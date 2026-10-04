@@ -39,3 +39,16 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Local credentials and device provisioning
+.env
+.env.*
+!.env.example
+connection.local.json
+*.ipa
+*.xcarchive/
+*.xcuserstate
+xcuserdata/
+
+# Local editor/agent preferences
+.claude/

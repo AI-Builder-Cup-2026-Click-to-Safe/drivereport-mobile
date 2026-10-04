@@ -1,19 +1,27 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "DriveReport",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#080d13"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": false,
+      "bundleIdentifier": "com.example.safetycar.dev",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": [
+          "whatsapp"
+        ],
+        "NSCameraUsageDescription": "Record a short road incident for review.",
+        "NSMicrophoneUsageDescription": "Include audio in your road incident recording."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -21,10 +29,37 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.example.safetycar.dev"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "scheme": "safetycar-dev",
+    "plugins": [
+      "expo-router",
+      "expo-video",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow DriveReport to record road incidents.",
+          "microphonePermission": "Allow DriveReport to record video audio.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose a dashcam video to review.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      "expo-asset",
+      "./plugins/withWhatsApp",
+      "expo-font",
+      "./plugins/withNoPushEntitlement"
+    ]
   }
 }
