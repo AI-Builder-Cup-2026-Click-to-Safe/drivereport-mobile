@@ -193,6 +193,25 @@ export function Developer() {
             .catch(showError)
         }
       />
+      {__DEV__ && (
+        <Quiet
+          title="Load 12-second test video"
+          onPress={() => {
+            if (busy || rr.job?.status === "running") return;
+            setBusy(true);
+            void store
+              .importSample()
+              .then((id) => {
+                setChosen(id);
+                setMessage(
+                  "Real test footage loaded. Analyse video sends it to the configured AI server; this is not a simulated result.",
+                );
+              })
+              .catch(showError)
+              .finally(() => setBusy(false));
+          }}
+        />
+      )}
       <T style={s.section}>Backend settings</T>
       <Field
         label="Base URL"

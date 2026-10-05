@@ -71,6 +71,12 @@ npm run provision:iphone -- <iphone-udid>
 
 These scripts require authenticated `gcloud` access to `prototype-public-api-token` in project `aitech-good-s27493`; Android also needs `adb`, and iPhone provisioning needs `afcclient`. They transfer a temporary file into the development app's sandbox, which imports credentials into SecureStore and deletes the file. Release builds do not import it. Tokens are not printed. Public distribution requires user-scoped authentication and request limits in place of the shared development token.
 
+## Repeat the live AI smoke test
+
+In a development build, open **Developer → Load 12-second test video**, then **Analyse video**. This imports the bundled real MP4 and calls the configured upload/review endpoints; it does not use the synthetic demo fixtures. A valid API token and Malaysia region are required. Gemini usage is billed to the configured backend. The sample loader is excluded from release UI.
+
+Wait for the final result, open Review, and check that the original footage and returned findings/citations are present. Missing plate/date/location remain editable rather than being invented. Loading the sample alone does not upload it or start analysis.
+
 ## Motion implementation
 
 Most UI is native React Native. Tab icons interpolate the supplied SVG matched-point geometry over 420 ms; pages, case switches and analysis rows use native-driver transitions. Home has a 3.2-second breathing treatment. Reduced motion respects both the app preference and the system setting.

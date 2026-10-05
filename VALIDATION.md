@@ -24,11 +24,23 @@ This section describes the new app. The dated DriveReport results below are hist
 - Switching off the demo dataset exposes migrated real evidence and its original server finding/citation. The original 12-second local video plays through native controls.
 - Active Review tab can be retapped; navigation returns Home without losing the app state.
 
+## Live AI retest through the rebuilt app — 2026-10-05
+
+- Configured the existing development API credential in the Simulator's SecureStore. The temporary provisioning file was removed by the app; no credential was printed or committed.
+- Added a development-only **Load 12-second test video** action for repeatable smoke testing. It imports the bundled real 1,766,147-byte MP4; **Analyse video** uses the normal authenticated upload/review flow and switches to the live dataset. No mock response or prior result was injected.
+- New evidence ID: `DR-MUUTWDI5-8CF`; new case ID: `DR-MUUTWDI5-8CF-1`; local job `JOB-1791179364751`, mode `live`.
+- Cloud Run access logs confirm `POST /v1/uploads` returned **200 OK** at `05:49:50.739 UTC` and `POST /v1/review` returned **200 OK** at `05:53:15.432 UTC`. The local job began at `05:49:24.751 UTC`: approximately **3 minutes 51 seconds** including cold start/upload, about **3 minutes 25 seconds** from upload-session response to final review response. This is one measured run, not a latency guarantee.
+- The actual response reported **one suspected offence** involving a blue sedan, interval **00:01–00:07**, model confidence **0.95**, with four evidence-timeline entries and `follow_up_exhausted=false`. The conduct described unsafe inside overtaking/cutting across in a construction corridor. Its AI-cited legal basis was Road Transport Act 1987, Section 43(1); this test verifies response transport/display, not legal correctness or calibrated confidence.
+- Native UI observed actual upload → server review → completed receipt animation → Review. Review shows the new finding and returned citation; the freshly imported original video plays through native controls.
+- Unknown plate, incident date/time and location remain blank; report submission stays disabled until the user supplies required facts. The case remains `needs_info`, `confirmedByUser=false`, `provenance.isDemo=false`.
+- Terminated and relaunched the app, then reopened Review. The same case ID, finding, citation and missing-fact state were restored. No WhatsApp message or authority report was sent.
+- TypeScript and ESLint passed after adding the development sample loader. No backend source or deployment changes were needed.
+
 ## Implementation boundaries
 
 - Native screens and SVG navigation are React Native; only the original Canvas illustration runs in a local, self-contained WebView. Decorative loops observe foreground/reduced-motion state and measured scroll visibility. Offscreen pause is implemented but not separately certified across screen sizes.
 - A Simulator cannot verify the physical camera, long-drive storage/thermal behavior, audio interruptions, or segment gap duration. Camera recording is foreground-only and segmented, not claimed gapless.
-- Demo animation stages are simulated. The existing synchronous live API provides only upload bytes and a final result; live intermediate stages are not invented. No new paid cloud review was triggered for the rebuild validation.
+- Demo animation stages are simulated. The existing synchronous live API provides only upload bytes and a final result; live intermediate stages are not invented. The initial UI pass used no new paid review; the subsequent live retest above performed one real cloud analysis.
 - Android native execution was not repeated for this rebuild. Historical Android results below apply to the previous app.
 - Face blurring, tracked annotations, authority outcomes, server-side cases and direct authority submission require backend capabilities that are not currently present. The new UI labels unavailable features and retains unknown outcomes.
 - No backend source or deployment was changed as part of this rebuild.
