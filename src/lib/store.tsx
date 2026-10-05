@@ -27,9 +27,15 @@ type Context = {
   active?: string;
   progress: number;
   saveSettings: (s: Settings) => Promise<void>;
-  importVideo: (uri: string, name: string, mime?: string) => Promise<string>;
+  importVideo: (
+    uri: string,
+    name: string,
+    mime?: string,
+    capture?: { dashcamSession: string; createdAt: string; protected: boolean },
+  ) => Promise<string>;
   importSample: () => Promise<string>;
-  analyse: (id: string) => Promise<void>;
+  analyse: (id: string) => Promise<Incident | undefined>;
+  getRecords: () => Incident[];
   cancel: () => void;
   update: (id: string, p: Partial<Incident>) => Promise<void>;
   remove: (id: string) => Promise<void>;
@@ -119,6 +125,7 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
     uri: string,
     name: string,
     suppliedMime?: string,
+    capture?: { dashcamSession: string; createdAt: string; protected: boolean },
   ) => {
     if (error) throw new Error(error);
     const suffix = name.toLowerCase().split(".").pop();
@@ -175,6 +182,7 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
         plate: "",
         location: "",
         occurredAt: "",
+        ...capture,
       },
       ...recordsRef.current,
     ]);
@@ -212,7 +220,14 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
           if (Object.keys(patch).length) await update(id, patch);
         },
       );
-      await update(id, { stage: "ready", result, error: undefined });
+      await update(id, {
+        stage: "ready",
+        result,
+        error: undefined,
+        ...(incident.dashcamSession && result.reportable.length
+          ? { protected: true }
+          : {}),
+      });
     } catch (e) {
       await update(id, {
         stage: "error",
@@ -228,6 +243,7 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
       setActive(undefined);
       void deactivateKeepAwake("analysis");
     }
+    return recordsRef.current.find((i) => i.id === id);
   };
   const remove = async (id: string) => {
     if (active === id)
@@ -255,6 +271,7 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
         importVideo,
         importSample,
         analyse,
+        getRecords: () => recordsRef.current,
         cancel: () => running.current?.abort(),
         update,
         remove,

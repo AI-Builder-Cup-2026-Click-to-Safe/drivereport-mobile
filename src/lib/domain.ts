@@ -40,6 +40,8 @@ export type Incident = {
   draft?: string;
   openedAt?: string;
   reportedAt?: string;
+  dashcamSession?: string;
+  protected?: boolean;
 };
 export type Settings = {
   apiUrl: string;

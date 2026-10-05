@@ -6,7 +6,9 @@ The mobile client connects to the organization's [GCP video review backend](http
 
 ## Features
 
-- Import videos from Photos or Files, record a short camera clip, or try the bundled 12-second sample.
+- Run a foreground dashcam session until stopped, import videos, or try the bundled 12-second sample.
+- Review saved driving segments automatically while recording continues; show real potential-violation alerts and protect evidence.
+- Preserve recent/current moments on demand and rotate only unprotected dashcam segments.
 - Upload footage directly to Cloud Storage and request a multi-agent video and legal review.
 - Inspect the original video, timestamped observations, vehicle-specific findings, AI confidence, and cited legal references.
 - Select a vehicle and manually verify its plate, incident location, and incident date/time.
@@ -65,7 +67,13 @@ The connection check calls the public `/health` endpoint. The access token is ve
 3. `POST /v1/review` with the returned `video_uri` and `mime_type`.
 4. Validate and save the returned verdict, findings, and evidence timeline.
 
-The client accepts MP4, MOV, WebM, and MPEG clips up to 500 MiB. The backend limits duration to 10 minutes. In-app recording is silent 720p video, limited to 60 seconds.
+The client accepts MP4, MOV, WebM, and MPEG clips up to 500 MiB. The backend limits duration to 10 minutes. Dashcam sessions record silent 720p footage in successive one-minute files until stopped. File rollover may introduce brief gaps: this is not a frame-continuous native recorder.
+
+The screen stays awake during a session. Leaving the foreground, locking the phone, camera errors, or low free storage stops recording; saved clips remain in History. Unprotected dashcam clips rotate out after 15 clips or 500 MiB, including unreviewed clips when the server falls behind. Imported clips, saved moments, findings, drafts and active reviews are excluded from automatic rotation. Protected footage consumes additional storage; recording stops below 400 MiB free.
+
+With **Scan while recording** enabled, saved clips are uploaded and reviewed one at a time using the existing API. Reviews can take minutes and do not cover every frame in real time. An analysis error pauses new reviews while local recording continues. Stopping the session stops new reviews; an already-running review may finish. Alerts never send reports automatically.
+
+Use **Preview dashcam UI** in iOS Simulator to view clearly labeled sample footage without a camera. **Open dashcam** uses the real device camera. **Show saved finding** previews an actual previously completed review; it does not fabricate AI results.
 
 ### Optional development provisioning
 

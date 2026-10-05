@@ -67,8 +67,8 @@ export default function Dashboard() {
           muted
           style={{ textAlign: "center", fontSize: 12, lineHeight: 20 }}
         >
-          Capture a short incident or import your dashcam footage. AI reviews it
-          after upload.
+          Record your drive while AI reviews saved clips, or import existing
+          dashcam footage.
         </Txt>
         <Button
           title="Launch Active Dashcam"

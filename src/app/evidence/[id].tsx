@@ -101,6 +101,26 @@ function Evidence({ incident: i }: { incident: Incident }) {
           color={C.muted}
         />
       </View>
+      {i.dashcamSession && (
+        <Card>
+          <Badge text={i.protected ? "PROTECTED CLIP" : "LOOP RECORDING"} />
+          <Txt muted style={{ fontSize: 12 }}>
+            {i.protected
+              ? "This clip is kept when older loop recordings are cleared."
+              : "Keep this clip to prevent it from being cleared by loop recording."}
+          </Txt>
+          {!i.protected && (
+            <Button
+              title="Keep this clip"
+              icon="shield-checkmark-outline"
+              kind="outline"
+              onPress={() => {
+                void store.update(i.id, { protected: true }).catch(handleError);
+              }}
+            />
+          )}
+        </Card>
+      )}
       {(i.stage === "queued" || i.stage === "error") && (
         <Card>
           {i.error && <Notice error>{i.error}</Notice>}

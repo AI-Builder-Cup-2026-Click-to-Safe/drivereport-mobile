@@ -26,6 +26,15 @@ Server: `prototype-video-api` in project `aitech-good-s27493`, `us-central1`.
 Native evidence IDs: `DR-MUTI43XV-ELD` (no findings), `DR-MUTIAYY1-GW3` (one finding).
 The bundled sample now uses the latter footage segment (ID01, 56–68 seconds).
 
+## Foreground dashcam update — 2026-10-04
+
+- Removed the single 60-second session limit. A recording session now starts subsequent one-minute files while earlier files are persisted and reviewed.
+- TypeScript and ESLint passed. All 12 tests passed, including five dashcam tests for rotation protection, storage bounds, sequential review selection, continuing across clips, and camera/storage failures.
+- Relaunched the development app on iPhone 16 Pro / iOS 18.6 Simulator. Verified the updated capture screen, sample-footage preview, and a violation card populated from the existing real 95% confidence server finding. Fixed the modal safe-area layout to avoid the notch.
+- Simulator preview is explicitly labeled and does not record or generate live findings. No additional cloud review was triggered during this UI check.
+- Verified that Stop & review closes the preview and opens the corresponding persisted Evidence File.
+- Physical multi-minute capture, interruption recovery, thermal behavior, and actual segment gap duration still require iPhone testing. The current camera API starts a new recording for each file, so gapless capture is not claimed.
+
 ## Scope limits
 
 - Physical camera capture is implemented but cannot be established by iOS simulator testing.
