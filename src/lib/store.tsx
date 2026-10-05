@@ -12,7 +12,12 @@ import * as Thumbnails from "expo-video-thumbnails";
 import { Asset } from "expo-asset";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { analyseVideo } from "./api";
-import { Incident, initialSettings, Settings } from "./domain";
+import {
+  applyBuildConnection,
+  Incident,
+  initialSettings,
+  Settings,
+} from "./domain";
 
 const RECORDS = "drivereport.records.v1";
 const SETTINGS = "drivereport.settings.v1";
@@ -97,7 +102,7 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
         let config = secure
           ? { ...initialSettings, ...JSON.parse(secure) }
           : initialSettings;
-        // Simulator-only provisioning: never bundle an API token in JavaScript.
+        // Local development provisioning remains separate from judging builds.
         if (__DEV__) {
           const path = `${FS.documentDirectory}connection.local.json`;
           if ((await FS.getInfoAsync(path)).exists) {
@@ -107,7 +112,7 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
             await FS.deleteAsync(path, { idempotent: true });
           }
         }
-        setSettings(config);
+        setSettings(applyBuildConnection(config));
       } catch {
         setError(
           "Could not restore local data. Restart the app before importing more videos.",
@@ -118,8 +123,9 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
     })();
   }, []);
   const saveSettings = async (s: Settings) => {
-    await SecureStore.setItemAsync(SETTINGS, JSON.stringify(s));
-    setSettings(s);
+    const next = applyBuildConnection(s);
+    await SecureStore.setItemAsync(SETTINGS, JSON.stringify(next));
+    setSettings(next);
   };
   const importVideo = async (
     uri: string,

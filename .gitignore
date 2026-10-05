@@ -45,6 +45,7 @@ yarn-error.*
 .env.*
 !.env.example
 connection.local.json
+/credentials.json
 *.ipa
 *.xcarchive/
 *.xcuserstate

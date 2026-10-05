@@ -1,5 +1,9 @@
 export const DEFAULT_API =
   "https://prototype-video-api-fydsujlsyq-uc.a.run.app";
+// Injected only for the explicitly authorized judging build. This value is
+// extractable from the binary; EAS visibility does not make it a runtime secret.
+const judgingToken = process.env.EXPO_PUBLIC_JUDGING_API_TOKEN?.trim() || "";
+export const hasBuiltInConnection = Boolean(judgingToken);
 export type Finding = {
   vehicle_id: string;
   appearance: string;
@@ -55,7 +59,7 @@ export type Settings = {
 };
 export const initialSettings: Settings = {
   apiUrl: DEFAULT_API,
-  token: "",
+  token: judgingToken,
   name: "",
   phone: "",
   address: "",
@@ -63,6 +67,13 @@ export const initialSettings: Settings = {
   recipient: "",
   onboarded: false,
 };
+export function applyBuildConnection(settings: Settings): Settings {
+  // Keep the supplied credential bound to its server, including after updates
+  // that restore an older empty token or a custom URL from Keychain.
+  return hasBuiltInConnection
+    ? { ...settings, apiUrl: DEFAULT_API, token: judgingToken }
+    : settings;
+}
 export function validateApiUrl(value: string) {
   const u = new URL(value.trim());
   if (u.protocol !== "https:" || u.username || u.password || u.search || u.hash)

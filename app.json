@@ -1,7 +1,8 @@
 {
   "expo": {
     "name": "Click-to-Safe",
-    "slug": "mobile",
+    "slug": "click-to-safe",
+    "owner": "yuyu-corp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -9,13 +10,15 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.example.safetycar.dev",
+      "bundleIdentifier": "app.aibuildercup.clicktosafe2",
+      "buildNumber": "2",
       "infoPlist": {
         "LSApplicationQueriesSchemes": [
           "whatsapp"
         ],
         "NSCameraUsageDescription": "Record your drive to review possible road incidents.",
-        "NSMicrophoneUsageDescription": "Include audio in your road incident recording."
+        "NSMicrophoneUsageDescription": "Include audio in your road incident recording.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -64,6 +67,12 @@
           "imageWidth": 146
         }
       ]
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "bf9e5ab8-8b00-405e-8f56-87fed2ec2910"
+      }
+    }
   }
 }

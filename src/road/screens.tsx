@@ -4,7 +4,7 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FS from "expo-file-system/legacy";
 import { useStore } from "../lib/store";
 import { checkConnection } from "../lib/api";
-import { validateApiUrl } from "../lib/domain";
+import { hasBuiltInConnection, validateApiUrl } from "../lib/domain";
 import { useRoad } from "./context";
 import {
   LivingIntelligence,
@@ -182,48 +182,57 @@ export function Developer() {
         <Quiet title="Replay Home entrance" onPress={replayHomeEntrance} />
       )}
       <T style={s.section}>Backend settings</T>
-      <Field
-        label="Base URL"
-        value={url}
-        onChangeText={setUrl}
-        autoCapitalize="none"
-        keyboardType="url"
-      />
-      <View style={{ gap: 5 }}>
-        <Field
-          label="Access token"
-          value={token}
-          onChangeText={setToken}
-          secureTextEntry={!reveal}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        <Quiet
-          title={reveal ? "Hide access token" : "Show access token"}
-          icon={reveal ? "EyeOff" : "Eye"}
-          onPress={() => setReveal(!reveal)}
-        />
-      </View>
-      <Action
-        title="Save connection"
-        secondary
-        onPress={() =>
-          void Promise.resolve()
-            .then(() =>
-              store.saveSettings({
-                ...store.settings,
-                apiUrl: validateApiUrl(url.trim()),
-                token: token.trim(),
-              }),
-            )
-            .then(() => setMessage("Connection saved securely."))
-            .catch(showError)
-        }
-      />
+      {hasBuiltInConnection ? (
+        <Notice>AI analysis is ready. No access token setup is needed.</Notice>
+      ) : (
+        <>
+          <Field
+            label="Base URL"
+            value={url}
+            onChangeText={setUrl}
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+          <View style={{ gap: 5 }}>
+            <Field
+              label="Access token"
+              value={token}
+              onChangeText={setToken}
+              secureTextEntry={!reveal}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Quiet
+              title={reveal ? "Hide access token" : "Show access token"}
+              icon={reveal ? "EyeOff" : "Eye"}
+              onPress={() => setReveal(!reveal)}
+            />
+          </View>
+          <Action
+            title="Save connection"
+            secondary
+            onPress={() =>
+              void Promise.resolve()
+                .then(() =>
+                  store.saveSettings({
+                    ...store.settings,
+                    apiUrl: validateApiUrl(url.trim()),
+                    token: token.trim(),
+                  }),
+                )
+                .then(() => setMessage("Connection saved securely."))
+                .catch(showError)
+            }
+          />
+        </>
+      )}
       <Quiet
         title="Check URL"
         onPress={() =>
-          void checkConnection({ ...store.settings, apiUrl: url })
+          void checkConnection({
+            ...store.settings,
+            apiUrl: hasBuiltInConnection ? store.settings.apiUrl : url,
+          })
             .then(setMessage)
             .catch(showError)
         }
