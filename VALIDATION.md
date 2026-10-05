@@ -1,3 +1,40 @@
+# Road Receipts rebuild validation — 2026-10-05
+
+This section describes the new app. The dated DriveReport results below are historical and do not establish that every new screen has been tested on Android or a physical phone.
+
+## Build and automated checks
+
+- Rebuilt native iOS development app after adding SVG, WebView, Device and DateTimePicker dependencies. Xcode build/install succeeded with zero errors and zero warnings.
+- iPhone 16 Pro Simulator, iOS 18.6; Expo SDK 54, React Native 0.81.5, Node 22.
+- TypeScript and ESLint passed. All 19 tests passed (12 retained domain/recording tests and seven new case, validation, reporting, impact, date-scope and GCP mapping tests).
+- Expo Doctor: 18/18 checks passed.
+- Handover source pinned at `3b64312`; its own structural validation and seven smoke groups passed before porting.
+
+## Native Simulator flows observed
+
+- Initial Home screen with supplied typography, copy and recording invitation.
+- Home → black recording screen → End recording → analysis. Elapsed timer advances; Simulator recording is explicitly labelled as a demo with no camera capture. Status bar switches correctly between dark and light screens.
+- Original Living intelligence graphic renders locally. Bridge diagnostics recorded all five stages as running in normal mode and paused in reduced-motion mode. The completed illustration visibly settles into the receipt/check composition.
+- App Reduce motion preference persists while changing screens; progress and completion remain visible with decorative animation stopped.
+- Analysis completion notice remains after returning Home. Opening a result restores the matching demo/live dataset before selecting its case.
+- Review with missing location disables the WhatsApp action. Entering an explicitly synthetic location enables it. Excluding an offence preserves the user's description and shows the review reminder.
+- Native incident-date picker opens and cancels without changing the case.
+- Demo handoff reached locally by an app deep link: Mark report sent increases the local counter; Undo restores the prior status and counts. No external WhatsApp draft or report was sent during this test.
+- Impact Today produces the expected empty state for older fixtures; All time restores the cases and independent counters.
+- Switching off the demo dataset exposes migrated real evidence and its original server finding/citation. The original 12-second local video plays through native controls.
+- Active Review tab can be retapped; navigation returns Home without losing the app state.
+
+## Implementation boundaries
+
+- Native screens and SVG navigation are React Native; only the original Canvas illustration runs in a local, self-contained WebView. Decorative loops observe foreground/reduced-motion state and measured scroll visibility. Offscreen pause is implemented but not separately certified across screen sizes.
+- A Simulator cannot verify the physical camera, long-drive storage/thermal behavior, audio interruptions, or segment gap duration. Camera recording is foreground-only and segmented, not claimed gapless.
+- Demo animation stages are simulated. The existing synchronous live API provides only upload bytes and a final result; live intermediate stages are not invented. No new paid cloud review was triggered for the rebuild validation.
+- Android native execution was not repeated for this rebuild. Historical Android results below apply to the previous app.
+- Face blurring, tracked annotations, authority outcomes, server-side cases and direct authority submission require backend capabilities that are not currently present. The new UI labels unavailable features and retains unknown outcomes.
+- No backend source or deployment was changed as part of this rebuild.
+
+---
+
 # Integration validation — 2026-10-04
 
 ## Native builds

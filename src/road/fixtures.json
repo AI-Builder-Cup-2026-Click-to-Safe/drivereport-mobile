@@ -1,0 +1,535 @@
+{
+  "allCases": [
+    {
+      "id": "RR-024",
+      "version": 1,
+      "region": "MY",
+      "vehicle": {
+        "plate": "WXY 2048",
+        "type": "Blue hatchback",
+        "model": null
+      },
+      "incident": {
+        "date": "2026-10-03",
+        "time": "08:42",
+        "timeZone": "Asia/Kuala_Lumpur",
+        "location": "Tun Razak Road, Kuala Lumpur",
+        "description": "The vehicle passed the stop line while the signal was red, then braked sharply in front of another vehicle."
+      },
+      "offences": [
+        {
+          "id": "RR-024-offence-1",
+          "code": "red_light",
+          "label": "Ran a red light",
+          "atSeconds": 12,
+          "confidence": 0.96,
+          "included": true,
+          "lawSources": []
+        },
+        {
+          "id": "RR-024-offence-2",
+          "code": "road_rage",
+          "label": "Suspected road rage",
+          "atSeconds": 17,
+          "confidence": 0.78,
+          "included": true,
+          "lawSources": []
+        }
+      ],
+      "evidence": {
+        "durationSeconds": 24,
+        "originalVideoUrl": null,
+        "annotatedVideoUrl": null,
+        "thumbnailUrl": "http://127.0.0.1:4174/assets/images/dashcam-evidence-demo.jpg",
+        "tracks": [],
+        "isSynthetic": true
+      },
+      "reporting": {
+        "status": "ready",
+        "confirmedByUser": false
+      },
+      "authorityOutcome": {
+        "status": "unknown",
+        "source": null,
+        "updatedAt": null
+      },
+      "provenance": {
+        "isDemo": true,
+        "factsSource": "synthetic_fixture",
+        "legalRetrieval": "not_performed"
+      }
+    },
+    {
+      "id": "RR-023",
+      "version": 1,
+      "region": "MY",
+      "vehicle": {
+        "plate": "VBN 7712",
+        "type": "Blue hatchback",
+        "model": null
+      },
+      "incident": {
+        "date": "2026-10-02",
+        "time": "18:21",
+        "timeZone": "Asia/Kuala_Lumpur",
+        "location": "Ampang Road, Kuala Lumpur",
+        "description": "The vehicle cut a queue twice and passed a red traffic signal."
+      },
+      "offences": [
+        {
+          "id": "RR-023-offence-1",
+          "code": "queue_cut",
+          "label": "Cut the queue",
+          "atSeconds": 8,
+          "confidence": 0.92,
+          "included": true,
+          "lawSources": []
+        },
+        {
+          "id": "RR-023-offence-2",
+          "code": "queue_cut",
+          "label": "Cut the queue",
+          "atSeconds": 18,
+          "confidence": 0.91,
+          "included": true,
+          "lawSources": []
+        },
+        {
+          "id": "RR-023-offence-3",
+          "code": "red_light",
+          "label": "Ran a red light",
+          "atSeconds": 23,
+          "confidence": 0.94,
+          "included": true,
+          "lawSources": []
+        }
+      ],
+      "evidence": {
+        "durationSeconds": 24,
+        "originalVideoUrl": null,
+        "annotatedVideoUrl": null,
+        "thumbnailUrl": "http://127.0.0.1:4174/assets/images/dashcam-evidence-demo.jpg",
+        "tracks": [],
+        "isSynthetic": true
+      },
+      "reporting": {
+        "status": "sent",
+        "confirmedByUser": true
+      },
+      "authorityOutcome": {
+        "status": "issued",
+        "source": "demo_fixture",
+        "updatedAt": null
+      },
+      "provenance": {
+        "isDemo": true,
+        "factsSource": "synthetic_fixture",
+        "legalRetrieval": "not_performed"
+      }
+    },
+    {
+      "id": "RR-022",
+      "version": 1,
+      "region": "MY",
+      "vehicle": {
+        "plate": "JSA 401",
+        "type": "Blue hatchback",
+        "model": null
+      },
+      "incident": {
+        "date": "2026-10-02",
+        "time": "09:10",
+        "timeZone": "Asia/Kuala_Lumpur",
+        "location": "MRR2, Kuala Lumpur",
+        "description": "The vehicle used the emergency lane on two occasions."
+      },
+      "offences": [
+        {
+          "id": "RR-022-offence-1",
+          "code": "emergency_lane",
+          "label": "Used the emergency lane",
+          "atSeconds": 8,
+          "confidence": 0.95,
+          "included": true,
+          "lawSources": []
+        },
+        {
+          "id": "RR-022-offence-2",
+          "code": "emergency_lane",
+          "label": "Used the emergency lane",
+          "atSeconds": 19,
+          "confidence": 0.95,
+          "included": true,
+          "lawSources": []
+        }
+      ],
+      "evidence": {
+        "durationSeconds": 24,
+        "originalVideoUrl": null,
+        "annotatedVideoUrl": null,
+        "thumbnailUrl": "http://127.0.0.1:4174/assets/images/dashcam-evidence-demo.jpg",
+        "tracks": [],
+        "isSynthetic": true
+      },
+      "reporting": {
+        "status": "sent",
+        "confirmedByUser": true
+      },
+      "authorityOutcome": {
+        "status": "unknown",
+        "source": null,
+        "updatedAt": null
+      },
+      "provenance": {
+        "isDemo": true,
+        "factsSource": "synthetic_fixture",
+        "legalRetrieval": "not_performed"
+      }
+    },
+    {
+      "id": "RR-021",
+      "version": 1,
+      "region": "MY",
+      "vehicle": {
+        "plate": "BQQ 993",
+        "type": "Blue hatchback",
+        "model": null
+      },
+      "incident": {
+        "date": "2026-10-01",
+        "time": "14:35",
+        "timeZone": "Asia/Kuala_Lumpur",
+        "location": "Pudu Road, Kuala Lumpur",
+        "description": "The vehicle passed two red signals and cut a queue."
+      },
+      "offences": [
+        {
+          "id": "RR-021-offence-1",
+          "code": "red_light",
+          "label": "Ran a red light",
+          "atSeconds": 10,
+          "confidence": 0.92,
+          "included": true,
+          "lawSources": []
+        },
+        {
+          "id": "RR-021-offence-2",
+          "code": "red_light",
+          "label": "Ran a red light",
+          "atSeconds": 20,
+          "confidence": 0.94,
+          "included": true,
+          "lawSources": []
+        },
+        {
+          "id": "RR-021-offence-3",
+          "code": "queue_cut",
+          "label": "Cut the queue",
+          "atSeconds": 23,
+          "confidence": 0.84,
+          "included": true,
+          "lawSources": []
+        }
+      ],
+      "evidence": {
+        "durationSeconds": 24,
+        "originalVideoUrl": null,
+        "annotatedVideoUrl": null,
+        "thumbnailUrl": "http://127.0.0.1:4174/assets/images/dashcam-evidence-demo.jpg",
+        "tracks": [],
+        "isSynthetic": true
+      },
+      "reporting": {
+        "status": "opened",
+        "confirmedByUser": false
+      },
+      "authorityOutcome": {
+        "status": "unknown",
+        "source": null,
+        "updatedAt": null
+      },
+      "provenance": {
+        "isDemo": true,
+        "factsSource": "synthetic_fixture",
+        "legalRetrieval": "not_performed"
+      }
+    },
+    {
+      "id": "RR-020",
+      "version": 1,
+      "region": "MY",
+      "vehicle": {
+        "plate": null,
+        "type": "Blue hatchback",
+        "model": null
+      },
+      "incident": {
+        "date": "2026-10-01",
+        "time": "08:12",
+        "timeZone": "Asia/Kuala_Lumpur",
+        "location": null,
+        "description": "The vehicle braked sharply in front of another vehicle and drove against the marked direction of traffic."
+      },
+      "offences": [
+        {
+          "id": "RR-020-offence-1",
+          "code": "road_rage",
+          "label": "Suspected road rage",
+          "atSeconds": 7,
+          "confidence": 0.81,
+          "included": true,
+          "lawSources": []
+        },
+        {
+          "id": "RR-020-offence-2",
+          "code": "counter_flow",
+          "label": "Drove against traffic",
+          "atSeconds": 16,
+          "confidence": 0.74,
+          "included": true,
+          "lawSources": []
+        }
+      ],
+      "evidence": {
+        "durationSeconds": 24,
+        "originalVideoUrl": null,
+        "annotatedVideoUrl": null,
+        "thumbnailUrl": "http://127.0.0.1:4174/assets/images/dashcam-evidence-demo.jpg",
+        "tracks": [],
+        "isSynthetic": true
+      },
+      "reporting": {
+        "status": "needs_info",
+        "confirmedByUser": false
+      },
+      "authorityOutcome": {
+        "status": "unknown",
+        "source": null,
+        "updatedAt": null
+      },
+      "provenance": {
+        "isDemo": true,
+        "factsSource": "synthetic_fixture",
+        "legalRetrieval": "not_performed"
+      }
+    },
+    {
+      "id": "RR-019",
+      "version": 1,
+      "region": "MY",
+      "vehicle": {
+        "plate": null,
+        "type": null,
+        "model": null
+      },
+      "incident": {
+        "date": "2026-09-30",
+        "time": "10:02",
+        "timeZone": "Asia/Kuala_Lumpur",
+        "location": "Bukit Jalil, Kuala Lumpur",
+        "description": "No suspected offence detected."
+      },
+      "offences": [],
+      "evidence": {
+        "durationSeconds": 24,
+        "originalVideoUrl": null,
+        "annotatedVideoUrl": null,
+        "thumbnailUrl": "http://127.0.0.1:4174/assets/images/dashcam-evidence-demo.jpg",
+        "tracks": [],
+        "isSynthetic": true
+      },
+      "reporting": {
+        "status": "clean",
+        "confirmedByUser": false
+      },
+      "authorityOutcome": {
+        "status": "unknown",
+        "source": null,
+        "updatedAt": null
+      },
+      "provenance": {
+        "isDemo": true,
+        "factsSource": "synthetic_fixture",
+        "legalRetrieval": "not_performed"
+      }
+    }
+  ],
+  "scenarios": {
+    "ready": {
+      "jobId": "demo-job",
+      "cases": [
+        {
+          "id": "RR-024",
+          "version": 1,
+          "region": "MY",
+          "vehicle": {
+            "plate": "WXY 2048",
+            "type": "Blue hatchback",
+            "model": null
+          },
+          "incident": {
+            "date": "2026-10-03",
+            "time": "08:42",
+            "timeZone": "Asia/Kuala_Lumpur",
+            "location": "Tun Razak Road, Kuala Lumpur",
+            "description": "The vehicle passed the stop line while the signal was red, then braked sharply in front of another vehicle."
+          },
+          "offences": [
+            {
+              "id": "RR-024-offence-1",
+              "code": "red_light",
+              "label": "Ran a red light",
+              "atSeconds": 12,
+              "confidence": 0.96,
+              "included": true,
+              "lawSources": []
+            },
+            {
+              "id": "RR-024-offence-2",
+              "code": "road_rage",
+              "label": "Suspected road rage",
+              "atSeconds": 17,
+              "confidence": 0.78,
+              "included": true,
+              "lawSources": []
+            }
+          ],
+          "evidence": {
+            "durationSeconds": 24,
+            "originalVideoUrl": null,
+            "annotatedVideoUrl": null,
+            "thumbnailUrl": "http://127.0.0.1:4174/assets/images/dashcam-evidence-demo.jpg",
+            "tracks": [],
+            "isSynthetic": true
+          },
+          "reporting": {
+            "status": "ready",
+            "confirmedByUser": false
+          },
+          "authorityOutcome": {
+            "status": "unknown",
+            "source": null,
+            "updatedAt": null
+          },
+          "provenance": {
+            "isDemo": true,
+            "factsSource": "synthetic_fixture",
+            "legalRetrieval": "not_performed"
+          }
+        }
+      ],
+      "isDemo": true
+    },
+    "needs_info": {
+      "jobId": "demo-job",
+      "cases": [
+        {
+          "id": "RR-020",
+          "version": 1,
+          "region": "MY",
+          "vehicle": {
+            "plate": null,
+            "type": "Blue hatchback",
+            "model": null
+          },
+          "incident": {
+            "date": "2026-10-01",
+            "time": "08:12",
+            "timeZone": "Asia/Kuala_Lumpur",
+            "location": null,
+            "description": "The vehicle braked sharply in front of another vehicle and drove against the marked direction of traffic."
+          },
+          "offences": [
+            {
+              "id": "RR-020-offence-1",
+              "code": "road_rage",
+              "label": "Suspected road rage",
+              "atSeconds": 7,
+              "confidence": 0.81,
+              "included": true,
+              "lawSources": []
+            },
+            {
+              "id": "RR-020-offence-2",
+              "code": "counter_flow",
+              "label": "Drove against traffic",
+              "atSeconds": 16,
+              "confidence": 0.74,
+              "included": true,
+              "lawSources": []
+            }
+          ],
+          "evidence": {
+            "durationSeconds": 24,
+            "originalVideoUrl": null,
+            "annotatedVideoUrl": null,
+            "thumbnailUrl": "http://127.0.0.1:4174/assets/images/dashcam-evidence-demo.jpg",
+            "tracks": [],
+            "isSynthetic": true
+          },
+          "reporting": {
+            "status": "needs_info",
+            "confirmedByUser": false
+          },
+          "authorityOutcome": {
+            "status": "unknown",
+            "source": null,
+            "updatedAt": null
+          },
+          "provenance": {
+            "isDemo": true,
+            "factsSource": "synthetic_fixture",
+            "legalRetrieval": "not_performed"
+          }
+        }
+      ],
+      "isDemo": true
+    },
+    "clean": {
+      "jobId": "demo-job",
+      "cases": [
+        {
+          "id": "RR-019",
+          "version": 1,
+          "region": "MY",
+          "vehicle": {
+            "plate": null,
+            "type": null,
+            "model": null
+          },
+          "incident": {
+            "date": "2026-09-30",
+            "time": "10:02",
+            "timeZone": "Asia/Kuala_Lumpur",
+            "location": "Bukit Jalil, Kuala Lumpur",
+            "description": "No suspected offence detected."
+          },
+          "offences": [],
+          "evidence": {
+            "durationSeconds": 24,
+            "originalVideoUrl": null,
+            "annotatedVideoUrl": null,
+            "thumbnailUrl": "http://127.0.0.1:4174/assets/images/dashcam-evidence-demo.jpg",
+            "tracks": [],
+            "isSynthetic": true
+          },
+          "reporting": {
+            "status": "clean",
+            "confirmedByUser": false
+          },
+          "authorityOutcome": {
+            "status": "unknown",
+            "source": null,
+            "updatedAt": null
+          },
+          "provenance": {
+            "isDemo": true,
+            "factsSource": "synthetic_fixture",
+            "legalRetrieval": "not_performed"
+          }
+        }
+      ],
+      "isDemo": true
+    }
+  }
+}

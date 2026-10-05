@@ -1,0 +1,286 @@
+import type { Incident as LegacyIncident } from "../lib/domain.ts";
+export type Region = "MY" | "SG" | "JP";
+export type Status = "needs_info" | "ready" | "opened" | "sent" | "clean";
+export type Offence = {
+  id: string;
+  code: string;
+  label: string;
+  atSeconds: number;
+  confidence: number;
+  included: boolean;
+  lawSources: { title?: string; url?: string; section?: string }[];
+};
+export type RoadCase = {
+  id: string;
+  version: number;
+  region: Region;
+  vehicle: { plate: string | null; type: string | null; model: string | null };
+  incident: {
+    date: string | null;
+    time: string | null;
+    timeZone: string;
+    location: string | null;
+    description: string | null;
+  };
+  offences: Offence[];
+  evidence: {
+    durationSeconds: number;
+    originalVideoUrl: string | null;
+    annotatedVideoUrl: string | null;
+    thumbnailUrl: string | null;
+    tracks: unknown[];
+    isSynthetic: boolean;
+  };
+  reporting: { status: Status; confirmedByUser: boolean };
+  authorityOutcome: {
+    status: string;
+    source: string | null;
+    updatedAt: string | null;
+  };
+  provenance: { isDemo: boolean; factsSource: string; legalRetrieval: string };
+  sourceId?: string;
+};
+export type Preferences = {
+  region: Region;
+  language: "en-GB" | "en-US";
+  reduced: boolean;
+  recipients: Record<Region, string>;
+  includePersonal: boolean;
+  name: string;
+  identity: string;
+  address: string;
+  phone: string;
+  email: string;
+  demo: boolean;
+};
+export const categories = [
+  ["red_light", "Red light"],
+  ["queue_cut", "Queue cutting"],
+  ["road_rage", "Road rage"],
+  ["counter_flow", "Counter traffic flow"],
+] as const;
+export const regionNames = { MY: "Malaysia", SG: "Singapore", JP: "Japan" };
+export const labels: Record<Status, string> = {
+  needs_info: "Needs details",
+  ready: "Review",
+  opened: "Draft opened",
+  sent: "Sent",
+  clean: "No offence",
+};
+export const normalizePlate = (p: string | null) =>
+  (p || "").replace(/\s+/g, "").toUpperCase();
+export const duration = (s: number) => {
+  const n = Math.max(0, Math.floor(s));
+  return `${n >= 3600 ? Math.floor(n / 3600) + ":" : ""}${String(Math.floor(n / 60) % 60).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
+};
+export function missing(c: RoadCase) {
+  return [
+    ["plate", c.vehicle.plate],
+    ["vehicle", c.vehicle.type],
+    ["date", c.incident.date],
+    ["time", c.incident.time],
+    ["location", c.incident.location],
+    ["description", c.incident.description],
+  ]
+    .filter(([, v]) => !v?.trim())
+    .map(([k]) => k!);
+}
+export function validation(c: RoadCase) {
+  if (!c.offences.some((o) => o.included))
+    return "Pick an offence. I don’t report vibes.";
+  const m: Record<string, string> = {
+    plate: "I’m petty, not psychic. Add the plate.",
+    vehicle: "I’m a snitch, not a psychic. Add the vehicle type.",
+    date: "I’ve got chaos, no date. Add when it happened.",
+    time: "I found the drama, lost the time. Add it.",
+    location: "I’ve got drama, no address. Add the location.",
+    description: "I need the plot. Add what happened.",
+  };
+  const key = missing(c)[0];
+  if (key) return m[key];
+  if (
+    !validDate(c.incident.date!) ||
+    !/^([01]\d|2[0-3]):[0-5]\d$/.test(c.incident.time!)
+  )
+    return "Check the incident date and time.";
+  return "";
+}
+export function validDate(s: string) {
+  return (
+    /^\d{4}-\d{2}-\d{2}$/.test(s) &&
+    !isNaN(Date.parse(s)) &&
+    new Date(s + "T12:00:00Z").toISOString().slice(0, 10) === s
+  );
+}
+export function correctStatus(c: RoadCase): Status {
+  return !c.offences.length
+    ? "clean"
+    : c.reporting.status === "sent"
+      ? "sent"
+      : validation(c)
+        ? "needs_info"
+        : c.reporting.status === "opened"
+          ? "opened"
+          : "ready";
+}
+export function recipient(p: Preferences, c: RoadCase) {
+  const v = p.recipients[c.region].replace(/[\s()+-]/g, "");
+  if (!/^[1-9]\d{7,14}$/.test(v))
+    throw Error(
+      `Add an Authority WhatsApp number for ${regionNames[c.region]} in Settings.`,
+    );
+  return v;
+}
+export function reportText(c: RoadCase, p: Preferences) {
+  const error = validation(c);
+  if (error) throw Error(error);
+  const personal = (value: string, label: string) =>
+    p.includePersonal && value.trim() ? value.trim() : `[${label}]`;
+  return [
+    c.provenance.isDemo
+      ? "DEMO — SYNTHETIC TRAFFIC OFFENCE REPORT"
+      : `TRAFFIC INCIDENT REPORT — ${c.id}`,
+    c.provenance.isDemo
+      ? "Demonstration only. This is not a real complaint."
+      : "",
+    `Authority: ${regionNames[c.region]}`,
+    `Date: ${c.incident.date}`,
+    `Time: ${c.incident.time} (${c.incident.timeZone})`,
+    `Location: ${c.incident.location}`,
+    `Vehicle plate: ${c.vehicle.plate}`,
+    `Vehicle: ${[c.vehicle.type, c.vehicle.model].filter(Boolean).join(" / ")}`,
+    `Description: ${c.incident.description}`,
+    "",
+    "Suspected offences:",
+    ...c.offences
+      .filter((o) => o.included)
+      .map((o, i) => `${i + 1}. ${o.label} — ${duration(o.atSeconds)}`),
+    "",
+    c.evidence.originalVideoUrl?.startsWith("https://")
+      ? `Original recording: ${c.evidence.originalVideoUrl}`
+      : "Video evidence: attach the original recording separately.",
+    ...(c.evidence.annotatedVideoUrl?.startsWith("https://")
+      ? [`Annotated evidence: ${c.evidence.annotatedVideoUrl}`]
+      : []),
+    "",
+    `Full name: ${personal(p.name, "Full name")}`,
+    `Identity number: ${personal(p.identity, "ID or passport number")}`,
+    `Postal address: ${personal(p.address, "Postal address")}`,
+    `Phone: ${personal(p.phone, "Phone number")}`,
+    `Email: ${personal(p.email, "Email address")}`,
+    "",
+    "Please review the evidence and suspected offences. Thank you.",
+  ]
+    .filter((v) => v !== undefined)
+    .join("\n");
+}
+export function whatsapp(c: RoadCase, p: Preferences) {
+  return `https://wa.me/${recipient(p, c)}?text=${encodeURIComponent(reportText(c, p))}`;
+}
+export function inPeriod(c: RoadCase, period: string, now = new Date()) {
+  if (period === "all") return true;
+  if (!c.incident.date) return false;
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: c.incident.timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+  const age = (Date.parse(today) - Date.parse(c.incident.date)) / 86400000;
+  return age >= 0 && age < (period === "today" ? 1 : 7);
+}
+export function impact(cases: RoadCase[], period = "all", now = new Date()) {
+  const scoped = cases.filter((c) => inPeriod(c, period, now));
+  const unique = (list: RoadCase[]) =>
+    new Set(list.map((c) => normalizePlate(c.vehicle.plate)).filter(Boolean))
+      .size;
+  const sightings = new Map<string, number>();
+  for (const c of scoped) {
+    const p = normalizePlate(c.vehicle.plate);
+    if (p) sightings.set(p, (sightings.get(p) || 0) + 1);
+  }
+  return {
+    scoped,
+    sent: unique(scoped.filter((c) => c.reporting.status === "sent")),
+    billed: unique(
+      scoped.filter((c) => c.authorityOutcome.status === "issued"),
+    ),
+    counts: Object.fromEntries(
+      categories.map(([k]) => [
+        k,
+        scoped.reduce(
+          (n, c) => n + c.offences.filter((o) => o.code === k).length,
+          0,
+        ),
+      ]),
+    ),
+    recurring: [...sightings.entries()].sort((a, b) => b[1] - a[1])[0],
+  };
+}
+export function fromLegacy(i: LegacyIncident, region: Region): RoadCase[] {
+  if (!i.result) return [];
+  const ids = [...new Set(i.result.reportable.map((o) => o.vehicle_id))];
+  if (!ids.length) ids.push("clean");
+  return ids.map((vehicleId, index) => {
+    const findings = i.result!.reportable.filter(
+      (o) => o.vehicle_id === vehicleId,
+    );
+    const c: RoadCase = {
+      id: `${i.id}-${index + 1}`,
+      sourceId: i.id,
+      version: 1,
+      region,
+      vehicle: {
+        plate: null,
+        type: findings[0]?.appearance || null,
+        model: null,
+      },
+      incident: {
+        date: null,
+        time: null,
+        timeZone:
+          region === "JP"
+            ? "Asia/Tokyo"
+            : region === "SG"
+              ? "Asia/Singapore"
+              : "Asia/Kuala_Lumpur",
+        location: null,
+        description:
+          findings.map((f) => f.conduct).join(" ") || i.result!.verdict,
+      },
+      offences: findings.map((f, n) => ({
+        id: `${i.id}-${index}-${n}`,
+        code: "other",
+        label: f.conduct,
+        atSeconds: f.start_seconds,
+        confidence: f.confidence,
+        included: true,
+        lawSources: [{ title: f.legal_basis }],
+      })),
+      evidence: {
+        durationSeconds: 0,
+        originalVideoUrl: i.file,
+        annotatedVideoUrl: null,
+        thumbnailUrl: i.thumbnail || null,
+        tracks: [],
+        isSynthetic: false,
+      },
+      reporting: {
+        status: findings.length ? "needs_info" : "clean",
+        confirmedByUser: false,
+      },
+      authorityOutcome: { status: "unknown", source: null, updatedAt: null },
+      provenance: {
+        isDemo: false,
+        factsSource: "video_analysis_and_user",
+        legalRetrieval: "backend_review",
+      },
+    };
+    // Only carry user facts to the explicitly selected vehicle; never duplicate a plate across vehicles.
+    if (ids.length === 1 || vehicleId === i.selectedVehicleId) {
+      c.vehicle.plate = i.plate || null;
+      c.incident.location = i.location || null;
+    }
+    return c;
+  });
+}

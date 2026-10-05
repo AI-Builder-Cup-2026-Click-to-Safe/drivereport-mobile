@@ -1,16 +1,16 @@
 {
   "expo": {
-    "name": "DriveReport",
+    "name": "Road Receipts",
     "slug": "mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#080d13"
+      "backgroundColor": "#f3f0f6"
     },
     "ios": {
       "supportsTablet": false,
@@ -19,7 +19,7 @@
         "LSApplicationQueriesSchemes": [
           "whatsapp"
         ],
-        "NSCameraUsageDescription": "Record a short road incident for review.",
+        "NSCameraUsageDescription": "Record your drive to review possible road incidents.",
         "NSMicrophoneUsageDescription": "Include audio in your road incident recording."
       }
     },
@@ -59,7 +59,8 @@
       "expo-asset",
       "./plugins/withWhatsApp",
       "expo-font",
-      "./plugins/withNoPushEntitlement"
+      "./plugins/withNoPushEntitlement",
+      "@react-native-community/datetimepicker"
     ]
   }
 }
