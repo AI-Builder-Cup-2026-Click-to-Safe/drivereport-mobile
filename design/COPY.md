@@ -4,6 +4,7 @@ Use the current prototype for complete literal strings. `design/computed-styles.
 
 | Surface / element | Exact final copy |
 | --- | --- |
+| App name / brand lockup | Click-to-Safe |
 | Home headline | One click away from making the road safer. |
 | Home supporting line | You drive. I’ll deal with the assholes. |
 | Main CTA | Start recording |
@@ -31,6 +32,8 @@ Use the current prototype for complete literal strings. `design/computed-styles.
 | Developer footage guidance | Daylight footage works better. |
 
 The sighting count is dynamic; singular uses “Spotted 1 time.” Labels for Red light, Queue cutting, Road rage and Counter traffic flow are literal. Preserving count grammar is required.
+
+Use **Click-to-Safe** with this capitalization and both hyphens in all current app-facing names, including the Home header, splash and prototype titles. The user explicitly approved this rename; other approved strings remain unchanged. Existing repository/file paths and historical evidence retain their original names.
 
 ## Voice rules
 

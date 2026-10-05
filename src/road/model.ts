@@ -284,3 +284,24 @@ export function fromLegacy(i: LegacyIncident, region: Region): RoadCase[] {
     return c;
   });
 }
+
+/** iOS may relocate Documents on app updates. Resolve local evidence through the
+ * original recording store, which persists filenames instead of container URLs. */
+export function restoreEvidence(
+  c: RoadCase,
+  source?: Pick<LegacyIncident, "id" | "file" | "thumbnail">,
+): RoadCase {
+  if (c.provenance.isDemo || !source || source.id !== c.sourceId) return c;
+  return {
+    ...c,
+    evidence: {
+      ...c.evidence,
+      originalVideoUrl: c.evidence.originalVideoUrl?.startsWith("file:")
+        ? source.file
+        : c.evidence.originalVideoUrl,
+      thumbnailUrl: c.evidence.thumbnailUrl?.startsWith("file:")
+        ? source.thumbnail || null
+        : c.evidence.thumbnailUrl,
+    },
+  };
+}

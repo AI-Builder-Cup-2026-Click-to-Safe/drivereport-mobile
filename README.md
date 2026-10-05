@@ -1,6 +1,6 @@
-# Road Receipts Mobile
+# Click-to-Safe Mobile
 
-A native React Native / Expo app rebuilt from the [Road Receipts handover](https://github.com/whyteaz/road-receipts-handover), pinned to commit `3b64312`. It keeps the supplied Manrope typography, pastel surfaces, exact product copy, native navigation icon morphs, and Gemini “Living intelligence” animation.
+A native React Native / Expo app rebuilt from the [Road Receipts handover](https://github.com/whyteaz/road-receipts-handover), updated to commit `3ae6b66`. It keeps the supplied Manrope typography, pastel surfaces, exact product copy, native navigation icon morphs, and Gemini “Living intelligence” animation.
 
 This repository contains the mobile client. It connects to the existing [GCP review backend](https://github.com/Lorem-Ipsum-AI-Builder-Cup-2026/prototype); no backend deployment is needed for this UI rebuild.
 
@@ -16,6 +16,8 @@ npm run ios                 # native development build and Simulator
 # npm run android           # native Android development build
 ```
 
+The display name and launcher icons are **Click-to-Safe**. The repository URL, bundle identifier and storage keys remain stable for existing installations.
+
 After installing the native development app:
 
 ```sh
@@ -28,7 +30,7 @@ For a physical iPhone, connect/trust it, enable Developer Mode, sign into Xcode,
 
 ## App flow
 
-- **Home:** start a foreground recording. The black recording screen has elapsed time, a static red indicator and an End recording action.
+- **Home:** Click-to-Safe branding and the “Capture arrives” opening (3.67 seconds, once per app session). The opening settles immediately on interaction, backgrounding or reduced motion; the 4.2-second recording-disc invitation pauses offscreen. Start a foreground recording. The black recording screen has elapsed time, a static red indicator and an End recording action.
 - **Analysis:** the original five-stage motion design. Demo mode simulates all five steps. Live mode shows actual upload progress, then waits for the server's single review response without inventing agent progress.
 - **Review:** play original footage, seek to findings, include/exclude offences, and edit plate, vehicle type, date, time, location and description. Missing facts prevent opening a report draft. Personal details and vehicle model are optional.
 - **WhatsApp:** open a draft for the case's jurisdiction; attach the original video separately. Opening WhatsApp does not mark a report sent. The user confirms sending, with an eight-second Undo and a lasting “Mark as not sent” action.
@@ -93,7 +95,7 @@ npm run build:motion
 
 ```text
 src/app/        Explicit Expo Router routes; Home entry point
-src/road/       Road Receipts native screens, case model, state and motion
+src/road/       Click-to-Safe native screens, case model, state and motion
 src/lib/        Retained GCP API adapter and original evidence storage
 assets/road/    Supplied fonts, SVG geometry, demo image and Canvas renderer
 design/         Pinned handover copy, motion, screens, acceptance and tokens

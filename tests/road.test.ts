@@ -5,6 +5,7 @@ import { URL } from "node:url";
 import {
   correctStatus,
   fromLegacy,
+  restoreEvidence,
   impact,
   inPeriod,
   missing,
@@ -165,4 +166,34 @@ test("no-findings GCP result becomes a clean case with real video retained", () 
   assert.equal(c.reporting.status, "clean");
   assert.equal(c.evidence.originalVideoUrl, i.file);
   assert.equal(c.provenance.isDemo, false);
+});
+
+test("app updates relink local evidence without changing reviews or remote/demo media", () => {
+  const c = base();
+  c.provenance.isDemo = false;
+  c.sourceId = "source-1";
+  c.evidence.originalVideoUrl =
+    "file:///old-container/Documents/evidence/source-1.mp4";
+  c.evidence.thumbnailUrl =
+    "file:///old-container/Documents/evidence/source-1.jpg";
+  const source = {
+    id: "source-1",
+    file: "file:///new-container/Documents/evidence/source-1.mp4",
+    thumbnail: "file:///new-container/Documents/evidence/source-1.jpg",
+  };
+  const updated = restoreEvidence(c, source);
+  assert.equal(updated.evidence.originalVideoUrl, source.file);
+  assert.equal(updated.evidence.thumbnailUrl, source.thumbnail);
+  assert.deepEqual(updated.offences, c.offences);
+  assert.deepEqual(updated.reporting, c.reporting);
+  assert.deepEqual(updated.incident, c.incident);
+  assert.equal(restoreEvidence(c), c);
+  assert.equal(restoreEvidence(c, { ...source, id: "other-clip" }), c);
+  c.evidence.originalVideoUrl = "https://example.com/signed-video";
+  assert.equal(
+    restoreEvidence(c, source).evidence.originalVideoUrl,
+    c.evidence.originalVideoUrl,
+  );
+  c.provenance.isDemo = true;
+  assert.equal(restoreEvidence(c, source), c);
 });

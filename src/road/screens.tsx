@@ -1,13 +1,18 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Image, Pressable, Switch, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import * as DocumentPicker from "expo-document-picker";
 import * as FS from "expo-file-system/legacy";
 import { useStore } from "../lib/store";
 import { checkConnection } from "../lib/api";
 import { validateApiUrl } from "../lib/domain";
 import { useRoad } from "./context";
-import { LivingIntelligence, BreathingDisc, Motion } from "./motion";
+import {
+  LivingIntelligence,
+  Motion,
+  ImpactBar,
+  Turn,
+  FadeArrival,
+} from "./motion";
 import {
   Action,
   C,
@@ -21,6 +26,7 @@ import {
   T,
   go,
   showError,
+  focusControl,
   styles as s,
 } from "./ui";
 import {
@@ -32,54 +38,9 @@ import {
   regionNames,
   type Region,
 } from "./model";
+import { replayHomeEntrance } from "./home";
 export { Review, Handoff } from "./review";
-export function Home() {
-  const rr = useRoad();
-  return (
-    <Page title="Home" home>
-      <Intro
-        title="One click away from making the road safer."
-        body="You drive. I’ll deal with the assholes."
-      />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Start recording"
-        disabled={!rr.ready || !!rr.error || rr.job?.status === "running"}
-        onPress={() => go("recording")}
-        style={{
-          borderRadius: 16,
-          overflow: "hidden",
-          marginTop: 13,
-          borderWidth: 1,
-          borderColor: "#d3d7d0",
-        }}
-      >
-        <LinearGradient
-          colors={[C.mint, C.lilac, C.peach]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{
-            height: 300,
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 28,
-          }}
-        >
-          <BreathingDisc disabled={rr.job?.status === "running"} />
-          <T style={{ fontSize: 18, fontWeight: "700" }}>Start recording</T>
-        </LinearGradient>
-      </Pressable>
-      {rr.job?.status === "running" && (
-        <Action
-          title="See analysis progress"
-          secondary
-          onPress={() => go("analysis")}
-        />
-      )}
-      <View style={{ height: 70 }} />
-    </Page>
-  );
-}
+export { Home } from "./home";
 export function Developer() {
   const rr = useRoad(),
     store = useStore();
@@ -89,6 +50,7 @@ export function Developer() {
     [chosen, setChosen] = useState(""),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
+  const chooseRef = useRef<View>(null);
   const file = store.records.find((i) => i.id === chosen);
   const choose = async () => {
     setBusy(true);
@@ -153,6 +115,7 @@ export function Developer() {
         </T>
       </View>
       <Action
+        controlRef={chooseRef}
         title="Choose video"
         secondary
         icon="Upload"
@@ -168,7 +131,10 @@ export function Developer() {
             <Quiet
               title="Remove selection"
               icon="X"
-              onPress={() => setChosen("")}
+              onPress={() => {
+                setChosen("");
+                focusControl(chooseRef);
+              }}
             />
           </View>
         </View>
@@ -211,6 +177,9 @@ export function Developer() {
               .finally(() => setBusy(false));
           }}
         />
+      )}
+      {__DEV__ && (
+        <Quiet title="Replay Home entrance" onPress={replayHomeEntrance} />
       )}
       <T style={s.section}>Backend settings</T>
       <Field
@@ -401,7 +370,12 @@ export function Analysis() {
           const done = complete || i < j.stage;
           const active = running && i === j.stage;
           return (
-            <Motion key={title} identity={`${i}-${done}-${active}`} small>
+            <Motion
+              key={title}
+              identity={`${i}-${done}-${active}`}
+              small
+              distance={0}
+            >
               <View
                 style={{
                   flexDirection: "row",
@@ -440,7 +414,9 @@ export function Analysis() {
                     {title}
                   </T>
                   {active ? (
-                    <T style={s.muted}>{body}</T>
+                    <FadeArrival identity={`${i}-${active}`} distance={0}>
+                      <T style={s.muted}>{body}</T>
+                    </FadeArrival>
                   ) : (
                     <T style={{ fontSize: 10, lineHeight: 14, color: C.muted }}>
                       {done
@@ -604,7 +580,7 @@ export function Impact() {
           onChange={setPeriod}
         />
         <T style={s.muted}>Pick their bullshit. I’ll find the clip.</T>
-        {categories.map(([code, label]) => (
+        {categories.map(([code, label], index) => (
           <Pressable
             key={code}
             accessibilityRole="checkbox"
@@ -628,15 +604,12 @@ export function Impact() {
                 {data.counts[code]}
               </T>
             </View>
-            <View style={{ height: 4, backgroundColor: C.line }}>
-              <View
-                style={{
-                  height: 4,
-                  width: `${(data.counts[code] / Math.max(1, ...Object.values(data.counts))) * 100}%`,
-                  backgroundColor: C.accent,
-                }}
-              />
-            </View>
+            <ImpactBar
+              index={index}
+              ratio={
+                data.counts[code] / Math.max(1, ...Object.values(data.counts))
+              }
+            />
           </Pressable>
         ))}
       </View>
@@ -664,83 +637,88 @@ export function Impact() {
         </View>
       ) : (
         list.map((c) => (
-          <Pressable
+          <FadeArrival
             key={c.id}
-            accessibilityRole="button"
-            accessibilityLabel={`Open case ${c.id} ${c.vehicle.plate || "Plate unreadable"}`}
-            onPress={() => {
-              rr.select(c.id);
-              go("review");
-            }}
-            style={{
-              flexDirection: "row",
-              gap: 14,
-              paddingVertical: 8,
-              minHeight: 83,
-              alignItems: "center",
-            }}
+            identity={`${period}-${status}-${plate}-${offence}`}
+            distance={0}
           >
-            <View style={{ flex: 1, gap: 4 }}>
-              <T style={{ fontWeight: "700", fontSize: 15 }}>
-                {c.vehicle.plate ||
-                  (!c.offences.length
-                    ? "Suspiciously civil"
-                    : "Plate unreadable")}
-              </T>
-              <T style={s.muted}>
-                {c.offences.length
-                  ? `${c.offences.length} offences`
-                  : "No offence"}{" "}
-                · {c.incident.date || "Date unknown"}
-              </T>
-              <T
-                style={{
-                  fontSize: 11,
-                  color:
-                    c.reporting.status === "sent"
-                      ? "#215841"
-                      : c.reporting.status === "needs_info"
-                        ? "#774009"
-                        : "#55327c",
-                }}
-              >
-                {labels[c.reporting.status]}
-              </T>
-            </View>
-            <View
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Open case ${c.id} ${c.vehicle.plate || "Plate unreadable"}`}
+              onPress={() => {
+                rr.select(c.id);
+                go("review");
+              }}
               style={{
-                width: 80,
-                height: 60,
-                backgroundColor: C.dark,
-                borderRadius: 7,
-                overflow: "hidden",
+                flexDirection: "row",
+                gap: 14,
+                paddingVertical: 8,
+                minHeight: 83,
+                alignItems: "center",
               }}
             >
-              {(c.provenance.isDemo || c.evidence.thumbnailUrl) && (
-                <Image
-                  source={
-                    c.provenance.isDemo
-                      ? require("../../assets/road/images/dashcam-evidence-demo.jpg")
-                      : { uri: c.evidence.thumbnailUrl! }
-                  }
-                  style={{ width: 80, height: 60 }}
-                />
-              )}
-              <T
+              <View style={{ flex: 1, gap: 4 }}>
+                <T style={{ fontWeight: "700", fontSize: 15 }}>
+                  {c.vehicle.plate ||
+                    (!c.offences.length
+                      ? "Suspiciously civil"
+                      : "Plate unreadable")}
+                </T>
+                <T style={s.muted}>
+                  {c.offences.length
+                    ? `${c.offences.length} offences`
+                    : "No offence"}{" "}
+                  · {c.incident.date || "Date unknown"}
+                </T>
+                <T
+                  style={{
+                    fontSize: 11,
+                    color:
+                      c.reporting.status === "sent"
+                        ? "#215841"
+                        : c.reporting.status === "needs_info"
+                          ? "#774009"
+                          : "#55327c",
+                  }}
+                >
+                  {labels[c.reporting.status]}
+                </T>
+              </View>
+              <View
                 style={{
-                  position: "absolute",
-                  bottom: 3,
-                  right: 4,
-                  color: "white",
-                  fontSize: 10,
-                  backgroundColor: "#20282bcc",
-                  paddingHorizontal: 3,
+                  width: 80,
+                  height: 60,
+                  backgroundColor: C.dark,
+                  borderRadius: 7,
+                  overflow: "hidden",
                 }}
               >
-                {duration(c.evidence.durationSeconds)}
-              </T>
-            </View>
-          </Pressable>
+                {(c.provenance.isDemo || c.evidence.thumbnailUrl) && (
+                  <Image
+                    source={
+                      c.provenance.isDemo
+                        ? require("../../assets/road/images/dashcam-evidence-demo.jpg")
+                        : { uri: c.evidence.thumbnailUrl! }
+                    }
+                    style={{ width: 80, height: 60 }}
+                  />
+                )}
+                <T
+                  style={{
+                    position: "absolute",
+                    bottom: 3,
+                    right: 4,
+                    color: "white",
+                    fontSize: 10,
+                    backgroundColor: "#20282bcc",
+                    paddingHorizontal: 3,
+                  }}
+                >
+                  {duration(c.evidence.durationSeconds)}
+                </T>
+              </View>
+            </Pressable>
+          </FadeArrival>
         ))
       )}
       <T style={[s.muted, { fontSize: 11 }]}>
@@ -755,6 +733,33 @@ export function Settings() {
   const [recipient, setRecipient] = useState(p.recipients[p.region]),
     [open, setOpen] = useState(""),
     [message, setMessage] = useState("");
+  const recipientRef = useRef<View>(null),
+    personalRef = useRef<View>(null);
+  const [personal, setPersonal] = useState({
+    name: p.name,
+    identity: p.identity,
+    address: p.address,
+    phone: p.phone,
+    email: p.email,
+    includePersonal: p.includePersonal,
+  });
+  const [saving, setSaving] = useState(false);
+  const saveAndClose = (
+    patch: Parameters<typeof rr.setPrefs>[0],
+    ref: React.RefObject<View | null>,
+    text: string,
+  ) => {
+    setSaving(true);
+    void rr
+      .setPrefs(patch)
+      .then(() => {
+        setOpen("");
+        setMessage(text);
+        focusControl(ref);
+      })
+      .catch(showError)
+      .finally(() => setSaving(false));
+  };
   useEffect(
     () => setRecipient(p.recipients[p.region]),
     [p.region, p.recipients],
@@ -766,6 +771,8 @@ export function Settings() {
       <T style={s.section}>Reporting</T>
       <Pressable
         accessibilityRole="button"
+        ref={recipientRef}
+        accessibilityState={{ expanded: open === "recipient" }}
         accessibilityLabel="Authority WhatsApp"
         onPress={() => setOpen(open === "recipient" ? "" : "recipient")}
         style={s.row}
@@ -779,39 +786,49 @@ export function Settings() {
               : "Add a number for this region"}
           </T>
         </View>
-        <Icon name="ChevronRight" />
+        <Turn open={open === "recipient"}>
+          <Icon name="ChevronRight" />
+        </Turn>
       </Pressable>
       {open === "recipient" && (
-        <View style={{ gap: 12 }}>
-          <Field
-            label="Recipient number"
-            value={recipient}
-            onChangeText={setRecipient}
-            keyboardType="phone-pad"
-          />
-          <Action
-            title="Save recipient"
-            secondary
-            onPress={() => {
-              const n = recipient.replace(/[\s()+-]/g, "");
-              if (!/^[1-9]\d{7,14}$/.test(n)) {
-                setMessage(
-                  "Enter an international number including country code.",
+        <FadeArrival distance={8}>
+          <View style={{ gap: 12 }}>
+            <Field
+              label="Recipient number"
+              value={recipient}
+              onChangeText={setRecipient}
+              keyboardType="phone-pad"
+            />
+            <Action
+              title="Save recipient"
+              disabled={saving}
+              secondary
+              onPress={() => {
+                const n = recipient.replace(/[\s()+-]/g, "");
+                if (!/^[1-9]\d{7,14}$/.test(n)) {
+                  setMessage(
+                    "Enter an international number including country code.",
+                  );
+                  return;
+                }
+                saveAndClose(
+                  { recipients: { ...p.recipients, [p.region]: n } },
+                  recipientRef,
+                  "Recipient saved for " + regionNames[p.region] + ".",
                 );
-                return;
-              }
-              save({ recipients: { ...p.recipients, [p.region]: n } });
-              setMessage("Recipient saved for " + regionNames[p.region] + ".");
-            }}
-          />
-          <T style={s.muted}>
-            I’ll use this for {regionNames[p.region]} drafts. Malaysia’s default
-            is the supplied demo number.
-          </T>
-        </View>
+              }}
+            />
+            <T style={s.muted}>
+              I’ll use this for {regionNames[p.region]} drafts. Malaysia’s
+              default is the supplied demo number.
+            </T>
+          </View>
+        </FadeArrival>
       )}
       <Pressable
         accessibilityRole="button"
+        ref={personalRef}
+        accessibilityState={{ expanded: open === "personal" }}
         accessibilityLabel="Your details"
         onPress={() => setOpen(open === "personal" ? "" : "personal")}
         style={s.row}
@@ -821,36 +838,56 @@ export function Settings() {
           <T style={{ fontWeight: "700" }}>Your details</T>
           <T style={s.muted}>Optional · fill them in WhatsApp</T>
         </View>
-        <Icon name="ChevronRight" />
+        <Turn open={open === "personal"}>
+          <Icon name="ChevronRight" />
+        </Turn>
       </Pressable>
       {open === "personal" && (
-        <View style={{ gap: 15 }}>
-          {(
-            [
-              ["name", "Full name"],
-              ["identity", "Identity number"],
-              ["address", "Postal address"],
-              ["phone", "Phone"],
-              ["email", "Email"],
-            ] as const
-          ).map(([key, label]) => (
-            <Field
-              key={key}
-              label={label}
-              value={p[key]}
-              onChangeText={(v) => save({ [key]: v })}
+        <FadeArrival distance={8}>
+          <View style={{ gap: 15 }}>
+            {(
+              [
+                ["name", "Full name"],
+                ["identity", "Identity number"],
+                ["address", "Postal address"],
+                ["phone", "Phone"],
+                ["email", "Email"],
+              ] as const
+            ).map(([key, label]) => (
+              <Field
+                key={key}
+                label={label}
+                value={personal[key]}
+                onChangeText={(v) =>
+                  setPersonal((current) => ({ ...current, [key]: v }))
+                }
+              />
+            ))}
+            <View style={s.row}>
+              <T style={{ flex: 1 }}>Add your details to report drafts</T>
+              <Switch
+                accessibilityLabel="Add your details to report drafts"
+                value={personal.includePersonal}
+                onValueChange={(v) =>
+                  setPersonal((current) => ({ ...current, includePersonal: v }))
+                }
+              />
+            </View>
+            <Action
+              title="Save details"
+              secondary
+              disabled={saving}
+              onPress={() =>
+                saveAndClose(
+                  personal,
+                  personalRef,
+                  "Your details are saved securely on this device.",
+                )
+              }
             />
-          ))}
-          <View style={s.row}>
-            <T style={{ flex: 1 }}>Add your details to report drafts</T>
-            <Switch
-              accessibilityLabel="Add your details to report drafts"
-              value={p.includePersonal}
-              onValueChange={(v) => save({ includePersonal: v })}
-            />
+            <T style={s.muted}>Saved securely on this device.</T>
           </View>
-          <T style={s.muted}>Saved securely on this device.</T>
-        </View>
+        </FadeArrival>
       )}
       <T style={s.section}>Preferences</T>
       <T style={{ fontWeight: "600" }}>Region</T>

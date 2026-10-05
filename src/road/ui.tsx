@@ -1,6 +1,7 @@
 import React, { useRef, useState } from "react";
 import {
   Alert,
+  AccessibilityInfo,
   Animated,
   KeyboardAvoidingView,
   Platform,
@@ -15,11 +16,17 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { setStatusBarStyle } from "expo-status-bar";
-import { LinearGradient } from "expo-linear-gradient";
 import { router, usePathname } from "expo-router";
-import { SvgXml } from "react-native-svg";
+import Svg, {
+  Defs,
+  RadialGradient,
+  Rect,
+  Stop,
+  SvgXml,
+} from "react-native-svg";
 import icons from "./icons.json";
-import { MorphIcon, Motion, DecorationViewport } from "./motion";
+import { BrandMark } from "./brand";
+import { MorphIcon, Motion, DecorationViewport, FadeArrival } from "./motion";
 import { useRoad } from "./context";
 export const C = {
   bg: "#f3f0f6",
@@ -36,7 +43,7 @@ export const C = {
   dark: "#20282b",
 };
 export const showError = (e: unknown) =>
-  Alert.alert("Road Receipts", e instanceof Error ? e.message : String(e));
+  Alert.alert("Click-to-Safe", e instanceof Error ? e.message : String(e));
 let currentDestination = "home";
 let navigationDirection = 1;
 export const go = (name: string) => {
@@ -87,6 +94,8 @@ export function Action({
   disabled = false,
   icon,
   small = false,
+  fadeOnEnable = false,
+  controlRef,
 }: {
   title: string;
   onPress: () => void;
@@ -94,54 +103,78 @@ export function Action({
   disabled?: boolean;
   icon?: keyof typeof icons;
   small?: boolean;
+  fadeOnEnable?: boolean;
+  controlRef?: React.Ref<View>;
 }) {
+  const { reduced, foreground } = useRoad();
+  const previous = useRef(disabled);
+  const opacity = useRef(new Animated.Value(1)).current;
+  React.useEffect(() => {
+    const becameEnabled = previous.current && !disabled;
+    previous.current = disabled;
+    if (!fadeOnEnable || !becameEnabled || reduced || !foreground) {
+      opacity.setValue(1);
+      return;
+    }
+    opacity.setValue(0.55);
+    const a = Animated.timing(opacity, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    });
+    a.start();
+    return () => a.stop();
+  }, [disabled, fadeOnEnable, reduced, foreground, opacity]);
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={title}
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [
-        {
-          minHeight: small ? 44 : 50,
-          borderRadius: 12,
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 10,
-          borderWidth: secondary ? 1 : 0,
-          borderColor: C.line,
-          backgroundColor: disabled
-            ? "#e8e3ec"
-            : secondary
-              ? C.surface
-              : pressed
-                ? C.accent
-                : C.ink,
-          opacity: pressed ? 0.85 : 1,
-        },
-      ]}
-    >
-      {icon && (
-        <Icon
-          name={icon}
-          color={disabled ? C.muted : secondary ? C.ink : "white"}
-          size={19}
-        />
-      )}
-      <T
-        style={{
-          fontWeight: "700",
-          color: disabled ? C.muted : secondary ? C.ink : "white",
-          textAlign: "center",
-        }}
+    <Animated.View style={{ opacity }}>
+      <Pressable
+        ref={controlRef}
+        accessibilityRole="button"
+        accessibilityLabel={title}
+        accessibilityState={{ disabled }}
+        disabled={disabled}
+        onPress={onPress}
+        style={({ pressed }) => [
+          {
+            minHeight: small ? 44 : 50,
+            borderRadius: 12,
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+            borderWidth: secondary ? 1 : 0,
+            borderColor: C.line,
+            backgroundColor: disabled
+              ? "#e8e3ec"
+              : secondary
+                ? C.surface
+                : pressed
+                  ? C.accent
+                  : C.ink,
+            opacity: pressed ? 0.85 : 1,
+          },
+        ]}
       >
-        {title}
-      </T>
-    </Pressable>
+        {icon && (
+          <Icon
+            name={icon}
+            color={disabled ? C.muted : secondary ? C.ink : "white"}
+            size={19}
+          />
+        )}
+        <T
+          style={{
+            fontWeight: "700",
+            color: disabled ? C.muted : secondary ? C.ink : "white",
+            textAlign: "center",
+          }}
+        >
+          {title}
+        </T>
+      </Pressable>
+    </Animated.View>
   );
 }
 export function Quiet({
@@ -149,17 +182,20 @@ export function Quiet({
   onPress,
   icon,
   compact = false,
+  onFocus,
 }: {
   title: string;
   onPress: () => void;
   icon?: keyof typeof icons;
   compact?: boolean;
+  onFocus?: () => void;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={title}
       onPress={onPress}
+      onFocus={onFocus}
       style={({ pressed }) => ({
         minHeight: 44,
         paddingHorizontal: 7,
@@ -183,29 +219,35 @@ export function Notice({
   error?: boolean;
 }) {
   return (
-    <View
-      accessibilityLiveRegion="polite"
-      style={{
-        padding: 13,
-        borderRadius: 10,
-        backgroundColor: error ? C.warningBg : C.mint,
-        flexDirection: "row",
-        gap: 9,
-        alignItems: "flex-start",
-      }}
-    >
-      <Icon name="CircleAlert" color={error ? C.warning : C.accent} size={18} />
-      <T
+    <FadeArrival>
+      <View
+        accessibilityLiveRegion="polite"
         style={{
-          fontSize: 12,
-          lineHeight: 18,
-          flex: 1,
-          color: error ? C.warning : C.accent,
+          padding: 13,
+          borderRadius: 10,
+          backgroundColor: error ? C.warningBg : C.mint,
+          flexDirection: "row",
+          gap: 9,
+          alignItems: "flex-start",
         }}
       >
-        {children}
-      </T>
-    </View>
+        <Icon
+          name="CircleAlert"
+          color={error ? C.warning : C.accent}
+          size={18}
+        />
+        <T
+          style={{
+            fontSize: 12,
+            lineHeight: 18,
+            flex: 1,
+            color: error ? C.warning : C.accent,
+          }}
+        >
+          {children}
+        </T>
+      </View>
+    </FadeArrival>
   );
 }
 export function Intro({ title, body }: { title: string; body?: string }) {
@@ -237,12 +279,13 @@ export function Field({
   ...rest
 }: TextInputProps & { label: string; missing?: boolean }) {
   const [height, setHeight] = useState(84);
+  const [focused, setFocused] = useState(false);
   return (
     <View style={{ gap: 5, flex: 1, minWidth: 110 }}>
       <T
         style={{
           fontSize: 12,
-          color: missing ? C.warning : C.muted,
+          color: missing ? C.warning : focused ? C.accent : C.muted,
           fontWeight: "600",
         }}
       >
@@ -272,6 +315,14 @@ export function Field({
           ...(multiline ? { height, textAlignVertical: "top" as const } : {}),
         }}
         {...rest}
+        onFocus={(e) => {
+          setFocused(true);
+          rest.onFocus?.(e);
+        }}
+        onBlur={(e) => {
+          setFocused(false);
+          rest.onBlur?.(e);
+        }}
       />
       {missing && (
         <T style={{ fontSize: 11, color: C.warning }}>
@@ -305,12 +356,20 @@ export function Page({
   children,
   footer,
   nav = true,
+  centered = false,
+  animateContent = true,
+  onScrollStart,
+  onActionFocus,
 }: {
   title: string;
   home?: boolean;
   children: React.ReactNode;
   footer?: React.ReactNode;
   nav?: boolean;
+  centered?: boolean;
+  animateContent?: boolean;
+  onScrollStart?: () => void;
+  onActionFocus?: () => void;
 }) {
   const path = usePathname();
   const rr = useRoad();
@@ -323,76 +382,80 @@ export function Page({
       style={{ flex: 1, backgroundColor: C.bg }}
     >
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <LinearGradient
-          colors={["#e8d5ed90", "#f3f0f600"]}
-          style={{
-            position: "absolute",
-            right: -100,
-            top: 0,
-            width: 240,
-            height: 260,
-            borderRadius: 130,
-          }}
-        />
-        <LinearGradient
-          colors={["#d4ebdf80", "#f3f0f600"]}
-          style={{
-            position: "absolute",
-            left: -130,
-            bottom: 120,
-            width: 250,
-            height: 360,
-            borderRadius: 130,
-          }}
-        />
+        <Svg width="100%" height="100%">
+          <Defs>
+            <RadialGradient id="rose-edge" cx="100%" cy="0%" rx="65%" ry="27%">
+              <Stop offset="0" stopColor="#e8d5ed" stopOpacity=".55" />
+              <Stop offset="1" stopColor="#f3f0f6" stopOpacity="0" />
+            </RadialGradient>
+            <RadialGradient id="mint-edge" cx="0%" cy="0%" rx="55%" ry="22%">
+              <Stop offset="0" stopColor="#d4ebdf" stopOpacity=".6" />
+              <Stop offset="1" stopColor="#f3f0f6" stopOpacity="0" />
+            </RadialGradient>
+          </Defs>
+          <Rect width="100%" height="100%" fill="url(#rose-edge)" />
+          <Rect width="100%" height="100%" fill="url(#mint-edge)" />
+        </Svg>
       </View>
-      <View
-        style={{
-          height: 62,
-          paddingHorizontal: 21,
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        {home ? (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Icon name="ScanLine" />
-            <T style={{ fontWeight: "700", fontSize: 17 }}>road receipts</T>
-          </View>
-        ) : (
-          <Quiet title="Back" icon="ChevronLeft" onPress={() => go("home")} />
-        )}
-        {!home && <T style={{ fontWeight: "700", fontSize: 16 }}>{title}</T>}
-        {home ? (
-          <Quiet
-            title="Settings"
-            icon="Settings"
-            onPress={() => go("settings")}
-          />
-        ) : (
-          <View style={{ width: 44 }} />
-        )}
-      </View>
+      <FadeArrival identity={path} duration={160} distance={0}>
+        <View
+          style={{
+            height: 62,
+            paddingHorizontal: 21,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          {home ? (
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+            >
+              <BrandMark />
+              <T style={{ fontWeight: "700", fontSize: 17 }}>Click-to-Safe</T>
+            </View>
+          ) : (
+            <Quiet title="Back" icon="ChevronLeft" onPress={() => go("home")} />
+          )}
+          {!home && <T style={{ fontWeight: "700", fontSize: 16 }}>{title}</T>}
+          {home ? (
+            <Quiet
+              onFocus={onActionFocus}
+              title="Settings"
+              icon="Settings"
+              onPress={() => go("settings")}
+            />
+          ) : (
+            <View style={{ width: 44 }} />
+          )}
+        </View>
+      </FadeArrival>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View ref={viewport} collapsable={false} style={{ flex: 1 }}>
           <ScrollView
+            onScrollBeginDrag={onScrollStart}
             onScroll={(event) => setOffset(event.nativeEvent.contentOffset.y)}
             scrollEventThrottle={100}
             key={path}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{
-              paddingHorizontal: 24,
+              flexGrow: centered ? 1 : undefined,
+              justifyContent: centered ? "center" : undefined,
+              paddingHorizontal: centered ? 20 : 24,
               paddingTop: 16,
               paddingBottom: 26,
               gap: 22,
             }}
           >
             <DecorationViewport.Provider value={visibility}>
-              <Motion identity={path} direction={navigationDirection}>
+              <Motion
+                identity={path}
+                direction={navigationDirection}
+                durationMs={animateContent ? undefined : 0}
+              >
                 <View style={{ gap: 24 }}>
                   {rr.error && <Notice error>{rr.error}</Notice>}
                   {children}
@@ -402,32 +465,36 @@ export function Page({
           </ScrollView>
         </View>
         {footer && (
-          <View
-            style={{
-              paddingHorizontal: 24,
-              paddingTop: 10,
-              paddingBottom: 14,
-              gap: 9,
-              backgroundColor: C.bg,
-            }}
-          >
-            {footer}
-          </View>
+          <FadeArrival identity={path} distance={0}>
+            <View
+              style={{
+                paddingHorizontal: 24,
+                paddingTop: 10,
+                paddingBottom: 14,
+                gap: 9,
+                backgroundColor: C.bg,
+              }}
+            >
+              {footer}
+            </View>
+          </FadeArrival>
         )}
       </KeyboardAvoidingView>
       {rr.job?.notice && path !== "/analysis" && (
-        <View style={{ paddingHorizontal: 18, paddingBottom: 7 }}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Review completed analysis"
-            onPress={() => go("analysis")}
-            style={{ backgroundColor: C.mint, padding: 12, borderRadius: 10 }}
-          >
-            <T style={{ fontSize: 12, fontWeight: "700" }}>
-              Report completed. Your draft is ready to review. →
-            </T>
-          </Pressable>
-        </View>
+        <FadeArrival distance={0}>
+          <View style={{ paddingHorizontal: 18, paddingBottom: 7 }}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Review completed analysis"
+              onPress={() => go("analysis")}
+              style={{ backgroundColor: C.mint, padding: 12, borderRadius: 10 }}
+            >
+              <T style={{ fontSize: 12, fontWeight: "700" }}>
+                Report completed. Your draft is ready to review. →
+              </T>
+            </Pressable>
+          </View>
+        </FadeArrival>
       )}
       {rr.undo && (
         <View
@@ -446,11 +513,15 @@ export function Page({
           />
         </View>
       )}
-      {nav ? <Navigation /> : <SafeAreaView edges={["bottom"]} />}
+      {nav ? (
+        <Navigation onActionFocus={onActionFocus} />
+      ) : (
+        <SafeAreaView edges={["bottom"]} />
+      )}
     </SafeAreaView>
   );
 }
-export function Navigation() {
+export function Navigation({ onActionFocus }: { onActionFocus?: () => void }) {
   const path = usePathname(),
     rr = useRoad();
   const active =
@@ -476,6 +547,7 @@ export function Navigation() {
         {(["home", "review", "history", "developer"] as const).map((key, i) => (
           <Pressable
             key={key}
+            onFocus={onActionFocus}
             accessibilityRole="tab"
             accessibilityLabel={["Home", "Review", "Impact", "Developer"][i]}
             accessibilityState={{ selected: active === key }}
@@ -613,4 +685,13 @@ export function Segments({
       ))}
     </View>
   );
+}
+
+export function focusControl(ref: React.RefObject<View | null>) {
+  requestAnimationFrame(() => {
+    if (ref.current) {
+      ref.current.focus();
+      AccessibilityInfo.sendAccessibilityEvent(ref.current, "focus");
+    }
+  });
 }

@@ -1,4 +1,31 @@
-# Road Receipts rebuild validation — 2026-10-05
+# Click-to-Safe design update validation — 2026-10-05
+
+Source handover: `whyteaz/road-receipts-handover` commit `3ae6b66` (previous native baseline `3b64312`). The following section records this design update; earlier build and live-AI results are retained below as historical evidence.
+
+## Changes and checks
+
+- Updated the installed app name, launcher assets, native splash and Home header to Click-to-Safe using the exact supplied shield/road SVG geometry. Bundle identifier, repository URL and data keys stay unchanged.
+- Ported Capture arrives: black brand hold, central aperture (1255–2140 ms), measured iris landing (2875 ms), phrase/copy reveal finishing at 3670 ms, and the 4200 ms invitation with two rings. The first entrance runs once per JavaScript app session. A development-only Replay Home entrance action supports inspection without resetting cases or credentials.
+- Added native Impact bar transitions (360 ms, stagger capped at 84 ms), result arrival, disclosure rotation, notice/header/footer arrivals, field focus colour and a one-time fade when a report action becomes enabled. Original navigation morphs and Gemini Living intelligence renderer remain intact.
+- Timestamp selection now follows the actual video playhead within 0.5 seconds; pressing the same timestamp again seeks again. Excluded offence titles are muted. Recipient/details saves close their disclosure and restore focus; removing a selected upload restores focus to Choose video.
+- TypeScript and ESLint passed. All **23 automated tests** passed, including entrance timing/corner coverage and evidence restoration after an iOS container relocation. Expo Doctor passed **18/18 checks**.
+
+## Simulator observations
+
+Environment: iPhone 16 Pro, iOS 18.6, Expo SDK 54 / React Native 0.81.5.
+
+- Development and Release native build/install both succeeded with **zero errors and zero warnings**. Stopped Metro, cold-launched the Release binary and confirmed Home loads and animates independently of the development server. Its launch video also shows the new system icon, native brand splash and aperture sequence. [Settled native Home](design/previews/click-to-safe-home-ios.png).
+- Captured the full first-entrance sequence to a local Simulator video and inspected its frames: black wordmark → expanding aperture → iris arriving at the recording disc → settled Home and repeating rings. Ordinary navigation back Home does not replay the full splash.
+- Settings remains actionable during the entrance: opening it interrupts the overlay and reveals the Settings screen. Reduce motion skips the entrance and shows the settled disc immediately. The preference was restored to off after testing.
+- Saving the existing recipient closes the disclosure and shows its confirmation. No recipient change or external message was sent.
+- Impact displays existing cases, accurate local counts and unknown authority outcomes. Existing live case `DR-MUV53LXK-AZ8-1` remains available; its original video opens and the 00:05 timestamp seeks to the corresponding frame with selected styling.
+- Reinstallation exposed stale absolute URLs in restored case evidence. The app now resolves those URLs through the original recording store's stable source ID and current Documents directory, preserving reviewed facts and reporting state. A regression test covers relocated local media, unknown sources, remote URLs and synthetic evidence.
+
+No backend code/deployment or AI request contract changed. This update does not claim a new real-camera or new AI inference test; the two real-video backend runs below remain the integration evidence. Physical-iPhone recording and Android launch/motion behavior still require device testing.
+
+---
+
+# Previous Road Receipts rebuild validation — 2026-10-05
 
 This section describes the new app. The dated DriveReport results below are historical and do not establish that every new screen has been tested on Android or a physical phone.
 

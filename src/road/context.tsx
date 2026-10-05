@@ -12,6 +12,7 @@ import * as Device from "expo-device";
 import { useStore } from "../lib/store";
 import {
   fromLegacy,
+  restoreEvidence,
   correctStatus,
   validation,
   type RoadCase,
@@ -77,6 +78,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     [selected, select] = useState(""),
     [job, setJob] = useState<Job | null>(null),
     [osReduced, setOSReduced] = useState(false),
+    [motionReady, setMotionReady] = useState(false),
     [foreground, setForeground] = useState(AppState.currentState === "active");
   const [undo, setUndo] = useState<{ id: string; until: number } | null>(null);
   useEffect(() => {
@@ -117,7 +119,10 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
   };
   useEffect(() => {
     alive.current = true;
-    void AccessibilityInfo.isReduceMotionEnabled().then(setOSReduced);
+    void AccessibilityInfo.isReduceMotionEnabled()
+      .then(setOSReduced)
+      .catch(() => setOSReduced(true))
+      .finally(() => setMotionReady(true));
     const motion = AccessibilityInfo.addEventListener(
       "reduceMotionChanged",
       setOSReduced,
@@ -150,7 +155,11 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
           : defaults;
         pr.current = p;
         setPreferences(p);
-        const restored: RoadCase[] = data ? JSON.parse(data) : [];
+        const stored: RoadCase[] = data ? JSON.parse(data) : [];
+        const sources = new Map(old.current.records.map((i) => [i.id, i]));
+        const restored = stored.map((c) =>
+          restoreEvidence(c, sources.get(c.sourceId || "")),
+        );
         // Preserve the old evidence store; migrate analysed records once into the new case model.
         const known = new Set(restored.map((c) => c.sourceId));
         const migrated = old.current.records
@@ -174,7 +183,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         }
       } catch {
         setError(
-          "Could not restore Road Receipts data. Restart before making changes.",
+          "Could not restore Click-to-Safe data. Restart before making changes.",
         );
       } finally {
         if (!disposed) setReady(true);
@@ -355,7 +364,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
   return (
     <RoadContext.Provider
       value={{
-        ready: ready && legacy.ready,
+        ready: ready && legacy.ready && motionReady,
         error,
         cases: cases.filter((c) => c.provenance.isDemo === prefs.demo),
         allCases: cases,

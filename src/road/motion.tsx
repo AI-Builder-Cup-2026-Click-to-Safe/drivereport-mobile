@@ -238,32 +238,27 @@ export function MorphIcon({
     </Svg>
   );
 }
-export function BreathingDisc({ disabled = false }: { disabled?: boolean }) {
+export function BreathingDisc({
+  disabled = false,
+  coreStyle,
+}: {
+  disabled?: boolean;
+  coreStyle?: React.ComponentProps<typeof Animated.View>["style"];
+}) {
   const { reduced, foreground } = useRoad();
   const { target, visible, measure } = useDecorationVisibility();
   const v = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (reduced || !foreground || disabled || !visible) {
-      v.setValue(0);
-      return;
-    }
+    v.setValue(0);
+    if (reduced || !foreground || disabled || !visible) return;
     const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(v, {
-          toValue: 1,
-          duration: 1600,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-          isInteraction: false,
-        }),
-        Animated.timing(v, {
-          toValue: 0,
-          duration: 1600,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-          isInteraction: false,
-        }),
-      ]),
+      Animated.timing(v, {
+        toValue: 1,
+        duration: 4200,
+        easing: Easing.linear,
+        useNativeDriver: true,
+        isInteraction: false,
+      }),
     );
     animation.start();
     return () => animation.stop();
@@ -277,16 +272,16 @@ export function BreathingDisc({ disabled = false }: { disabled?: boolean }) {
         width: 128,
         height: 128,
         borderRadius: 64,
-        backgroundColor: "#fcfafebd",
+        backgroundColor: "#fcfafe",
         alignItems: "center",
         justifyContent: "center",
         borderWidth: 1,
-        borderColor: "#ffffff",
+        borderColor: "#b8b0bd",
         transform: [
           {
             scale: v.interpolate({
-              inputRange: [0, 1],
-              outputRange: [1, 1.055],
+              inputRange: [0, 0.23, 0.42, 0.68, 1],
+              outputRange: [1, 1.045, 1.012, 1, 1],
             }),
           },
         ],
@@ -294,12 +289,169 @@ export function BreathingDisc({ disabled = false }: { disabled?: boolean }) {
     >
       <View
         style={{
-          width: 47,
-          height: 47,
-          borderRadius: 24,
-          backgroundColor: "#4e625a",
+          position: "absolute",
+          inset: 8,
+          borderWidth: 1,
+          borderColor: "#d1c8d4",
+          borderRadius: 60,
         }}
       />
+      {[0, 1].map((i) => (
+        <Animated.View
+          key={i}
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            inset: -1,
+            borderWidth: 1,
+            borderRadius: 65,
+            borderColor: i ? "#7b698b" : "#4e625a",
+            opacity: v.interpolate({
+              inputRange: [
+                0,
+                0.083 * i + 0.001,
+                0.13 + 0.083 * i,
+                0.45 + 0.083 * i,
+                1,
+              ],
+              outputRange: [0, 0, 0.34, 0, 0],
+            }),
+            transform: [
+              {
+                scale: v.interpolate({
+                  inputRange: [0, 0.083 * i + 0.001, 0.45 + 0.083 * i, 1],
+                  outputRange: [0.94, 0.94, 1.28, 1.28],
+                }),
+              },
+            ],
+          }}
+        />
+      ))}
+      <Animated.View
+        style={[
+          {
+            width: 42,
+            height: 42,
+            borderRadius: 21,
+            backgroundColor: "#2b2531",
+          },
+          coreStyle,
+        ]}
+      />
+    </Animated.View>
+  );
+}
+
+export function FadeArrival({
+  children,
+  identity = "arrival",
+  duration = 180,
+  distance = 6,
+}: {
+  children: React.ReactNode;
+  identity?: string;
+  duration?: number;
+  distance?: number;
+}) {
+  const { reduced, foreground } = useRoad();
+  const value = useRef(new Animated.Value(reduced ? 1 : 0)).current;
+  useEffect(() => {
+    value.setValue(reduced || !foreground ? 1 : 0);
+    if (reduced || !foreground) return;
+    const animation = Animated.timing(value, {
+      toValue: 1,
+      duration,
+      easing: Easing.bezier(0.16, 1, 0.3, 1),
+      useNativeDriver: true,
+      isInteraction: false,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [identity, reduced, foreground, duration, value]);
+  return (
+    <Animated.View
+      style={{
+        opacity: value,
+        transform: [
+          {
+            translateY: value.interpolate({
+              inputRange: [0, 1],
+              outputRange: [distance, 0],
+            }),
+          },
+        ],
+      }}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
+export function ImpactBar({ ratio, index }: { ratio: number; index: number }) {
+  const { reduced, foreground } = useRoad();
+  const v = useRef(new Animated.Value(reduced ? ratio : 0)).current;
+  useEffect(() => {
+    if (reduced || !foreground) {
+      v.setValue(ratio);
+      return;
+    }
+    const animation = Animated.timing(v, {
+      toValue: ratio,
+      duration: 360,
+      delay: Math.min(84, index * 28),
+      easing: Easing.bezier(0.16, 1, 0.3, 1),
+      useNativeDriver: true,
+      isInteraction: false,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [ratio, index, reduced, foreground, v]);
+  return (
+    <View style={{ height: 4, backgroundColor: "#d1c8d4", overflow: "hidden" }}>
+      <Animated.View
+        style={{
+          height: 4,
+          backgroundColor: "#4e625a",
+          transformOrigin: "left center",
+          transform: [{ scaleX: v }],
+        }}
+      />
+    </View>
+  );
+}
+
+export function Turn({
+  open,
+  children,
+}: {
+  open: boolean;
+  children: React.ReactNode;
+}) {
+  const { reduced, foreground } = useRoad();
+  const v = useRef(new Animated.Value(open ? 1 : 0)).current;
+  useEffect(() => {
+    const a = Animated.timing(v, {
+      toValue: open ? 1 : 0,
+      duration: reduced || !foreground ? 0 : 180,
+      useNativeDriver: true,
+    });
+    a.start();
+    return () => a.stop();
+  }, [v, open, reduced, foreground]);
+  return (
+    <Animated.View
+      style={{
+        transform: [
+          {
+            rotate: v.interpolate({
+              inputRange: [0, 1],
+              outputRange: ["0deg", "90deg"],
+            }),
+          },
+        ],
+      }}
+    >
+      {children}
     </Animated.View>
   );
 }

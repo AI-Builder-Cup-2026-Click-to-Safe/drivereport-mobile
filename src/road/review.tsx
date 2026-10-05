@@ -27,17 +27,34 @@ import {
   showError,
   styles as s,
 } from "./ui";
-function RealVideo({ uri, seek }: { uri: string; seek: number }) {
+function RealVideo({
+  uri,
+  seek,
+  revision,
+  onTime,
+}: {
+  uri: string;
+  seek: number;
+  revision: number;
+  onTime: (time: number) => void;
+}) {
   const [failed, setFailed] = useState(false);
   const player = useVideoPlayer(uri, (p) => {
     p.loop = false;
+    p.timeUpdateEventInterval = 0.25;
   });
   useEffect(() => {
     if (seek >= 0) {
       player.currentTime = seek;
       player.pause();
     }
-  }, [seek, player]);
+  }, [seek, revision, player]);
+  useEffect(() => {
+    const sub = player.addListener("timeUpdate", ({ currentTime }) =>
+      onTime(currentTime),
+    );
+    return () => sub.remove();
+  }, [player, onTime]);
   useEffect(() => {
     const sub = player.addListener("statusChange", (e) =>
       setFailed(e.status === "error"),
@@ -63,7 +80,17 @@ function RealVideo({ uri, seek }: { uri: string; seek: number }) {
     />
   );
 }
-function Evidence({ c, seek }: { c: RoadCase; seek: number }) {
+function Evidence({
+  c,
+  seek,
+  revision,
+  onTime,
+}: {
+  c: RoadCase;
+  seek: number;
+  revision: number;
+  onTime: (time: number) => void;
+}) {
   return c.provenance.isDemo ? (
     <View
       style={{ borderRadius: 12, overflow: "hidden", backgroundColor: C.dark }}
@@ -101,7 +128,13 @@ function Evidence({ c, seek }: { c: RoadCase; seek: number }) {
       </View>
     </View>
   ) : c.evidence.originalVideoUrl ? (
-    <RealVideo key={c.id} uri={c.evidence.originalVideoUrl} seek={seek} />
+    <RealVideo
+      key={c.id}
+      uri={c.evidence.originalVideoUrl}
+      seek={seek}
+      revision={revision}
+      onTime={onTime}
+    />
   ) : (
     <Notice error>Original evidence is unavailable.</Notice>
   );
@@ -228,12 +261,15 @@ export function Review() {
   );
   const c = rr.cases[index];
   const [seek, setSeek] = useState(-1),
+    [seekRevision, setSeekRevision] = useState(0),
+    [playhead, setPlayhead] = useState(-1),
     [busy, setBusy] = useState(false),
     [direction, setDirection] = useState(1),
     [descriptionNote, setDescriptionNote] = useState(false);
   const changing = useRef(false);
   useEffect(() => {
     setSeek(-1);
+    setPlayhead(-1);
     setDescriptionNote(false);
   }, [c?.id]);
   if (!c)
@@ -304,6 +340,7 @@ export function Review() {
           <>
             <Action
               title="Report via WhatsApp"
+              fadeOnEnable
               icon="MessageCircle"
               disabled={!!error || busy}
               onPress={() => void send()}
@@ -365,7 +402,12 @@ export function Review() {
           {missing(c).length > 0 && c.offences.length > 0 && (
             <Notice error>{error}</Notice>
           )}
-          <Evidence c={c} seek={seek} />
+          <Evidence
+            c={c}
+            seek={seek}
+            revision={seekRevision}
+            onTime={setPlayhead}
+          />
           {c.provenance.isDemo && (
             <T style={s.muted}>
               Synthetic demonstration. No real incident is being reported.
@@ -391,21 +433,50 @@ export function Review() {
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Seek ${o.label}`}
-                      onPress={() => setSeek(o.atSeconds)}
+                      accessibilityState={{
+                        selected: Math.abs(playhead - o.atSeconds) <= 0.5,
+                      }}
+                      onPress={() => {
+                        setSeek(o.atSeconds);
+                        setPlayhead(o.atSeconds);
+                        setSeekRevision((n) => n + 1);
+                      }}
                       style={{
                         minHeight: 44,
                         justifyContent: "center",
                         padding: 8,
                         borderRadius: 8,
-                        backgroundColor: "#e8e3ec",
+                        backgroundColor:
+                          Math.abs(playhead - o.atSeconds) <= 0.5
+                            ? C.mint
+                            : "#e8e3ec",
                       }}
                     >
-                      <T style={{ fontSize: 11, fontWeight: "600" }}>
+                      <T
+                        style={{
+                          fontSize: 11,
+                          fontWeight: "600",
+                          color:
+                            Math.abs(playhead - o.atSeconds) <= 0.5
+                              ? C.accent
+                              : C.ink,
+                          textDecorationLine:
+                            Math.abs(playhead - o.atSeconds) <= 0.5
+                              ? "underline"
+                              : "none",
+                        }}
+                      >
                         {duration(o.atSeconds)}
                       </T>
                     </Pressable>
                     <View style={{ flex: 1, gap: 3 }}>
-                      <T style={{ fontSize: 13, fontWeight: "600" }}>
+                      <T
+                        style={{
+                          fontSize: 13,
+                          fontWeight: "600",
+                          color: o.included ? C.ink : C.muted,
+                        }}
+                      >
                         {o.label}
                       </T>
                       <T
