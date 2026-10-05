@@ -36,6 +36,17 @@ This section describes the new app. The dated DriveReport results below are hist
 - Terminated and relaunched the app, then reopened Review. The same case ID, finding, citation and missing-fact state were restored. No WhatsApp message or authority report was sent.
 - TypeScript and ESLint passed after adding the development sample loader. No backend source or deployment changes were needed.
 
+## Second live video retest — 2026-10-05, ID02
+
+- Tested different footage: the first 12 seconds of workspace `data/mydashcam/ID02.mp4`, transcoded to silent H.264. Size: 1,172,575 bytes; SHA-256: `9ff9c6ba84a0c81421e7ae0e2e9a00e906d36530ef98cbcb134cddca5279bac8`.
+- Temporarily substituted this clip for the development sample-loader input, then verified that the app's newly imported local file had the identical SHA-256. The original committed sample was restored byte-for-byte after analysis. No fixture result or previous review was reused.
+- New live job: `JOB-1791198116770`; evidence: `DR-MUV53LXK-AZ8`; case: `DR-MUV53LXK-AZ8-1`.
+- Cloud Run confirms `POST /v1/uploads` **200 OK** at `11:02:22.892 UTC` and `POST /v1/review` **200 OK** at `11:07:03.426 UTC`. Local job creation was `11:01:56.770 UTC`: about **5 minutes 7 seconds** overall and **4 minutes 41 seconds** after upload-session creation.
+- The new response identified a light green/teal compact hatchback making an abrupt late lane change toward the right exit at a highway fork, **00:05–00:07.5**, confidence **0.85**, one suspected offence, four timeline entries, `follow_up_exhausted=false`. The AI returned Road Transport Act 1987 Section 43(1) as its citation; legal accuracy and probability calibration were not established by this integration test.
+- Review displayed the new vehicle/conduct/citation. Tapping the offence sought the original video to 00:05; the rendered frame matched the independently extracted 5-second frame. Required unknown incident facts remained blank and WhatsApp remained disabled.
+- Relaunched after restoring the bundled sample: the ID02 case and its original video/result persisted. No report was sent. The Simulator is left on this real result.
+- TypeScript and ESLint passed. No application logic, backend source or deployment change was needed. Physical iPhone camera capture was not tested in this run.
+
 ## Implementation boundaries
 
 - Native screens and SVG navigation are React Native; only the original Canvas illustration runs in a local, self-contained WebView. Decorative loops observe foreground/reduced-motion state and measured scroll visibility. Offscreen pause is implemented but not separately certified across screen sizes.
