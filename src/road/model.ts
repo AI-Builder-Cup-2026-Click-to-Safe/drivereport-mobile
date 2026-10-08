@@ -1,4 +1,7 @@
-import type { Incident as LegacyIncident } from "../lib/domain.ts";
+import type {
+  Incident as LegacyIncident,
+  Review,
+} from "../lib/domain.ts";
 export type Region = "MY" | "SG" | "JP";
 export type Status = "needs_info" | "ready" | "opened" | "sent" | "clean";
 export type Offence = {
@@ -377,6 +380,66 @@ export function fromLegacy(i: LegacyIncident, region: Region): RoadCase[] {
     }
     return c;
   });
+}
+
+/** Convert a persisted backend review into the same case model used for a
+ * review created on this device. The signed original is used only when no
+ * durable local recording exists. */
+export function fromServerReview(review: Review, region: Region): RoadCase[] {
+  if (!review.review_id) return [];
+  return fromLegacy(
+    {
+      id: `cloud:${review.review_id}`,
+      name: `Server review ${review.review_id.slice(0, 8)}`,
+      file: review.original_video_url || "",
+      mime: "video/mp4",
+      size: 0,
+      createdAt: review.created_at || "",
+      stage: "ready",
+      plate: "",
+      location: "",
+      occurredAt: "",
+      result: review,
+    },
+    region,
+  );
+}
+
+/** Refresh server-owned fields without erasing facts or local evidence edited
+ * on the current device. */
+export function mergeServerCase(
+  local: RoadCase,
+  remote: RoadCase,
+): RoadCase {
+  const localOriginal = local.evidence.originalVideoUrl;
+  const localThumbnail = local.evidence.thumbnailUrl;
+  return {
+    ...local,
+    reviewId: remote.reviewId || local.reviewId,
+    decisionTrail: remote.decisionTrail || local.decisionTrail,
+    authorityOutcome: remote.authorityOutcome,
+    evidence: {
+      ...local.evidence,
+      durationSeconds:
+        remote.evidence.durationSeconds || local.evidence.durationSeconds,
+      originalVideoUrl:
+        localOriginal?.startsWith("file:")
+          ? localOriginal
+          : remote.evidence.originalVideoUrl || localOriginal,
+      annotatedVideoUrl:
+        remote.evidence.annotatedVideoUrl ||
+        local.evidence.annotatedVideoUrl,
+      excerptVideoUrl:
+        remote.evidence.excerptVideoUrl || local.evidence.excerptVideoUrl,
+      thumbnailUrl:
+        localThumbnail?.startsWith("file:")
+          ? localThumbnail
+          : remote.evidence.thumbnailUrl || localThumbnail,
+      tracks: remote.evidence.tracks.length
+        ? remote.evidence.tracks
+        : local.evidence.tracks,
+    },
+  };
 }
 
 const object = (value: unknown): Record<string, unknown> | null =>

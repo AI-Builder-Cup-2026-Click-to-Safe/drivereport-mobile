@@ -7,6 +7,8 @@ import {
   defaultWhatsAppTestMessage,
   editCase,
   fromLegacy,
+  fromServerReview,
+  mergeServerCase,
   restoreEvidence,
   impact,
   inPeriod,
@@ -350,6 +352,68 @@ test("new GCP case contract keeps server IDs, citations, tracks and cited excerp
   assert.equal(c.offences[0].reasoning, "Visible unsafe pass");
   assert.equal(c.decisionTrail?.citations[0].quote, "A person who drives...");
   assert.equal(c.reporting.status, "needs_info");
+});
+
+test("server history becomes a case while refreshed cloud fields preserve local edits and footage", () => {
+  const reviewId = "b".repeat(32);
+  const review = {
+    review_id: reviewId,
+    created_at: "2026-10-09T10:00:00+00:00",
+    verdict: "Nothing reportable",
+    reportable: [],
+    follow_up_exhausted: false,
+    original_video_url: "https://example.com/original.mp4",
+    annotated_video_url: "https://example.com/annotated.mp4",
+    tracks: [],
+    evidence: { timeline: [] },
+    case: {
+      id: "RR-SHARED1",
+      version: 1,
+      region: "MY",
+      vehicle: { plate: null, type: null, model: null },
+      incident: {
+        date: null,
+        time: null,
+        timeZone: "Asia/Kuala_Lumpur",
+        location: null,
+        description: "Nothing reportable",
+      },
+      offences: [],
+      evidence: {
+        durationSeconds: 12,
+        originalVideoUrl: "https://example.com/original.mp4",
+        annotatedVideoUrl: "https://example.com/annotated.mp4",
+        thumbnailUrl: null,
+        tracks: [],
+        isSynthetic: false,
+      },
+      reporting: { status: "clean", confirmedByUser: false },
+      authorityOutcome: { status: "unknown", source: null, updatedAt: null },
+      provenance: {
+        isDemo: false,
+        factsSource: "gemini_video_analysis",
+        legalRetrieval: "backend_review",
+      },
+    },
+  };
+  const [cloud] = fromServerReview(review, "MY");
+  assert.equal(cloud.reviewId, reviewId);
+  assert.equal(cloud.sourceId, `cloud:${reviewId}`);
+  assert.equal(
+    cloud.evidence.originalVideoUrl,
+    "https://example.com/original.mp4",
+  );
+
+  const local = structuredClone(cloud);
+  local.vehicle.plate = "USER EDIT";
+  local.evidence.originalVideoUrl = "file:///retained.mov";
+  const merged = mergeServerCase(local, cloud);
+  assert.equal(merged.vehicle.plate, "USER EDIT");
+  assert.equal(merged.evidence.originalVideoUrl, "file:///retained.mov");
+  assert.equal(
+    merged.evidence.annotatedVideoUrl,
+    "https://example.com/annotated.mp4",
+  );
 });
 
 test("app updates relink local evidence without changing reviews or remote/demo media", () => {

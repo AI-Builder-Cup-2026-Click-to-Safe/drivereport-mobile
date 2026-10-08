@@ -687,6 +687,14 @@ export function StandardImpact() {
     <Page title="Impact">
       <Intro title="Your impact. Their problem." />
       <T style={s.muted}>I keep receipts. Karma loves paperwork.</T>
+      {!rr.prefs.demo && (
+        <Quiet
+          title={rr.syncingCases ? "Syncing server cases…" : "Sync server cases"}
+          disabled={rr.syncingCases}
+          onPress={() => void rr.syncCases(true).catch(showError)}
+        />
+      )}
+      {!!rr.historyError && <Notice error>{rr.historyError}</Notice>}
       <View style={{ flexDirection: "row", gap: 10 }}>
         {[
           [remote?.snitchedCount ?? data.sent, "Assholes reported"],

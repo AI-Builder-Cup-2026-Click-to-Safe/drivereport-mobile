@@ -14,14 +14,18 @@ import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import {
   analyseVideo,
   fetchImpact,
+  listReviewHistory,
+  readReview,
   refreshReview,
   updateReporting,
+  type ReviewHistoryItem,
 } from "./api";
 import {
   applyBuildConnection,
   Incident,
   initialSettings,
   Settings,
+  type Review,
   type ImpactSummary,
 } from "./domain";
 
@@ -51,6 +55,12 @@ type Context = {
   ) => Promise<Incident | undefined>;
   refresh: (id: string) => Promise<Incident | undefined>;
   syncReporting: (id: string, status: "opened" | "sent") => Promise<void>;
+  listReviews: () => Promise<ReviewHistoryItem[]>;
+  getReview: (reviewId: string) => Promise<Review>;
+  syncReviewReporting: (
+    reviewId: string,
+    status: "opened" | "sent",
+  ) => Promise<void>;
   getImpact: (period: "all" | "week" | "today") => Promise<ImpactSummary>;
   getRecords: () => Incident[];
   cancel: () => void;
@@ -290,6 +300,36 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
       clearTimeout(timer);
     }
   };
+  const listReviews = async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30000);
+    try {
+      return await listReviewHistory(settings, controller.signal);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const getReview = async (reviewId: string) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      return await readReview(reviewId, settings, controller.signal);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const syncReviewReporting = async (
+    reviewId: string,
+    status: "opened" | "sent",
+  ) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      await updateReporting(reviewId, status, settings, controller.signal);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
   const getImpact = async (period: "all" | "week" | "today") => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
@@ -327,6 +367,9 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
         analyse,
         refresh,
         syncReporting,
+        listReviews,
+        getReview,
+        syncReviewReporting,
         getImpact,
         getRecords: () => recordsRef.current,
         cancel: () => running.current?.abort(),

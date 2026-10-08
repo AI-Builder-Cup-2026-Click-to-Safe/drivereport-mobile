@@ -20,6 +20,7 @@ export type Review = {
   reportable: Finding[];
   follow_up_exhausted: boolean;
   review_id?: string;
+  created_at?: string;
   case?: unknown;
   decision_trail?: unknown;
   original_video_url?: string;
@@ -149,6 +150,7 @@ export function parseReview(input: unknown): Review {
     reportable,
     follow_up_exhausted: r.follow_up_exhausted === true,
     ...(text(r.review_id) ? { review_id: text(r.review_id) } : {}),
+    ...(text(r.created_at) ? { created_at: text(r.created_at) } : {}),
     ...(r.case && typeof r.case === "object" ? { case: r.case } : {}),
     ...(r.decision_trail && typeof r.decision_trail === "object"
       ? { decision_trail: r.decision_trail }

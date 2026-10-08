@@ -347,8 +347,20 @@ export function Review() {
     <Page title="Case">
       <Intro
         title="I can’t snitch on thin air."
-        body="Give me a clip. I’ll check for clown behaviour."
+        body={
+          rr.syncingCases
+            ? "Checking the server for shared cases…"
+            : "Give me a clip. I’ll check for clown behaviour."
+        }
       />
+      {!rr.prefs.demo && (
+        <Quiet
+          title={rr.syncingCases ? "Syncing cases…" : "Sync server cases"}
+          disabled={rr.syncingCases}
+          onPress={() => void rr.syncCases(true).catch(showError)}
+        />
+      )}
+      {!!rr.historyError && <Notice error>{rr.historyError}</Notice>}
       <Action title="Analyse a clip" onPress={() => go("clip")} />
     </Page>
   );

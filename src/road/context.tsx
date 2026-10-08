@@ -1,4 +1,5 @@
 import React, {
+  useCallback,
   createContext,
   useContext,
   useEffect,
@@ -12,6 +13,8 @@ import * as Device from "expo-device";
 import { useStore } from "../lib/store";
 import {
   fromLegacy,
+  fromServerReview,
+  mergeServerCase,
   editCase,
   restoreEvidence,
   correctStatus,
@@ -61,6 +64,9 @@ type Context = {
   select: (id: string) => void;
   changeCase: (id: string, patch: Partial<RoadCase>) => Promise<void>;
   refreshEvidence: (id: string) => Promise<RoadCase>;
+  syncCases: (force?: boolean) => Promise<void>;
+  syncingCases: boolean;
+  historyError: string;
   job: Job | null;
   begin: (ids: string[], demo?: boolean) => Promise<void>;
   cancel: () => void;
@@ -86,7 +92,9 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     [job, setJob] = useState<Job | null>(null),
     [osReduced, setOSReduced] = useState(false),
     [motionReady, setMotionReady] = useState(false),
-    [foreground, setForeground] = useState(AppState.currentState === "active");
+    [foreground, setForeground] = useState(AppState.currentState === "active"),
+    [syncingCases, setSyncingCases] = useState(false),
+    [historyError, setHistoryError] = useState("");
   const [undo, setUndo] = useState<{ id: string; until: number } | null>(null);
   useEffect(() => {
     if (!undo) return;
@@ -101,8 +109,10 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     jr = useRef(job),
     writes = useRef(Promise.resolve()),
     run = useRef(0),
-    alive = useRef(true);
-  const persistCases = (next: RoadCase[]) => {
+    alive = useRef(true),
+    lastHistorySync = useRef(0),
+    historySync = useRef<Promise<void> | null>(null);
+  const persistCases = useCallback((next: RoadCase[]) => {
     cr.current = next;
     setCases(next);
     const text = JSON.stringify(next);
@@ -111,7 +121,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
       .then(() => AsyncStorage.setItem("road.cases.v1", text));
     writes.current = work;
     return work;
-  };
+  }, []);
   const updateJob = (next: Job | null) => {
     jr.current = next;
     setJob(next);
@@ -146,6 +156,89 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
       app.remove();
     };
   }, []);
+  const syncCases = useCallback(
+    async (force = false) => {
+      if (pr.current.demo || !old.current.settings.token.trim()) return;
+      if (!force && Date.now() - lastHistorySync.current < 15000) return;
+      if (historySync.current) return historySync.current;
+      const work = (async () => {
+        setSyncingCases(true);
+        setHistoryError("");
+        try {
+          const history = await old.current.listReviews();
+          const known = new Set(
+            cr.current.map((c) => c.reviewId).filter(Boolean),
+          );
+          const missing = history.filter((item) => !known.has(item.reviewId));
+          const fetched = await Promise.allSettled(
+            missing.map(async (item) => {
+              const review = await old.current.getReview(item.reviewId);
+              if (!review.created_at) review.created_at = item.createdAt;
+              return fromServerReview(review, pr.current.region);
+            }),
+          );
+          const remote = fetched.flatMap((result) =>
+            result.status === "fulfilled" ? result.value : [],
+          );
+          const statusByReview = new Map(
+            history.map((item) => [item.reviewId, item.reportingStatus]),
+          );
+          let next = cr.current.map((local) => {
+            const serverStatus = local.reviewId
+              ? statusByReview.get(local.reviewId)
+              : undefined;
+            if (!serverStatus || local.reporting.status === "sent")
+              return local;
+            return {
+              ...local,
+              reporting: {
+                ...local.reporting,
+                status: serverStatus,
+                confirmedByUser: serverStatus === "sent",
+              },
+            };
+          });
+          for (const serverCase of remote) {
+            const index = next.findIndex(
+              (local) =>
+                (local.reviewId && local.reviewId === serverCase.reviewId) ||
+                local.id === serverCase.id,
+            );
+            const serverStatus = serverCase.reviewId
+              ? statusByReview.get(serverCase.reviewId)
+              : undefined;
+            if (serverStatus)
+              serverCase.reporting = {
+                status: serverStatus,
+                confirmedByUser: serverStatus === "sent",
+              };
+            if (index >= 0)
+              next[index] = mergeServerCase(next[index], serverCase);
+            else next = [...next, serverCase];
+          }
+          await persistCases(next);
+          lastHistorySync.current = Date.now();
+          if (fetched.some((result) => result.status === "rejected"))
+            setHistoryError("Some server cases could not be downloaded. Retry.");
+        } catch (e) {
+          setHistoryError(
+            e instanceof Error
+              ? e.message
+              : "Could not sync server case history.",
+          );
+        } finally {
+          setSyncingCases(false);
+        }
+      })();
+      historySync.current = work;
+      try {
+        await work;
+      } finally {
+        historySync.current = null;
+      }
+    },
+    [persistCases],
+  );
   useEffect(() => {
     if (!legacy.ready) return;
     let disposed = false;
@@ -180,6 +273,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
           }
         await persistCases(next);
         select(next.find((c) => c.provenance.isDemo === p.demo)?.id || "");
+        if (!p.demo) void syncCases(true);
         if (savedJob) {
           const j: Job | null = JSON.parse(savedJob);
           if (j) {
@@ -202,7 +296,10 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     return () => {
       disposed = true;
     };
-  }, [legacy.ready]);
+  }, [legacy.ready, persistCases, syncCases]);
+  useEffect(() => {
+    if (ready && foreground && !prefs.demo) void syncCases();
+  }, [foreground, prefs.demo, ready, syncCases]);
   useEffect(() => {
     if (
       jr.current?.status === "running" &&
@@ -239,12 +336,8 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
   const changeCase = async (id: string, patch: Partial<RoadCase>) => {
     const current = cr.current.find((c) => c.id === id);
     const status = patch.reporting?.status;
-    if (
-      current?.sourceId &&
-      current.reviewId &&
-      (status === "opened" || status === "sent")
-    )
-      await old.current.syncReporting(current.sourceId, status);
+    if (current?.reviewId && (status === "opened" || status === "sent"))
+      await old.current.syncReviewReporting(current.reviewId, status);
     await persistCases(
       cr.current.map((c) => {
         if (c.id !== id) return c;
@@ -261,23 +354,24 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
   const refreshEvidence = async (id: string) => {
     const current = cr.current.find((c) => c.id === id);
     if (!current) throw Error("Case not found.");
-    if (!current.sourceId || !current.reviewId) return current;
-    const record = await old.current.refresh(current.sourceId);
-    const refreshed = record
-      ? fromLegacy(record, current.region)[0]
+    if (!current.reviewId) return current;
+    const hasLocalRecord = old.current.records.some(
+      (record) => record.id === current.sourceId,
+    );
+    const record = hasLocalRecord && current.sourceId
+      ? await old.current.refresh(current.sourceId)
       : undefined;
+    const serverCases = record
+      ? fromLegacy(record, current.region)
+      : fromServerReview(
+          await old.current.getReview(current.reviewId),
+          current.region,
+        );
+    const refreshed =
+      serverCases.find((serverCase) => serverCase.id === current.id) ||
+      serverCases[0];
     if (!refreshed) return current;
-    const next = {
-      ...current,
-      reviewId: refreshed.reviewId,
-      decisionTrail: refreshed.decisionTrail,
-      evidence: {
-        ...current.evidence,
-        annotatedVideoUrl: refreshed.evidence.annotatedVideoUrl,
-        excerptVideoUrl: refreshed.evidence.excerptVideoUrl,
-        tracks: refreshed.evidence.tracks,
-      },
-    };
+    const next = mergeServerCase(current, refreshed);
     await persistCases(cr.current.map((c) => (c.id === id ? next : c)));
     return next;
   };
@@ -423,6 +517,9 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         select,
         changeCase,
         refreshEvidence,
+        syncCases,
+        syncingCases,
+        historyError,
         job,
         begin,
         cancel,

@@ -2,10 +2,16 @@ import * as FileSystem from "expo-file-system/legacy";
 import {
   Incident,
   parseReview,
+  type Review,
   Settings,
   validateApiUrl,
   type ImpactSummary,
 } from "./domain";
+import {
+  parseReviewHistory,
+  type ReviewHistoryItem,
+} from "./history";
+export type { ReviewHistoryItem } from "./history";
 
 async function request(
   settings: Settings,
@@ -59,6 +65,36 @@ export async function refreshReview(
   return parseReview(
     await request(settings, `/v1/reviews/${reviewId}`, signal),
   );
+}
+
+export async function listReviewHistory(
+  settings: Settings,
+  signal: AbortSignal,
+): Promise<ReviewHistoryItem[]> {
+  const found = new Map<string, ReviewHistoryItem>();
+  const seenCursors = new Set<string>();
+  let before: string | undefined;
+  do {
+    const path = `/v1/reviews?limit=100${before ? `&before=${encodeURIComponent(before)}` : ""}`;
+    const page = parseReviewHistory(await request(settings, path, signal));
+    for (const item of page.reviews)
+      if (!found.has(item.reviewId)) found.set(item.reviewId, item);
+    before = page.nextBefore;
+    if (before) {
+      if (seenCursors.has(before))
+        throw new Error("The server returned a repeated history page.");
+      seenCursors.add(before);
+    }
+  } while (before);
+  return [...found.values()];
+}
+
+export async function readReview(
+  reviewId: string,
+  settings: Settings,
+  signal: AbortSignal,
+): Promise<Review> {
+  return refreshReview(reviewId, settings, signal);
 }
 export async function updateReporting(
   reviewId: string,

@@ -68,6 +68,7 @@ test("preserves the backend case, decision trail and playable HTTPS URLs", () =>
     reportable: [finding],
     verdict: "Review it",
     review_id: "a".repeat(32),
+    created_at: "2026-10-09T10:00:00+00:00",
     case: serverCase,
     decision_trail: trail,
     tracks: [{ vehicleTrackId: "v1" }],
@@ -78,6 +79,7 @@ test("preserves the backend case, decision trail and playable HTTPS URLs", () =>
   assert.deepEqual(review.case, serverCase);
   assert.deepEqual(review.decision_trail, trail);
   assert.equal(review.review_id, "a".repeat(32));
+  assert.equal(review.created_at, "2026-10-09T10:00:00+00:00");
   assert.equal(review.original_video_url, undefined);
   assert.equal(review.annotated_video_url, "https://example.com/a.mp4");
   assert.equal(review.tracks.length, 1);
