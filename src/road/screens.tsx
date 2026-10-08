@@ -23,7 +23,12 @@ import {
   focusControl,
   styles as s,
 } from "./ui";
-import { regionNames, whatsappTest, type Region } from "./model";
+import {
+  defaultWhatsAppTestMessage,
+  regionNames,
+  whatsappTest,
+  type Region,
+} from "./model";
 import { replayHomeEntrance } from "./home";
 export { Review, Handoff } from "./review";
 export {
@@ -41,6 +46,9 @@ export function Developer() {
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
   const [testNumber, setTestNumber] = useState(rr.prefs.testRecipient || "");
+  const [testMessage, setTestMessage] = useState(
+    rr.prefs.testMessage || defaultWhatsAppTestMessage,
+  );
   const chooseRef = useRef<View>(null);
   const file = store.records.find((i) => i.id === chosen);
   const choose = async () => {
@@ -88,8 +96,8 @@ export function Developer() {
     setBusy(true);
     try {
       const number = testNumber.replace(/[\s()+-]/g, "");
-      const link = whatsappTest(number);
-      await rr.setPrefs({ testRecipient: number });
+      const link = whatsappTest(number, testMessage);
+      await rr.setPrefs({ testRecipient: number, testMessage });
       await Linking.openURL(link);
       setMessage(
         "Test draft opened. Nothing is sent until you tap Send in WhatsApp.",
@@ -113,6 +121,13 @@ export function Developer() {
         keyboardType="phone-pad"
         placeholder="Country code and phone number"
       />
+      <Field
+        label="Demo message"
+        value={testMessage}
+        onChangeText={setTestMessage}
+        multiline
+        placeholder="Write the message to open in WhatsApp"
+      />
       <Action
         title="Open WhatsApp test draft"
         icon="MessageCircle"
@@ -120,7 +135,7 @@ export function Developer() {
         onPress={() => void openWhatsAppTest()}
       />
       <Action
-        title="Save number only"
+        title="Save test details"
         secondary
         onPress={() => {
           const number = testNumber.replace(/[\s()+-]/g, "");
@@ -128,11 +143,12 @@ export function Developer() {
             return showError(
               "Enter an international number including country code.",
             );
+          if (!testMessage.trim()) return showError("Enter a test message.");
           void rr
-            .setPrefs({ testRecipient: number })
+            .setPrefs({ testRecipient: number, testMessage })
             .then(() =>
               setMessage(
-                "Test number saved. Demo reports only go to this number.",
+                "Test number and message saved. Demo reports only go to this number.",
               ),
             )
             .catch(showError);

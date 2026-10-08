@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { URL } from "node:url";
 import {
   correctStatus,
+  defaultWhatsAppTestMessage,
   editCase,
   fromLegacy,
   restoreEvidence,
@@ -91,7 +92,14 @@ test("demo drafts require an explicit test recipient and never fall back to auth
 test("WhatsApp test UI opens a harmless encoded draft to a normalized number", () => {
   const url = whatsappTest("+81 70-1234-5678");
   assert.ok(url.startsWith("https://wa.me/817012345678?text="));
-  assert.match(decodeURIComponent(url), /harmless test draft/);
+  assert.match(decodeURIComponent(url), /DEMO — TRAFFIC REPORT TEST/);
+  assert.match(decodeURIComponent(url), /No real complaint/);
+  assert.equal(
+    decodeURIComponent(whatsappTest("817012345678", "My editable test")),
+    "https://wa.me/817012345678?text=My editable test",
+  );
+  assert.ok(defaultWhatsAppTestMessage.includes("Running a red light"));
+  assert.throws(() => whatsappTest("817012345678", "  "), /test message/);
   assert.throws(() => whatsappTest("070-1234"), /international number/);
 });
 

@@ -16,6 +16,7 @@ import {
   restoreEvidence,
   correctStatus,
   validation,
+  defaultWhatsAppTestMessage,
   type RoadCase,
   type Preferences,
   type Region,
@@ -45,6 +46,7 @@ const defaults: Preferences = {
   phone: "",
   email: "",
   demo: !Device.isDevice,
+  testMessage: defaultWhatsAppTestMessage,
 };
 type Context = {
   ready: boolean;

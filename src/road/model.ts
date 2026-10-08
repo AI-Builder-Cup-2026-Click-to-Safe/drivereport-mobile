@@ -61,6 +61,7 @@ export type Preferences = {
   email: string;
   demo: boolean;
   testRecipient?: string;
+  testMessage?: string;
 };
 export const categories = [
   ["red_light", "Red light"],
@@ -190,15 +191,27 @@ export function reportText(c: RoadCase, p: Preferences) {
 export function whatsapp(c: RoadCase, p: Preferences) {
   return `https://wa.me/${recipient(p, c)}?text=${encodeURIComponent(reportText(c, p))}`;
 }
-export function whatsappTest(value: string) {
+export const defaultWhatsAppTestMessage = [
+  "DEMO — TRAFFIC REPORT TEST",
+  "This is a test message. No real complaint is being submitted.",
+  "",
+  "Incident: Running a red light",
+  "Vehicle: Perodua Myvi · VGD 8888",
+  "Location: Jalan Tun Razak, Kuala Lumpur",
+  "Time: 10:04 AM · 12 Feb 2026",
+  "",
+  "Video evidence: Demo attachment",
+  "Please ignore this test message.",
+].join("\n");
+export function whatsappTest(
+  value: string,
+  message = defaultWhatsAppTestMessage,
+) {
   const number = value.replace(/[\s()+-]/g, "");
   if (!/^[1-9]\d{7,14}$/.test(number))
     throw Error("Enter an international number including country code.");
-  const draft = [
-    "Click-to-Safe WhatsApp integration test",
-    "This is a harmless test draft. No traffic complaint has been submitted.",
-    "If you can read this in WhatsApp, the handoff is working.",
-  ].join("\n");
+  const draft = message.trim();
+  if (!draft) throw Error("Enter a test message.");
   return `https://wa.me/${number}?text=${encodeURIComponent(draft)}`;
 }
 export function inPeriod(c: RoadCase, period: string, now = new Date()) {
