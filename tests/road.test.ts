@@ -82,6 +82,9 @@ test("demo drafts require an explicit test recipient and never fall back to auth
     /test WhatsApp/,
   );
   assert.ok(whatsapp(c, prefs).startsWith("https://wa.me/60123456789?"));
+  assert.ok(
+    decodeURIComponent(whatsapp(c, prefs)).includes("Location / Lokasi:"),
+  );
 });
 
 test("editing facts preserves original model evidence and records user provenance", () => {

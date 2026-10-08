@@ -3,6 +3,7 @@ import { Image, Linking, Modal, Platform, Pressable, View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useVideoPlayer, VideoView } from "expo-video";
 import * as Sharing from "expo-sharing";
+import * as Clipboard from "expo-clipboard";
 import { useRoad } from "./context";
 import { demoFrameFor } from "./media";
 import {
@@ -10,6 +11,7 @@ import {
   labels,
   missing,
   regionNames,
+  reportText,
   validation,
   whatsapp,
   type RoadCase,
@@ -29,6 +31,27 @@ import {
   showError,
   styles as s,
 } from "./ui";
+
+async function openWhatsAppDraft(
+  c: RoadCase,
+  prefs: Parameters<typeof whatsapp>[1],
+) {
+  await Clipboard.setStringAsync(reportText(c, prefs));
+  await Linking.openURL(whatsapp(c, prefs));
+}
+
+async function shareOriginal(c: RoadCase) {
+  const uri = c.evidence.originalVideoUrl;
+  if (!uri?.startsWith("file:"))
+    throw Error("The original recording is not available on this device.");
+  if (!(await Sharing.isAvailableAsync()))
+    throw Error("Video sharing is not available on this device.");
+  await Sharing.shareAsync(uri, {
+    dialogTitle: "Attach original evidence in WhatsApp",
+    mimeType: "video/mp4",
+    UTI: "public.movie",
+  });
+}
 function RealVideo({
   uri,
   seek,
@@ -357,7 +380,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
     changing.current = true;
     setBusy(true);
     try {
-      await Linking.openURL(whatsapp(c, rr.prefs));
+      await openWhatsAppDraft(c, rr.prefs);
       await rr.changeCase(c.id, {
         reporting: { status: "opened", confirmedByUser: false },
       });
@@ -687,11 +710,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
             title="Share original recording"
             secondary
             icon="Upload"
-            onPress={() =>
-              void Sharing.shareAsync(c.evidence.originalVideoUrl!).catch(
-                showError,
-              )
-            }
+            onPress={() => void shareOriginal(c).catch(showError)}
           />
         )}
     </Page>
@@ -700,6 +719,8 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
 export function Handoff() {
   const rr = useRoad();
   const c = rr.cases.find((i) => i.id === rr.selected);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
   if (!c)
     return (
       <Page title="WhatsApp">
@@ -731,7 +752,7 @@ export function Handoff() {
     >
       <Intro
         title="I drafted it. Go snitch."
-        body="Attach the clip, tap Send in WhatsApp, then come back and tell me."
+        body="The report text is copied too. Attach the original clip, tap Send in WhatsApp, then come back and tell me."
       />
       <View
         style={[
@@ -750,6 +771,50 @@ export function Handoff() {
       <Intro
         title="Did you send it?"
         body="I can draft reports. I can’t read your damn mind."
+      />
+      {message ? <Notice>{message}</Notice> : null}
+      {!c.provenance.isDemo &&
+        c.evidence.originalVideoUrl?.startsWith("file:") && (
+          <Action
+            title="Share original clip"
+            secondary
+            icon="Upload"
+            disabled={busy}
+            onPress={() => {
+              setBusy(true);
+              void shareOriginal(c)
+                .then(() =>
+                  setMessage(
+                    "The share sheet opened. Select WhatsApp and the same chat; sharing does not prove it was sent.",
+                  ),
+                )
+                .catch(showError)
+                .finally(() => setBusy(false));
+            }}
+          />
+        )}
+      <Action
+        title="Reopen WhatsApp draft"
+        secondary
+        icon="MessageCircle"
+        disabled={busy}
+        onPress={() => {
+          setBusy(true);
+          void openWhatsAppDraft(c, rr.prefs)
+            .then(() =>
+              setMessage("WhatsApp draft reopened. Report text copied."),
+            )
+            .catch(showError)
+            .finally(() => setBusy(false));
+        }}
+      />
+      <Quiet
+        title="Copy report text"
+        onPress={() =>
+          void Clipboard.setStringAsync(reportText(c, rr.prefs))
+            .then(() => setMessage("Report text copied."))
+            .catch(showError)
+        }
       />
     </Page>
   );

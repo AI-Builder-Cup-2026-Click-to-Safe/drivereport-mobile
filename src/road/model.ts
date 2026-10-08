@@ -152,35 +152,35 @@ export function reportText(c: RoadCase, p: Preferences) {
   return [
     c.provenance.isDemo
       ? "DEMO — SYNTHETIC TRAFFIC OFFENCE REPORT"
-      : `TRAFFIC INCIDENT REPORT — ${c.id}`,
+      : `ADUAN KESALAHAN LALU LINTAS / TRAFFIC OFFENCE REPORT — ${c.id}`,
     c.provenance.isDemo
       ? "Demonstration only. This is not a real complaint."
       : "",
-    `Authority: ${regionNames[c.region]}`,
-    `Date: ${c.incident.date}`,
-    `Time: ${c.incident.time} (${c.incident.timeZone})`,
-    `Location: ${c.incident.location}`,
-    `Vehicle plate: ${c.vehicle.plate}`,
-    `Vehicle: ${[c.vehicle.type, c.vehicle.model].filter(Boolean).join(" / ")}`,
-    `Description: ${c.incident.description}`,
+    `Authority / Pihak berkuasa: ${regionNames[c.region]}`,
+    `Date / Tarikh: ${c.incident.date}`,
+    `Time / Masa: ${c.incident.time} (${c.incident.timeZone})`,
+    `Location / Lokasi: ${c.incident.location}`,
+    `Vehicle plate / No. pendaftaran: ${c.vehicle.plate}`,
+    `Vehicle / Kenderaan: ${[c.vehicle.type, c.vehicle.model].filter(Boolean).join(" / ")}`,
+    `Description / Keterangan: ${c.incident.description}`,
     "",
-    "Suspected offences:",
+    "Suspected offences / Kesalahan disyaki:",
     ...c.offences
       .filter((o) => o.included)
       .map((o, i) => `${i + 1}. ${o.label} — ${duration(o.atSeconds)}`),
     "",
     c.evidence.originalVideoUrl?.startsWith("https://")
-      ? `Original recording: ${c.evidence.originalVideoUrl}`
-      : "Video evidence: attach the original recording separately.",
+      ? `Original recording / Rakaman asal: ${c.evidence.originalVideoUrl}`
+      : "Video evidence / Bukti video: attach the original recording separately.",
     ...(c.evidence.annotatedVideoUrl?.startsWith("https://")
       ? [`Annotated evidence: ${c.evidence.annotatedVideoUrl}`]
       : []),
     "",
-    `Full name: ${personal(p.name, "Full name")}`,
-    `Identity number: ${personal(p.identity, "ID or passport number")}`,
-    `Postal address: ${personal(p.address, "Postal address")}`,
-    `Phone: ${personal(p.phone, "Phone number")}`,
-    `Email: ${personal(p.email, "Email address")}`,
+    `Full name / Nama penuh: ${personal(p.name, "Full name")}`,
+    `Identity number / No. pengenalan: ${personal(p.identity, "ID or passport number")}`,
+    `Postal address / Alamat: ${personal(p.address, "Postal address")}`,
+    `Phone / Telefon: ${personal(p.phone, "Phone number")}`,
+    `Email / E-mel: ${personal(p.email, "Email address")}`,
     "",
     "Please review the evidence and suspected offences. Thank you.",
   ]
