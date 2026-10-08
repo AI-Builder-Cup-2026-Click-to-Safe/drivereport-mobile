@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Pressable, Switch, View } from "react-native";
+import { Linking, Pressable, Switch, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import * as FS from "expo-file-system/legacy";
 import { useStore } from "../lib/store";
@@ -23,7 +23,7 @@ import {
   focusControl,
   styles as s,
 } from "./ui";
-import { regionNames, type Region } from "./model";
+import { regionNames, whatsappTest, type Region } from "./model";
 import { replayHomeEntrance } from "./home";
 export { Review, Handoff } from "./review";
 export {
@@ -84,8 +84,28 @@ export function Developer() {
       })
       .catch(showError);
   };
+  const openWhatsAppTest = async () => {
+    setBusy(true);
+    try {
+      const number = testNumber.replace(/[\s()+-]/g, "");
+      const link = whatsappTest(number);
+      await rr.setPrefs({ testRecipient: number });
+      await Linking.openURL(link);
+      setMessage(
+        "Test draft opened. Nothing is sent until you tap Send in WhatsApp.",
+      );
+    } catch (e) {
+      showError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <Page title="Developer options" nav={false}>
+      <Intro
+        title="Test WhatsApp"
+        body="Enter your own number. I’ll open a harmless dummy draft so you can verify the handoff without creating a case."
+      />
       <Field
         label="Test WhatsApp number"
         value={testNumber}
@@ -94,7 +114,13 @@ export function Developer() {
         placeholder="Country code and phone number"
       />
       <Action
-        title="Save test number"
+        title="Open WhatsApp test draft"
+        icon="MessageCircle"
+        disabled={busy}
+        onPress={() => void openWhatsAppTest()}
+      />
+      <Action
+        title="Save number only"
         secondary
         onPress={() => {
           const number = testNumber.replace(/[\s()+-]/g, "");

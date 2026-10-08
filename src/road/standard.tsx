@@ -72,6 +72,9 @@ export function StandardHome() {
             onPress={() => go("recording")}
           />
         </Arrival>
+        <Arrival delay={530}>
+          <Quiet title="Test WhatsApp" onPress={() => go("developer")} />
+        </Arrival>
         {rr.job?.status === "running" && (
           <Quiet
             title="Gemini is still working · see progress"

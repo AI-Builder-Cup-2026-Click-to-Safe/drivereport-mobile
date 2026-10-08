@@ -15,6 +15,7 @@ import {
   reportText,
   validation,
   whatsapp,
+  whatsappTest,
   type RoadCase,
   type Preferences,
 } from "../src/road/model.ts";
@@ -85,6 +86,13 @@ test("demo drafts require an explicit test recipient and never fall back to auth
   assert.ok(
     decodeURIComponent(whatsapp(c, prefs)).includes("Location / Lokasi:"),
   );
+});
+
+test("WhatsApp test UI opens a harmless encoded draft to a normalized number", () => {
+  const url = whatsappTest("+81 70-1234-5678");
+  assert.ok(url.startsWith("https://wa.me/817012345678?text="));
+  assert.match(decodeURIComponent(url), /harmless test draft/);
+  assert.throws(() => whatsappTest("070-1234"), /international number/);
 });
 
 test("editing facts preserves original model evidence and records user provenance", () => {

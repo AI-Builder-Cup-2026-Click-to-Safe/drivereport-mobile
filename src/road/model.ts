@@ -190,6 +190,17 @@ export function reportText(c: RoadCase, p: Preferences) {
 export function whatsapp(c: RoadCase, p: Preferences) {
   return `https://wa.me/${recipient(p, c)}?text=${encodeURIComponent(reportText(c, p))}`;
 }
+export function whatsappTest(value: string) {
+  const number = value.replace(/[\s()+-]/g, "");
+  if (!/^[1-9]\d{7,14}$/.test(number))
+    throw Error("Enter an international number including country code.");
+  const draft = [
+    "Click-to-Safe WhatsApp integration test",
+    "This is a harmless test draft. No traffic complaint has been submitted.",
+    "If you can read this in WhatsApp, the handoff is working.",
+  ].join("\n");
+  return `https://wa.me/${number}?text=${encodeURIComponent(draft)}`;
+}
 export function inPeriod(c: RoadCase, period: string, now = new Date()) {
   if (period === "all") return true;
   if (!c.incident.date) return false;
