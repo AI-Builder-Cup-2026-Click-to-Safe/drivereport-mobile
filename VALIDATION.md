@@ -5,8 +5,15 @@ Backend reference: `Lorem-Ipsum-AI-Builder-Cup-2026/prototype` **5ff78ce**, depl
 - Added client support for the server `case`, `decision_trail`, `review_id`, tracks and signed original/annotated/excerpt video links while retaining the legacy response mapper for existing local reviews.
 - The selected MY/SG/JP region is included in new review requests. Live evidence links are refreshed with `GET /v1/reviews/{id}` before WhatsApp handoff; new review reporting states synchronize through `PATCH /v1/reviews/{id}/reporting`.
 - Live Impact uses `GET /v1/impact` for all/week/today counters and most-spotted data, with local evidence lists and a clearly degraded local fallback when the service is unavailable. The current all-time endpoint and Simulator both returned 0 reported, 0 billed and no most-spotted plate.
-- Authenticated Cloud Run `/health` and `/v1/impact?period=all` checks passed. The production token was read from Secret Manager only at runtime and was not printed or committed. No paid Gemini review, WhatsApp message, reporting-state mutation or remote record deletion was performed.
+- Authenticated Cloud Run `/health` and `/v1/impact?period=all` checks passed. The production token was read from Secret Manager only at runtime and was not printed or committed. No WhatsApp message, reporting-state mutation or remote record deletion was performed.
 - TypeScript, ESLint and all **36 automated mobile tests** passed. The updated development bundle loaded on iPhone 16 Pro / iOS 18.6 Simulator, with demo mode off, and displayed values matching the live endpoint. Backend deployment CI also passed; the backend's older local virtual environment could not collect its suite because `google.cloud.firestore` was not installed locally.
+
+## Live Case contract test
+
+- From the Simulator UI, loaded the bundled 1,766,147-byte, 12-second MP4 and tapped **Analyse video** in live mode. Upload completed and the real Gemini review returned through the normal app flow; this run incurred the backend's configured model usage.
+- New server review `ada0b6b68b6f4d94b380880bb18d7d62` returned Case `RR-ADA0B6B6`, status `ready`, one `queue_cut` offence at 00:01, one track, a decision trail with two retrieved citations and two disclosed retrieval gaps, plus signed original, annotated and cited-excerpt videos.
+- HEAD requests to all three signed video URLs returned **200 video/mp4**. The app added a fourth live Case and opened it with the same blue-sedan description, 00:01 offence, Sections 43(1) and 42(1), timeline, reasoning, retrieval gaps and **Watch cited evidence excerpt** action. The **How Gemini decided** screen displayed the exact server Case ID.
+- The client correctly changed the actionable UI state to `needs_info` because the server did not establish plate, date, time or location. This is intentional local validation; the stored server Case remains `ready` until a reporting state is explicitly synchronized.
 
 ---
 
