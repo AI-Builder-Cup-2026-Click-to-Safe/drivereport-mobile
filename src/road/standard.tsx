@@ -1,5 +1,11 @@
-import React, { useState } from "react";
-import { Image, Pressable, View, useWindowDimensions } from "react-native";
+import React, { useEffect, useState } from "react";
+import {
+  Image,
+  Linking,
+  Pressable,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import * as FS from "expo-file-system/legacy";
 import { useRoad } from "./context";
@@ -617,11 +623,37 @@ export function StandardAnalysis() {
 }
 
 export function StandardImpact() {
-  const rr = useRoad();
+  const rr = useRoad(),
+    store = useStore();
   const [period, setPeriod] = useState(0),
     [status, setStatus] = useState(0),
     [plate, setPlate] = useState(""),
     [offence, setOffence] = useState("");
+  const [remote, setRemote] = useState<Awaited<
+    ReturnType<typeof store.getImpact>
+  > | null>(null);
+  const [remoteError, setRemoteError] = useState(false);
+  const periodKey = (["all", "week", "today"] as const)[period];
+  useEffect(() => {
+    let alive = true;
+    if (rr.prefs.demo) {
+      setRemote(null);
+      setRemoteError(false);
+      return;
+    }
+    setRemoteError(false);
+    void store
+      .getImpact(periodKey)
+      .then((value) => {
+        if (alive) setRemote(value);
+      })
+      .catch(() => {
+        if (alive) setRemoteError(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [periodKey, rr.prefs.demo, store]);
   const data = impact(rr.cases, ["all", "week", "today"][period]);
   const scoped = data.scoped.filter(
     (c) =>
@@ -635,6 +667,21 @@ export function StandardImpact() {
       status === 0 || (status === 1 ? needs(c) : c.reporting.status === "sent"),
   );
   const top = topOffender(data.scoped);
+  const topPlate = top?.case.vehicle.plate || remote?.mostSpotted?.plate || "";
+  const remoteCount = remote?.mostSpotted?.count || 0;
+  const remoteOffenceCount = (code: string) => {
+    const values = remote?.offenceOccurrences || {};
+    if (code === "wrong_way")
+      return (values.wrong_way || 0) + (values.counter_flow || 0);
+    if (code === "dangerous")
+      return (
+        (values.dangerous || 0) +
+        (values.queue_cut || 0) +
+        (values.road_rage || 0) +
+        (values.emergency_lane || 0)
+      );
+    return values[code] || 0;
+  };
   const { width } = useWindowDimensions();
   return (
     <Page title="Impact">
@@ -642,8 +689,8 @@ export function StandardImpact() {
       <T style={s.muted}>I keep receipts. Karma loves paperwork.</T>
       <View style={{ flexDirection: "row", gap: 10 }}>
         {[
-          [data.sent, "Assholes reported"],
-          [data.billed, "Got billed"],
+          [remote?.snitchedCount ?? data.sent, "Assholes reported"],
+          [remote?.billedCount ?? data.billed, "Got billed"],
         ].map(([value, label]) => (
           <View
             key={String(label)}
@@ -665,14 +712,12 @@ export function StandardImpact() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={
-            top
-              ? `Filter cases for ${top.case.vehicle.plate}`
+            topPlate
+              ? `Filter cases for ${topPlate}`
               : "Top offender: nobody yet"
           }
-          disabled={!top}
-          onPress={() =>
-            setPlate(plate ? "" : normalizePlate(top!.case.vehicle.plate))
-          }
+          disabled={!topPlate}
+          onPress={() => setPlate(plate ? "" : normalizePlate(topPlate))}
           style={{
             padding: 16,
             borderRadius: 16,
@@ -686,7 +731,7 @@ export function StandardImpact() {
             <T style={{ fontSize: 20, fontWeight: "800", color: "white" }}>
               Top offender
             </T>
-            {top && (
+            {!!topPlate && (
               <T
                 style={{
                   fontSize: 18,
@@ -697,7 +742,7 @@ export function StandardImpact() {
                   borderRadius: 6,
                 }}
               >
-                {top.case.vehicle.plate}
+                {topPlate}
               </T>
             )}
           </View>
@@ -706,11 +751,19 @@ export function StandardImpact() {
               ? top.record + top.pending >= 20
                 ? "Your report could take their licence."
                 : `${20 - top.record - top.pending} more points and they’re taking the bus.`
-              : rr.prefs.demo
-                ? "Nobody yet. Report a red-light runner and they land here."
-                : "Licence records are not available yet."}
+              : remoteCount
+                ? `${remoteCount} server case${remoteCount === 1 ? "" : "s"}. Licence records are not available.`
+                : rr.prefs.demo
+                  ? "Nobody yet. Report a red-light runner and they land here."
+                  : "Licence records are not available yet."}
           </T>
-          <MeterBar record={top?.record ?? 0} pending={top?.pending ?? 0} />
+          {top ? (
+            <MeterBar record={top.record} pending={top.pending} />
+          ) : (
+            <T style={{ color: "#B6BAC2", fontSize: 12 }}>
+              The backend does not return licence points for live cases.
+            </T>
+          )}
           {top && (
             <T style={{ color: "white", fontSize: 12 }}>
               {top.record} on record · {top.pending} from your report
@@ -735,12 +788,18 @@ export function StandardImpact() {
         >
           <View style={s.row}>
             <T style={{ fontSize: 14, flex: 1 }}>{name}</T>
-            <T>{data.counts[code]}</T>
+            <T>{remote ? remoteOffenceCount(code) : data.counts[code]}</T>
           </View>
           <ImpactBar
             index={i}
             ratio={
-              data.counts[code] / Math.max(1, ...Object.values(data.counts))
+              (remote ? remoteOffenceCount(code) : data.counts[code]) /
+              Math.max(
+                1,
+                ...categories.map(([key]) =>
+                  remote ? remoteOffenceCount(key) : data.counts[key],
+                ),
+              )
             }
           />
         </Pressable>
@@ -838,6 +897,11 @@ export function StandardImpact() {
       <T style={s.muted}>
         {rr.prefs.demo ? "Demo cases. " : ""}“Sent” means you confirmed sending.
       </T>
+      {remoteError && (
+        <T style={s.muted}>
+          Cloud impact is unavailable, so these counters use this device.
+        </T>
+      )}
     </Page>
   );
 }
@@ -854,6 +918,7 @@ export function Work() {
       </Page>
     );
   const original = c.analysis;
+  const trail = c.decisionTrail;
   const storedResult = store.records.find((r) => r.id === c.sourceId)?.result;
   const timeline = original?.timeline || storedResult?.evidence.timeline || [];
   const offences =
@@ -896,6 +961,16 @@ export function Work() {
         </T>
       )}
       <T style={s.section}>What it found and cited</T>
+      {trail?.excerptVideoUrl?.startsWith("https://") && (
+        <Action
+          title="Watch cited evidence excerpt"
+          secondary
+          icon="Video"
+          onPress={() =>
+            void Linking.openURL(trail.excerptVideoUrl!).catch(showError)
+          }
+        />
+      )}
       <View style={s.row}>
         <T style={s.muted}>Original plate reading</T>
         <T style={{ color: C.accent }}>
@@ -923,6 +998,29 @@ export function Work() {
           </View>
         </Arrival>
       ))}
+      {!!trail?.citations.length && (
+        <Disclosure
+          title="Retrieved law text"
+          note={`${trail.citations.length} citation${trail.citations.length === 1 ? "" : "s"}`}
+        >
+          {trail.citations.map((citation, index) => (
+            <View key={index} style={{ gap: 6 }}>
+              <T style={{ fontWeight: "700" }}>
+                {[citation.statute, citation.section]
+                  .filter(Boolean)
+                  .join(", ")}
+              </T>
+              {!!citation.quote && <T>{citation.quote}</T>}
+              {!!citation.penalty && (
+                <T style={s.muted}>Penalty cited: {citation.penalty}</T>
+              )}
+            </View>
+          ))}
+        </Disclosure>
+      )}
+      {!!trail?.gaps.length && (
+        <Notice>Retrieval gaps: {trail.gaps.join(" ")}</Notice>
+      )}
       {!original && !storedResult && (
         <T style={s.muted}>
           This older case has no saved original response. Its edited report

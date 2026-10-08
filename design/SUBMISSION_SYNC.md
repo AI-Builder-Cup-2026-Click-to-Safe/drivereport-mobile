@@ -14,9 +14,9 @@ Source: [whyteaz/road-receipts-handover, 9b9f293](https://github.com/whyteaz/roa
 
 ## Integration boundaries
 
-No backend source, deployment, authentication or API contract changed. Camera capture, segment storage and actual GCS/Gemini integration are retained. Existing saved cases and recordings are preserved. Old demo fixtures remain in storage but are hidden from the new submission dataset.
+The original visual sync changed no backend source, deployment, authentication or API contract. A later integration pass now consumes backend `5ff78ce`: normalized cases and decision trails, tracked/annotated evidence, cited excerpts, refreshed signed links, reporting status and live Impact aggregates. The client retains its older response mapper, local footage and user edits so existing saved cases and recordings remain usable. Old demo fixtures remain in storage but are hidden from the new submission dataset.
 
-The reference is a synthetic web prototype. Its licence lookup, demerit values, estimates, tracking overlays and issued outcomes are **sample-only**. The native app keeps explicit synthetic labels, unlike the presentation reference, because the server does not provide those fields. A live plate that happens to match WXY 2048 does not receive the sample's record. Live stages are not invented while awaiting the synchronous response. No exact model ID, tokens or measured cost are claimed without a response field.
+The reference is a synthetic web prototype. Its licence lookup, demerit values, estimates and issued outcomes are **sample-only**. The native app keeps explicit synthetic labels, unlike the presentation reference, because the server does not provide those fields. Server tracks and annotated/excerpt footage are treated as evidence, not a licence or fine outcome. A live plate that happens to match WXY 2048 does not receive the sample's record. Live stages are not invented while awaiting the synchronous response. No exact model ID, tokens or measured cost are claimed without a response field.
 
 The editable Test WhatsApp utility remains available. Submission sample drafts choose any chat; actual cases retain the configured authority recipient. Neither opening a draft nor tapping an offence sends a message. No actual message was sent in this validation.
 

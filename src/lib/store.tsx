@@ -11,12 +11,18 @@ import * as FS from "expo-file-system/legacy";
 import * as Thumbnails from "expo-video-thumbnails";
 import { Asset } from "expo-asset";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
-import { analyseVideo } from "./api";
+import {
+  analyseVideo,
+  fetchImpact,
+  refreshReview,
+  updateReporting,
+} from "./api";
 import {
   applyBuildConnection,
   Incident,
   initialSettings,
   Settings,
+  type ImpactSummary,
 } from "./domain";
 
 const RECORDS = "drivereport.records.v1";
@@ -39,7 +45,13 @@ type Context = {
     capture?: { dashcamSession: string; createdAt: string; protected: boolean },
   ) => Promise<string>;
   importSample: () => Promise<string>;
-  analyse: (id: string) => Promise<Incident | undefined>;
+  analyse: (
+    id: string,
+    region?: "MY" | "SG" | "JP",
+  ) => Promise<Incident | undefined>;
+  refresh: (id: string) => Promise<Incident | undefined>;
+  syncReporting: (id: string, status: "opened" | "sent") => Promise<void>;
+  getImpact: (period: "all" | "week" | "today") => Promise<ImpactSummary>;
   getRecords: () => Incident[];
   cancel: () => void;
   update: (id: string, p: Partial<Incident>) => Promise<void>;
@@ -203,7 +215,7 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
       "video/mp4",
     );
   };
-  const analyse = async (id: string) => {
+  const analyse = async (id: string, region: "MY" | "SG" | "JP" = "MY") => {
     if (running.current)
       throw new Error(
         "Another video is being analysed. Wait for it to finish.",
@@ -225,6 +237,7 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
           if (fraction !== undefined) setProgress(fraction);
           if (Object.keys(patch).length) await update(id, patch);
         },
+        region,
       );
       await update(id, {
         stage: "ready",
@@ -250,6 +263,41 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
       void deactivateKeepAwake("analysis");
     }
     return recordsRef.current.find((i) => i.id === id);
+  };
+  const refresh = async (id: string) => {
+    const incident = recordsRef.current.find((i) => i.id === id);
+    const reviewId = incident?.result?.review_id;
+    if (!incident || !reviewId) return incident;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      const result = await refreshReview(reviewId, settings, controller.signal);
+      await update(id, { result });
+      return recordsRef.current.find((i) => i.id === id);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const syncReporting = async (id: string, status: "opened" | "sent") => {
+    const reviewId = recordsRef.current.find((i) => i.id === id)?.result
+      ?.review_id;
+    if (!reviewId) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      await updateReporting(reviewId, status, settings, controller.signal);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const getImpact = async (period: "all" | "week" | "today") => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      return await fetchImpact(period, settings, controller.signal);
+    } finally {
+      clearTimeout(timer);
+    }
   };
   const remove = async (id: string) => {
     if (active === id)
@@ -277,6 +325,9 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
         importVideo,
         importSample,
         analyse,
+        refresh,
+        syncReporting,
+        getImpact,
         getRecords: () => recordsRef.current,
         cancel: () => running.current?.abort(),
         update,

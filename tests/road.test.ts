@@ -223,6 +223,126 @@ test("no-findings GCP result becomes a clean case with real video retained", () 
   assert.equal(c.provenance.isDemo, false);
 });
 
+test("new GCP case contract keeps server IDs, citations, tracks and cited excerpt", () => {
+  const id = "RR-ABC12345";
+  const i = {
+    id: "DR-new-contract",
+    file: "file:///local-original.mov",
+    thumbnail: "file:///local-thumb.jpg",
+    result: {
+      review_id: "a".repeat(32),
+      verdict: "Report it",
+      reportable: [
+        {
+          vehicle_id: "v1",
+          appearance: "White MPV WA 4978 R",
+          conduct: "Overtook across double lines",
+          start_seconds: 10,
+          end_seconds: 14,
+          confidence: 0.95,
+          legal_basis: "Act 333, section 43(1)",
+          penalty: "Fine",
+          reasoning: "Visible unsafe pass",
+        },
+      ],
+      follow_up_exhausted: false,
+      tracks: [{ vehicleTrackId: "v1", frames: [] }],
+      evidence: {
+        timeline: [{ start_seconds: 10, end_seconds: 14, event: "Pass" }],
+      },
+      annotated_video_url: "https://example.com/annotated.mp4",
+      excerpt_video_url: "https://example.com/excerpt.mp4",
+      case: {
+        id,
+        version: 1,
+        region: "MY",
+        vehicle: { plate: "WA 4978 R", type: "White MPV", model: null },
+        incident: {
+          date: null,
+          time: null,
+          timeZone: "Asia/Kuala_Lumpur",
+          location: null,
+          description: "Report it",
+        },
+        offences: [
+          {
+            id: `${id}-offence-1`,
+            code: "queue_cut",
+            label: "Overtook across double lines",
+            atSeconds: 10,
+            confidence: 0.95,
+            included: true,
+            lawSources: [
+              {
+                title: "Road Transport Act 1987",
+                section: "Section 43(1)",
+                url: "https://example.com/act.pdf",
+              },
+            ],
+          },
+        ],
+        evidence: {
+          durationSeconds: 18,
+          originalVideoUrl: "https://example.com/original.mp4",
+          annotatedVideoUrl: "https://example.com/annotated.mp4",
+          thumbnailUrl: null,
+          tracks: [{ vehicleTrackId: "v1", frames: [] }],
+          isSynthetic: false,
+        },
+        reporting: { status: "ready", confirmedByUser: false },
+        authorityOutcome: { status: "unknown", source: null, updatedAt: null },
+        provenance: {
+          isDemo: false,
+          factsSource: "gemini_video_analysis",
+          legalRetrieval: "rag_act_333",
+        },
+      },
+      decision_trail: {
+        excerptVideoUrl: "https://example.com/excerpt.mp4",
+        verdict: "Report it",
+        offences: [
+          {
+            offenceId: `${id}-offence-1`,
+            observed: "Overtook across double lines",
+            reasoning: "Visible unsafe pass",
+            legalBasis: "Act 333, section 43(1)",
+            penalty: "Fine",
+            confidence: 0.95,
+            window: { startSeconds: 10, endSeconds: 14 },
+          },
+        ],
+        citations: [
+          {
+            statute: "Road Transport Act 1987",
+            section: "Section 43(1)",
+            quote: "A person who drives...",
+            penalty: "Fine",
+            relevance: 0.9,
+          },
+        ],
+        gaps: ["Rule not retrieved"],
+        roundsUsed: 3,
+        followUpExhausted: false,
+        outstandingQuestions: { video: [], lawyer: [] },
+      },
+    },
+  } as unknown as Incident;
+  const [c] = fromLegacy(i, "MY");
+  assert.equal(c.id, id);
+  assert.equal(c.sourceId, i.id);
+  assert.equal(c.reviewId, "a".repeat(32));
+  assert.equal(c.evidence.originalVideoUrl, i.file);
+  assert.equal(
+    c.evidence.annotatedVideoUrl,
+    "https://example.com/annotated.mp4",
+  );
+  assert.equal(c.evidence.excerptVideoUrl, "https://example.com/excerpt.mp4");
+  assert.equal(c.offences[0].code, "double_line");
+  assert.equal(c.offences[0].reasoning, "Visible unsafe pass");
+  assert.equal(c.decisionTrail?.citations[0].quote, "A person who drives...");
+  assert.equal(c.reporting.status, "needs_info");
+});
+
 test("app updates relink local evidence without changing reviews or remote/demo media", () => {
   const c = base();
   c.provenance.isDemo = false;

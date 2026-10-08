@@ -35,6 +35,7 @@ test("rotation removes oldest loop clips, never imports or evidence under review
         verdict: "",
         reportable: [{} as never],
         follow_up_exhausted: false,
+        tracks: [],
         evidence: { timeline: [] },
       },
     }),

@@ -17,6 +17,30 @@ export type Offence = {
     section?: string;
   }[];
 };
+export type DecisionTrail = {
+  excerptVideoUrl: string | null;
+  verdict: string;
+  offences: {
+    offenceId: string;
+    observed: string;
+    reasoning: string;
+    legalBasis: string;
+    penalty: string;
+    confidence: number;
+    window: { startSeconds: number; endSeconds: number };
+  }[];
+  citations: {
+    statute: string;
+    section: string;
+    quote: string;
+    penalty: string;
+    relevance: number;
+  }[];
+  gaps: string[];
+  roundsUsed: number;
+  followUpExhausted: boolean;
+  outstandingQuestions: { video: string[]; lawyer: string[] };
+};
 export type RoadCase = {
   id: string;
   version: number;
@@ -34,6 +58,7 @@ export type RoadCase = {
     durationSeconds: number;
     originalVideoUrl: string | null;
     annotatedVideoUrl: string | null;
+    excerptVideoUrl?: string | null;
     thumbnailUrl: string | null;
     tracks: unknown[];
     isSynthetic: boolean;
@@ -46,6 +71,8 @@ export type RoadCase = {
   };
   provenance: { isDemo: boolean; factsSource: string; legalRetrieval: string };
   sourceId?: string;
+  reviewId?: string;
+  decisionTrail?: DecisionTrail;
   analysis?: {
     vehicle: RoadCase["vehicle"];
     incident: RoadCase["incident"];
@@ -179,6 +206,9 @@ export function reportText(c: RoadCase, p: Preferences) {
     c.evidence.originalVideoUrl?.startsWith("https://")
       ? `Original recording / Rakaman asal: ${c.evidence.originalVideoUrl}`
       : "Video evidence / Bukti video: attach the original recording separately.",
+    ...(c.evidence.excerptVideoUrl?.startsWith("https://")
+      ? [`Cited evidence excerpt: ${c.evidence.excerptVideoUrl}`]
+      : []),
     ...(c.evidence.annotatedVideoUrl?.startsWith("https://")
       ? [`Annotated evidence: ${c.evidence.annotatedVideoUrl}`]
       : []),
@@ -262,6 +292,8 @@ export function impact(cases: RoadCase[], period = "all", now = new Date()) {
 }
 export function fromLegacy(i: LegacyIncident, region: Region): RoadCase[] {
   if (!i.result) return [];
+  const server = fromServerCase(i, region);
+  if (server) return [server];
   const ids = [...new Set(i.result.reportable.map((o) => o.vehicle_id))];
   if (!ids.length) ids.push("clean");
   return ids.map((vehicleId, index) => {
@@ -339,6 +371,219 @@ export function fromLegacy(i: LegacyIncident, region: Region): RoadCase[] {
     }
     return c;
   });
+}
+
+const object = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+const text = (value: unknown) => (typeof value === "string" ? value : "");
+const nullableText = (value: unknown) =>
+  typeof value === "string" && value.trim() ? value : null;
+const finite = (value: unknown) =>
+  typeof value === "number" && Number.isFinite(value) ? value : 0;
+const https = (value: unknown) =>
+  typeof value === "string" && value.startsWith("https://") ? value : null;
+const submissionCode = (code: string, label: string) => {
+  if (["red_light", "double_line", "wrong_way", "dangerous"].includes(code))
+    return code;
+  if (code === "counter_flow") return "wrong_way";
+  if (code === "queue_cut" && /double line|overtak/i.test(label))
+    return "double_line";
+  if (["queue_cut", "road_rage", "emergency_lane"].includes(code))
+    return "dangerous";
+  return code || "other";
+};
+
+function parseDecisionTrail(value: unknown): DecisionTrail | undefined {
+  const trail = object(value);
+  if (!trail) return undefined;
+  const questions = object(trail.outstandingQuestions);
+  return {
+    excerptVideoUrl: https(trail.excerptVideoUrl),
+    verdict: text(trail.verdict),
+    offences: Array.isArray(trail.offences)
+      ? trail.offences.flatMap((value) => {
+          const item = object(value),
+            window = object(item?.window);
+          return item
+            ? [
+                {
+                  offenceId: text(item.offenceId),
+                  observed: text(item.observed),
+                  reasoning: text(item.reasoning),
+                  legalBasis: text(item.legalBasis),
+                  penalty: text(item.penalty),
+                  confidence: Math.min(1, Math.max(0, finite(item.confidence))),
+                  window: {
+                    startSeconds: Math.max(0, finite(window?.startSeconds)),
+                    endSeconds: Math.max(0, finite(window?.endSeconds)),
+                  },
+                },
+              ]
+            : [];
+        })
+      : [],
+    citations: Array.isArray(trail.citations)
+      ? trail.citations.flatMap((value) => {
+          const item = object(value);
+          return item
+            ? [
+                {
+                  statute: text(item.statute),
+                  section: text(item.section),
+                  quote: text(item.quote),
+                  penalty: text(item.penalty),
+                  relevance: Math.min(1, Math.max(0, finite(item.relevance))),
+                },
+              ]
+            : [];
+        })
+      : [],
+    gaps: Array.isArray(trail.gaps) ? trail.gaps.map(text).filter(Boolean) : [],
+    roundsUsed: Math.max(0, finite(trail.roundsUsed)),
+    followUpExhausted: trail.followUpExhausted === true,
+    outstandingQuestions: {
+      video: Array.isArray(questions?.video)
+        ? questions.video.map(text).filter(Boolean)
+        : [],
+      lawyer: Array.isArray(questions?.lawyer)
+        ? questions.lawyer.map(text).filter(Boolean)
+        : [],
+    },
+  };
+}
+
+/** Prefer the backend's dashboard contract, while retaining the legacy mapper
+ * for records created by older revisions. Unknown or malformed case data falls
+ * back instead of making a completed review disappear. */
+function fromServerCase(i: LegacyIncident, fallbackRegion: Region) {
+  const result = i.result;
+  if (!result) return null;
+  const raw = object(result.case),
+    vehicle = object(raw?.vehicle),
+    incident = object(raw?.incident),
+    evidence = object(raw?.evidence),
+    reporting = object(raw?.reporting),
+    outcome = object(raw?.authorityOutcome),
+    provenance = object(raw?.provenance);
+  if (
+    !raw ||
+    !text(raw.id) ||
+    !vehicle ||
+    !incident ||
+    !evidence ||
+    !reporting ||
+    !Array.isArray(raw.offences)
+  )
+    return null;
+  const trail = parseDecisionTrail(result.decision_trail);
+  const offences = raw.offences.flatMap((value, index) => {
+    const item = object(value);
+    if (!item) return [];
+    const id = text(item.id) || `${text(raw.id)}-offence-${index + 1}`;
+    const detail = trail?.offences.find((o) => o.offenceId === id);
+    return [
+      {
+        id,
+        code: submissionCode(text(item.code), text(item.label)),
+        label: text(item.label) || "Traffic offence",
+        atSeconds: Math.max(0, finite(item.atSeconds)),
+        confidence: Math.min(1, Math.max(0, finite(item.confidence))),
+        included: item.included !== false,
+        ...(detail?.reasoning ? { reasoning: detail.reasoning } : {}),
+        lawSources: Array.isArray(item.lawSources)
+          ? item.lawSources.flatMap((value) => {
+              const law = object(value);
+              return law
+                ? [
+                    {
+                      title: nullableText(law.title) || undefined,
+                      url: https(law.url) || undefined,
+                      section: nullableText(law.section) || undefined,
+                    },
+                  ]
+                : [];
+            })
+          : [],
+      },
+    ];
+  });
+  const suppliedRegion = text(raw.region);
+  const c: RoadCase = {
+    id: text(raw.id),
+    version: Math.max(1, finite(raw.version)),
+    region: (["MY", "SG", "JP"].includes(suppliedRegion)
+      ? suppliedRegion
+      : fallbackRegion) as Region,
+    vehicle: {
+      plate: nullableText(vehicle.plate),
+      type: nullableText(vehicle.type),
+      model: nullableText(vehicle.model),
+    },
+    incident: {
+      date: nullableText(incident.date),
+      time: nullableText(incident.time),
+      timeZone:
+        nullableText(incident.timeZone) ||
+        (fallbackRegion === "JP"
+          ? "Asia/Tokyo"
+          : fallbackRegion === "SG"
+            ? "Asia/Singapore"
+            : "Asia/Kuala_Lumpur"),
+      location: nullableText(incident.location),
+      description: nullableText(incident.description),
+    },
+    offences,
+    evidence: {
+      durationSeconds: Math.max(0, finite(evidence.durationSeconds)),
+      // The local original survives signed-link expiry and offline use.
+      originalVideoUrl: i.file || https(evidence.originalVideoUrl),
+      annotatedVideoUrl:
+        https(evidence.annotatedVideoUrl) || result.annotated_video_url || null,
+      excerptVideoUrl:
+        trail?.excerptVideoUrl || result.excerpt_video_url || null,
+      thumbnailUrl: i.thumbnail || https(evidence.thumbnailUrl),
+      tracks: Array.isArray(evidence.tracks)
+        ? evidence.tracks
+        : result.tracks || [],
+      isSynthetic: false,
+    },
+    reporting: {
+      status: (["needs_info", "ready", "opened", "sent", "clean"].includes(
+        text(reporting.status),
+      )
+        ? text(reporting.status)
+        : offences.length
+          ? "needs_info"
+          : "clean") as Status,
+      confirmedByUser: reporting.confirmedByUser === true,
+    },
+    authorityOutcome: {
+      status: text(outcome?.status) || "unknown",
+      source: nullableText(outcome?.source),
+      updatedAt: nullableText(outcome?.updatedAt),
+    },
+    provenance: {
+      isDemo: false,
+      factsSource: text(provenance?.factsSource) || "gemini_video_analysis",
+      legalRetrieval: text(provenance?.legalRetrieval) || "backend_review",
+    },
+    sourceId: i.id,
+    reviewId: result.review_id,
+    decisionTrail: trail,
+  };
+  c.analysis = {
+    vehicle: { ...c.vehicle },
+    incident: { ...c.incident },
+    offences: c.offences.map((o) => ({
+      ...o,
+      lawSources: o.lawSources.map((law) => ({ ...law })),
+    })),
+    timeline: result.evidence.timeline.map((line) => ({ ...line })),
+  };
+  c.reporting.status = correctStatus(c);
+  return c;
 }
 
 /** Preserve the original model response while tracking explicitly edited facts. */

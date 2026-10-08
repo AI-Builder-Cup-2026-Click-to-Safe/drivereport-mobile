@@ -446,7 +446,8 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
     changing.current = true;
     setBusy(true);
     try {
-      await openWhatsAppDraft(c, rr.prefs);
+      const fresh = await rr.refreshEvidence(c.id);
+      await openWhatsAppDraft(fresh, rr.prefs);
       await rr.changeCase(c.id, {
         reporting: { status: "opened", confirmedByUser: false },
       });
@@ -868,14 +869,23 @@ export function Handoff() {
           <Quiet
             title="Open WhatsApp again"
             icon="MessageCircle"
-            onPress={() => void openWhatsAppDraft(c, rr.prefs).catch(showError)}
+            onPress={() =>
+              void rr
+                .refreshEvidence(c.id)
+                .then((fresh) => openWhatsAppDraft(fresh, rr.prefs))
+                .catch(showError)
+            }
           />
         </>
       }
     >
       <Intro
         title="Did you send it?"
-        body="Attach the clip, tap Send in WhatsApp, then tell me here."
+        body={
+          c.evidence.excerptVideoUrl?.startsWith("https://")
+            ? "The cited evidence link is in the draft. Tap Send in WhatsApp, then tell me here."
+            : "Attach the clip, tap Send in WhatsApp, then tell me here."
+        }
       />
       <View
         style={[

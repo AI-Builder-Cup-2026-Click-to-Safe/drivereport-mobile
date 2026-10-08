@@ -48,9 +48,9 @@ The judging build explicitly embeds the existing test API token from the product
 
 - **Home:** “Spotted an asshole? Let’s take their licence.” with rolling JAPAC road statistics and staggered entrances, an Analyse a clip action, and a secondary recording action. The clip tray preloads the synthetic sample and accepts a file or saved recording for real analysis. The black recording screen retains its elapsed clock and End recording action.
 - **Analysis:** footage, four stage indicators (Upload, Watch, Law, Judge), rotating Gemini spark, scan sweep, caption transitions, arriving findings, stamped points and a sample cost counter. Demo stages are simulated and labelled. Live mode shows actual upload progress, then waits for the server's single review response without inventing agent progress.
-- **Cases:** page through pending cases, play original footage, seek to findings, include/exclude offences, read citations and fill missing facts. Other facts are under Edit details. How Gemini decided preserves the original response separately from user changes.
-- **WhatsApp:** open a live draft for the case's jurisdiction; the new submission samples open a recipientless chat picker so the tester chooses their own chat. The separate editable Test WhatsApp utility retains the configured test number. Attach the original video separately. Opening WhatsApp does not mark a report sent. The user confirms sending, sees a printing receipt and Reported stamp, then taps See your impact to start the eight-second Undo window. A lasting “Mark as not sent” action remains available.
-- **Impact:** filter by date, offence, plate and local reporting status. Sent and fine counters count distinct known plates independently. The sample licence meter distinguishes prior records from potential points on sent reports. Live authority outcomes and licence records remain unknown because the server does not provide them.
+- **Cases:** page through pending cases, play original footage, seek to findings, include/exclude offences, read citations and fill missing facts. Other facts are under Edit details. How Gemini decided preserves the server decision trail separately from user changes. Live cases use the server case shape when available and retain the older response mapper for previously saved reviews.
+- **WhatsApp:** open a live draft for the case's jurisdiction; the new submission samples open a recipientless chat picker so the tester chooses their own chat. The separate editable Test WhatsApp utility retains the configured test number. Before opening a live draft, the app refreshes expiring evidence links and includes the cited excerpt link when the server produced one; the original clip remains available for manual attachment. Opening WhatsApp records an `opened` state, but does not mark a report sent. The user confirms sending, sees a printing receipt and Reported stamp, then taps See your impact to start the eight-second Undo window. A lasting “Mark as not sent” action remains available.
+- **Impact:** filter by date, offence, plate and reporting status. Live mode reads the server's period totals and most-spotted plate while the case list remains the device's retained evidence. Reporting `opened`/`sent` changes are synchronized to the server for new reviews. Demo mode keeps its synthetic counters and licence meter. Live authority outcomes and licence records remain unknown because the server does not provide them.
 - **Developer:** available from Settings, with test recipient, API connection, retained-clip retry and synthetic demo controls. The main navigation is Home / Cases / Impact.
 - **Settings:** jurisdiction-specific recipients, optional reporter details, locale and reduced motion. Profile details are opt-in for WhatsApp and are never sent to the analysis API.
 
@@ -70,14 +70,16 @@ For builds without the judging environment variable, enter an HTTPS base URL and
 
 The existing development base URL is `https://prototype-video-api-fydsujlsyq-uc.a.run.app`. “Check URL” calls `/health`; it does not validate the token.
 
-The existing API contract is unchanged:
+The mobile client follows the current backend contract:
 
 1. `POST /v1/uploads` with `mime_type` and `size_bytes`.
 2. Binary `PUT` to the returned upload URL.
-3. `POST /v1/review` with `video_uri` and `mime_type`.
-4. Map the final response to per-vehicle cases while preserving citations and footage.
+3. `POST /v1/review` with `video_uri`, `mime_type` and the selected `region`.
+4. Preserve the returned `review_id`, `case`, `decision_trail`, tracks and signed original/annotated/excerpt video links. Older stored responses continue through the legacy mapper.
+5. `GET /v1/reviews/{review_id}` refreshes expiring signed evidence links before handoff.
+6. `PATCH /v1/reviews/{review_id}/reporting` synchronizes `opened` and `sent`; `GET /v1/impact?period=all|week|today` supplies live aggregate counters.
 
-The backend limits clips to ten minutes and currently supplies Malaysia legal analysis only. Live review is gated to Malaysia. Other jurisdictions can be previewed with demo fixtures and configured recipients. There are no server APIs for persisted cases, progress events, tracking boxes, face blurring, authority submission, fine outcomes or remote deletion. Those capabilities are not fabricated in live mode. Keep the app open while reviewing; stopping local waiting cannot cancel an already-started server job.
+The backend limits clips to ten minutes. It now persists a normalized case, decision trail, tracked/annotated evidence and a cited excerpt when rendering succeeds. Signed links expire, so the app refreshes them before WhatsApp handoff. The backend still has no progress-event stream, face blurring, direct authority submission, verified fine outcomes or licence records. Those capabilities are not fabricated in live mode. Keep the app open while reviewing; stopping local waiting cannot cancel an already-started server job.
 
 Optional provisioning for contributors with existing GCP Secret Manager access:
 

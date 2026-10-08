@@ -19,9 +19,24 @@ export type Review = {
   verdict: string;
   reportable: Finding[];
   follow_up_exhausted: boolean;
+  review_id?: string;
+  case?: unknown;
+  decision_trail?: unknown;
+  original_video_url?: string;
+  annotated_video_url?: string;
+  excerpt_video_url?: string;
+  tracks: unknown[];
   evidence: {
     timeline: { start_seconds: number; end_seconds: number; event: string }[];
   };
+};
+export type ImpactSummary = {
+  snitchedCount: number;
+  billedCount: number;
+  mostSpotted: { plate: string; count: number } | null;
+  offenceOccurrences: Record<string, number>;
+  isDemo: boolean;
+  demoToday: string;
 };
 export type Stage = "queued" | "uploading" | "reviewing" | "ready" | "error";
 export type Incident = {
@@ -127,10 +142,27 @@ export function parseReview(input: unknown): Review {
           : [];
       })
     : [];
+  const httpsUrl = (v: unknown) =>
+    typeof v === "string" && v.startsWith("https://") ? v : undefined;
   return {
     verdict: r.verdict,
     reportable,
     follow_up_exhausted: r.follow_up_exhausted === true,
+    ...(text(r.review_id) ? { review_id: text(r.review_id) } : {}),
+    ...(r.case && typeof r.case === "object" ? { case: r.case } : {}),
+    ...(r.decision_trail && typeof r.decision_trail === "object"
+      ? { decision_trail: r.decision_trail }
+      : {}),
+    ...(httpsUrl(r.original_video_url)
+      ? { original_video_url: httpsUrl(r.original_video_url) }
+      : {}),
+    ...(httpsUrl(r.annotated_video_url)
+      ? { annotated_video_url: httpsUrl(r.annotated_video_url) }
+      : {}),
+    ...(httpsUrl(r.excerpt_video_url)
+      ? { excerpt_video_url: httpsUrl(r.excerpt_video_url) }
+      : {}),
+    tracks: Array.isArray(r.tracks) ? r.tracks : [],
     evidence: { timeline },
   };
 }

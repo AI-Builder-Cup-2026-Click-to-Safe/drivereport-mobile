@@ -58,6 +58,30 @@ test("keeps malformed confidence finite and flags incomplete reviews", () => {
   assert.equal(r.follow_up_exhausted, true);
   assert.equal(r.evidence.timeline.length, 1);
 });
+test("preserves the backend case, decision trail and playable HTTPS URLs", () => {
+  const serverCase = { id: "RR-ABC12345", vehicle: { plate: "WA 4978 R" } };
+  const trail = {
+    caseId: "RR-ABC12345",
+    excerptVideoUrl: "https://example.com/e.mp4",
+  };
+  const review = parseReview({
+    reportable: [finding],
+    verdict: "Review it",
+    review_id: "a".repeat(32),
+    case: serverCase,
+    decision_trail: trail,
+    tracks: [{ vehicleTrackId: "v1" }],
+    original_video_url: "gs://private/original",
+    annotated_video_url: "https://example.com/a.mp4",
+    excerpt_video_url: "https://example.com/e.mp4",
+  });
+  assert.deepEqual(review.case, serverCase);
+  assert.deepEqual(review.decision_trail, trail);
+  assert.equal(review.review_id, "a".repeat(32));
+  assert.equal(review.original_video_url, undefined);
+  assert.equal(review.annotated_video_url, "https://example.com/a.mp4");
+  assert.equal(review.tracks.length, 1);
+});
 test("requires verified metadata and never inserts inaccessible GCS URLs", () => {
   assert.throws(() => buildDraft({ ...incident, plate: "" }, initialSettings));
   const draft = buildDraft(

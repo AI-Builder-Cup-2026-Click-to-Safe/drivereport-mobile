@@ -1,14 +1,21 @@
 import * as FileSystem from "expo-file-system/legacy";
-import { Incident, parseReview, Settings, validateApiUrl } from "./domain";
+import {
+  Incident,
+  parseReview,
+  Settings,
+  validateApiUrl,
+  type ImpactSummary,
+} from "./domain";
 
 async function request(
   settings: Settings,
   path: string,
   signal: AbortSignal,
   body?: object,
+  method?: "POST" | "PATCH",
 ) {
   const response = await fetch(`${validateApiUrl(settings.apiUrl)}${path}`, {
-    method: body ? "POST" : "GET",
+    method: method || (body ? "POST" : "GET"),
     signal,
     headers: {
       "Content-Type": "application/json",
@@ -42,11 +49,77 @@ export async function checkConnection(settings: Settings) {
     clearTimeout(timer);
   }
 }
+export async function refreshReview(
+  reviewId: string,
+  settings: Settings,
+  signal: AbortSignal,
+) {
+  if (!/^[a-f0-9]{32}$/i.test(reviewId))
+    throw new Error("This review has no valid server reference.");
+  return parseReview(
+    await request(settings, `/v1/reviews/${reviewId}`, signal),
+  );
+}
+export async function updateReporting(
+  reviewId: string,
+  status: "opened" | "sent",
+  settings: Settings,
+  signal: AbortSignal,
+) {
+  if (!/^[a-f0-9]{32}$/i.test(reviewId))
+    throw new Error("This review has no valid server reference.");
+  return request(
+    settings,
+    `/v1/reviews/${reviewId}/reporting`,
+    signal,
+    { reporting_status: status },
+    "PATCH",
+  );
+}
+export async function fetchImpact(
+  period: "all" | "week" | "today",
+  settings: Settings,
+  signal: AbortSignal,
+): Promise<ImpactSummary> {
+  const raw = (await request(
+    settings,
+    `/v1/impact?period=${period}`,
+    signal,
+  )) as Record<string, unknown>;
+  const count = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value)
+      ? Math.max(0, Math.floor(value))
+      : 0;
+  const most =
+    raw.mostSpotted && typeof raw.mostSpotted === "object"
+      ? (raw.mostSpotted as Record<string, unknown>)
+      : null;
+  const occurrences =
+    raw.offenceOccurrences && typeof raw.offenceOccurrences === "object"
+      ? Object.fromEntries(
+          Object.entries(raw.offenceOccurrences as Record<string, unknown>)
+            .filter(([key]) => key.length > 0)
+            .map(([key, value]) => [key, count(value)]),
+        )
+      : {};
+  return {
+    snitchedCount: count(raw.snitchedCount),
+    billedCount: count(raw.billedCount),
+    mostSpotted:
+      most && typeof most.plate === "string" && most.plate.trim()
+        ? { plate: most.plate, count: count(most.count) }
+        : null,
+    offenceOccurrences: occurrences,
+    isDemo: raw.isDemo === true,
+    demoToday: typeof raw.demoToday === "string" ? raw.demoToday : "",
+  };
+}
 export async function analyseVideo(
   i: Incident,
   settings: Settings,
   signal: AbortSignal,
   update: (patch: Partial<Incident>, progress?: number) => Promise<void>,
+  region: "MY" | "SG" | "JP" = "MY",
 ) {
   if (!settings.token.trim())
     throw new Error("Add your API access token in Settings to analyse videos.");
@@ -112,6 +185,7 @@ export async function analyseVideo(
   const raw = await request(settings, "/v1/review", signal, {
     video_uri: uri,
     mime_type: i.mime,
+    region,
   });
   return parseReview(raw);
 }

@@ -59,6 +59,7 @@ type Context = {
   selected: string;
   select: (id: string) => void;
   changeCase: (id: string, patch: Partial<RoadCase>) => Promise<void>;
+  refreshEvidence: (id: string) => Promise<RoadCase>;
   job: Job | null;
   begin: (ids: string[], demo?: boolean) => Promise<void>;
   cancel: () => void;
@@ -235,6 +236,14 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     await work;
   };
   const changeCase = async (id: string, patch: Partial<RoadCase>) => {
+    const current = cr.current.find((c) => c.id === id);
+    const status = patch.reporting?.status;
+    if (
+      current?.sourceId &&
+      current.reviewId &&
+      (status === "opened" || status === "sent")
+    )
+      await old.current.syncReporting(current.sourceId, status);
     await persistCases(
       cr.current.map((c) => {
         if (c.id !== id) return c;
@@ -247,6 +256,29 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         return n;
       }),
     );
+  };
+  const refreshEvidence = async (id: string) => {
+    const current = cr.current.find((c) => c.id === id);
+    if (!current) throw Error("Case not found.");
+    if (!current.sourceId || !current.reviewId) return current;
+    const record = await old.current.refresh(current.sourceId);
+    const refreshed = record
+      ? fromLegacy(record, current.region)[0]
+      : undefined;
+    if (!refreshed) return current;
+    const next = {
+      ...current,
+      reviewId: refreshed.reviewId,
+      decisionTrail: refreshed.decisionTrail,
+      evidence: {
+        ...current.evidence,
+        annotatedVideoUrl: refreshed.evidence.annotatedVideoUrl,
+        excerptVideoUrl: refreshed.evidence.excerptVideoUrl,
+        tracks: refreshed.evidence.tracks,
+      },
+    };
+    await persistCases(cr.current.map((c) => (c.id === id ? next : c)));
+    return next;
   };
   const confirmSent = async (id: string, deferUndo = false) => {
     await changeCase(id, {
@@ -331,7 +363,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
             select(completed[0].id);
             continue;
           }
-          const record = await old.current.analyse(id);
+          const record = await old.current.analyse(id, j.region);
           if (run.current !== generation) return;
           if (!record || record.stage === "error")
             throw Error(record?.error || "Analysis unavailable.");
@@ -389,6 +421,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         selected,
         select,
         changeCase,
+        refreshEvidence,
         job,
         begin,
         cancel,
