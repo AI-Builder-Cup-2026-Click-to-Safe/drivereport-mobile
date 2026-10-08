@@ -109,7 +109,11 @@ export function StandardHome() {
         </Arrival>
         {rr.job?.status === "running" && (
           <Quiet
-            title="Gemini is still working · see progress"
+            title={
+              rr.job.stage < 0
+                ? "Saving your recording · see progress"
+                : "Gemini is still working · see progress"
+            }
             onPress={() => go("analysis")}
           />
         )}
@@ -307,14 +311,16 @@ export function StandardAnalysis() {
       </Page>
     );
   const done = j.status === "complete",
-    running = j.status === "running";
+    running = j.status === "running",
+    preparing = j.stage < 0,
+    saving = preparing && running;
   const result =
     rr.allCases.find((c) => j.caseIds.includes(c.id)) ||
     (j.mode === "demo"
       ? (submissionFixtures.allCases[0] as RoadCase)
       : undefined);
   const file = store.records.find((r) => j.sourceIds.includes(r.id));
-  const stage = done ? 4 : j.stage;
+  const stage = done ? 4 : Math.max(0, j.stage);
   const awarded = result ? casePoints(result) : 0;
   const prior = result ? licenceRecord(result) : null;
   const captions = [
@@ -353,7 +359,7 @@ export function StandardAnalysis() {
   };
   return (
     <Page
-      title="Gemini at work"
+      title={saving ? "Saving your drive" : "Gemini at work"}
       nav={false}
       gap={10}
       footer={
@@ -384,7 +390,7 @@ export function StandardAnalysis() {
           justifyContent: "center",
         }}
       >
-        {j.mode === "demo" || file?.thumbnail ? (
+        {!saving && (j.mode === "demo" || file?.thumbnail) ? (
           <Image
             source={j.mode === "demo" ? demoFrame : { uri: file!.thumbnail }}
             style={{
@@ -408,7 +414,11 @@ export function StandardAnalysis() {
             fontSize: 12,
           }}
         >
-          {j.mode === "demo" ? "Synthetic demo" : "Your recording"}
+          {j.mode === "demo"
+            ? "Synthetic demo"
+            : saving
+              ? "Saving on this device"
+              : "Your recording"}
         </T>
         {stage === 0 && j.progress !== null && (
           <View
@@ -443,13 +453,15 @@ export function StandardAnalysis() {
               <View
                 key={name}
                 accessible
-                accessibilityLabel={`${name}: ${done || i < stage ? "complete" : i === stage ? "working" : "awaiting result"}`}
+                accessibilityLabel={`${name}: ${preparing ? "awaiting saved recording" : done || i < stage ? "complete" : i === stage ? "working" : "awaiting result"}`}
                 style={{
                   width: 8,
                   height: 8,
                   borderRadius: 4,
                   backgroundColor:
-                    done || i < stage
+                    preparing
+                      ? C.lilac
+                      : done || i < stage
                       ? C.accent
                       : i === stage
                         ? C.ink
@@ -460,7 +472,8 @@ export function StandardAnalysis() {
                 style={{
                   fontSize: 11,
                   fontWeight: "700",
-                  color: done || i < stage ? C.accent : C.muted,
+                  color:
+                    !preparing && (done || i < stage) ? C.accent : C.muted,
                 }}
               >
                 {name}
@@ -469,7 +482,9 @@ export function StandardAnalysis() {
           ))}
         </View>
         <T style={s.muted}>
-          {done
+          {saving
+            ? "Preparing"
+            : done
             ? "Done"
             : !running
               ? "Paused"
@@ -492,10 +507,18 @@ export function StandardAnalysis() {
                 letterSpacing: -0.6,
               }}
             >
-              {running || done ? captions[stage][0] : "Analysis interrupted"}
+              {saving
+                ? "Securing the last recording"
+                : running || done
+                  ? captions[stage][0]
+                  : "Analysis interrupted"}
             </T>
             <T style={{ color: C.muted, fontSize: 14, lineHeight: 20 }}>
-              {running || done
+              {saving
+                ? j.sourceIds.length
+                  ? `${j.sourceIds.length} saved segment${j.sourceIds.length === 1 ? "" : "s"}. Finishing the last file before upload.`
+                  : "Closing the camera file and saving it locally before upload."
+                : running || done
                 ? captions[stage][1]
                 : j.error || "Your recording is still saved."}
             </T>
@@ -609,15 +632,21 @@ export function StandardAnalysis() {
         <>
           <Notice error>{j.error || "Analysis interrupted."}</Notice>
           <Action
-            title="Retry analysis"
+            title={j.sourceIds.length ? "Retry analysis" : "Record again"}
             secondary
-            onPress={() =>
-              void rr.begin(j.sourceIds, j.mode === "demo").catch(showError)
-            }
+            onPress={() => {
+              if (!j.sourceIds.length && j.mode === "live") go("recording");
+              else
+                void rr
+                  .begin(j.sourceIds, j.mode === "demo")
+                  .catch(showError);
+            }}
           />
         </>
       )}
-      {running && <Quiet title="Stop waiting" onPress={rr.cancel} />}
+      {running && !saving && (
+        <Quiet title="Stop waiting" onPress={rr.cancel} />
+      )}
     </Page>
   );
 }

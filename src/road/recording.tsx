@@ -13,8 +13,10 @@ import { T, go, showError } from "./ui";
 export function Recording() {
   const rr = useRoad(),
     store = useStore(),
-    current = useRef(store);
+    current = useRef(store),
+    road = useRef(rr);
   current.current = store;
+  road.current = rr;
   const demo = rr.prefs.demo;
   const camera = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
@@ -113,6 +115,7 @@ export function Recording() {
               { dashcamSession: session, createdAt, protected: true },
             );
             ids.current.push(id);
+            road.current.recordingSaved(id);
             await FS.deleteAsync(uri, { idempotent: true });
             if ((await FS.getFreeDiskStorageAsync()) < MIN_FREE_BYTES)
               fail(
@@ -147,6 +150,10 @@ export function Recording() {
     endingRef.current = true;
     setEnding(true);
     stop();
+    if (!demo) {
+      rr.prepareRecording(ids.current);
+      go("analysis");
+    }
     try {
       await task.current;
       await deactivateKeepAwake("road-recording");
@@ -155,6 +162,9 @@ export function Recording() {
         void rr.begin([], true).catch(showError);
       } else if (ids.current.length) {
         if (!store.settings.token) {
+          rr.failRecording(
+            "Recording saved. Add your API token, then retry the saved clips.",
+          );
           go("developer");
           showError(
             Error(
@@ -165,11 +175,21 @@ export function Recording() {
           go("analysis");
           void rr.begin(ids.current).catch(showError);
         }
-      } else go("home");
+      } else if (!demo)
+        rr.failRecording(
+          error || "The camera stopped before a recording could be saved.",
+        );
+      else go("home");
     } catch (e) {
+      if (!demo)
+        rr.failRecording(
+          e instanceof Error ? e.message : "Could not save the recording.",
+        );
       showError(e);
-      setEnding(false);
-      endingRef.current = false;
+      if (mounted.current) {
+        setEnding(false);
+        endingRef.current = false;
+      }
     }
   };
   return (

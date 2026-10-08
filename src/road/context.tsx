@@ -67,6 +67,9 @@ type Context = {
   syncCases: (force?: boolean) => Promise<void>;
   syncingCases: boolean;
   historyError: string;
+  prepareRecording: (sourceIds?: string[]) => void;
+  recordingSaved: (sourceId: string) => void;
+  failRecording: (message: string) => void;
   job: Job | null;
   begin: (ids: string[], demo?: boolean) => Promise<void>;
   cancel: () => void;
@@ -133,6 +136,33 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     void work.catch(() =>
       setError("Could not save analysis state. Keep the app open."),
     );
+  };
+  const prepareRecording = (sourceIds: string[] = []) => {
+    updateJob({
+      id: `JOB-${Date.now()}`,
+      mode: "live",
+      status: "running",
+      stage: -1,
+      progress: null,
+      sourceIds: [...new Set(sourceIds)],
+      caseIds: [],
+      region: pr.current.region,
+      notice: false,
+    });
+  };
+  const recordingSaved = (sourceId: string) => {
+    const current = jr.current;
+    if (!current || current.status !== "running" || current.stage !== -1)
+      return;
+    updateJob({
+      ...current,
+      sourceIds: [...new Set([...current.sourceIds, sourceId])],
+    });
+  };
+  const failRecording = (message: string) => {
+    const current = jr.current;
+    if (!current || current.stage !== -1) return;
+    updateJob({ ...current, status: "error", error: message });
   };
   useEffect(() => {
     alive.current = true;
@@ -400,7 +430,12 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     await setPrefs({ demo: true });
   };
   const begin = async (ids: string[], demo = false) => {
-    if (jr.current?.status === "running")
+    const preparedRecording =
+      !demo &&
+      jr.current?.status === "running" &&
+      jr.current.mode === "live" &&
+      jr.current.stage === -1;
+    if (jr.current?.status === "running" && !preparedRecording)
       throw Error("An analysis is already running.");
     if (!ready || error) throw Error(error || "Still restoring your data.");
     if (!demo && pr.current.region !== "MY")
@@ -410,17 +445,25 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     if (!demo && !old.current.settings.token)
       throw Error("Add your API access token in Developer before analysing.");
     const generation = ++run.current;
-    const j: Job = {
-      id: `JOB-${Date.now()}`,
-      mode: demo ? "demo" : "live",
-      status: "running",
-      stage: 0,
-      progress: 0,
-      sourceIds: ids,
-      caseIds: [],
-      region: pr.current.region,
-      notice: false,
-    };
+    const j: Job = preparedRecording
+      ? {
+          ...jr.current!,
+          stage: 0,
+          progress: 0,
+          sourceIds: ids,
+          error: undefined,
+        }
+      : {
+          id: `JOB-${Date.now()}`,
+          mode: demo ? "demo" : "live",
+          status: "running",
+          stage: 0,
+          progress: 0,
+          sourceIds: ids,
+          caseIds: [],
+          region: pr.current.region,
+          notice: false,
+        };
     updateJob(j);
     try {
       if (demo) {
@@ -520,6 +563,9 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         syncCases,
         syncingCases,
         historyError,
+        prepareRecording,
+        recordingSaved,
+        failRecording,
         job,
         begin,
         cancel,

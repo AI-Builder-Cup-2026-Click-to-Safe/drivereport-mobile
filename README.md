@@ -64,7 +64,7 @@ There is no 60-second **session** limit. Silent 720p capture writes successive o
 
 The app keeps the screen awake. Leaving the foreground, locking the phone, a camera error or low storage stops recording. Saved segments remain available in Developer. Footage is preserved; this flow does not automatically delete older recordings. Capture stops below 400 MiB of free storage. Long driving sessions therefore require available device space.
 
-After recording ends, saved segments are analysed sequentially when credentials are configured. Without credentials they remain available for later analysis. This is post-drive review, not real-time violation detection. Retrying a partially completed job reuses completed cases and preserves user edits. An interrupted job can be retried after reopening the app.
+End recording immediately opens the progress screen. It first shows the local finalization step while the last camera file is closed, copied and indexed, including the number of segments already secured. The same screen then advances to upload progress and server review. Saved segments are analysed sequentially when credentials are configured. Without credentials they remain available for later analysis. This is post-drive review, not real-time violation detection. Retrying a partially completed job reuses completed cases and preserves user edits. An interrupted job can be retried after reopening the app.
 
 ## Backend connection
 
