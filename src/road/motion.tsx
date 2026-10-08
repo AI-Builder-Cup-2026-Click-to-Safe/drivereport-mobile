@@ -101,8 +101,9 @@ export function Motion({
   const value = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     value.stopAnimation();
-    value.setValue(reduced || !foreground ? 1 : 0);
-    if (reduced || !foreground) return;
+    const immediate = reduced || !foreground || durationMs === 0;
+    value.setValue(immediate ? 1 : 0);
+    if (immediate) return;
     const a = Animated.timing(value, {
       toValue: 1,
       duration: durationMs ?? (small ? 180 : 300),
