@@ -1,6 +1,6 @@
 # Click-to-Safe Mobile
 
-A native React Native / Expo app rebuilt from the [Road Receipts handover](https://github.com/whyteaz/road-receipts-handover), updated to commit `3ae6b66`. It keeps the supplied Manrope typography, pastel surfaces, exact product copy, native navigation icon morphs, and Gemini “Living intelligence” animation.
+A native React Native / Expo app using the **Standard** variant from the [Road Receipts handover](https://github.com/whyteaz/road-receipts-handover/tree/25f5108/variants/standard). It uses the supplied Manrope typography, white surfaces, Gemini Blue, pill actions, and native Standard motion. See [the implementation notes](design/STANDARD.md) for provenance and integration boundaries.
 
 This repository contains the mobile client. It connects to the existing [GCP review backend](https://github.com/Lorem-Ipsum-AI-Builder-Cup-2026/prototype); no backend deployment is needed for this UI rebuild.
 
@@ -46,12 +46,12 @@ The judging build explicitly embeds the existing test API token from the product
 
 ## App flow
 
-- **Home:** Click-to-Safe branding and the “Capture arrives” opening (3.67 seconds, once per app session). The opening settles immediately on interaction, backgrounding or reduced motion; the 4.2-second recording-disc invitation pauses offscreen. Start a foreground recording. The black recording screen has elapsed time, a static red indicator and an End recording action.
-- **Analysis:** the original five-stage motion design. Demo mode simulates all five steps. Live mode shows actual upload progress, then waits for the server's single review response without inventing agent progress.
-- **Review:** play original footage, seek to findings, include/exclude offences, and edit plate, vehicle type, date, time, location and description. Missing facts prevent opening a report draft. Personal details and vehicle model are optional.
-- **WhatsApp:** open a draft for the case's jurisdiction; attach the original video separately. Opening WhatsApp does not mark a report sent. The user confirms sending, with an eight-second Undo and a lasting “Mark as not sent” action.
+- **Home:** “Spotted an asshole?” with staggered entrances, an Analyse a clip action, and a secondary recording action. The clip tray accepts a file, saved recording or explicit synthetic demo. The black recording screen retains its elapsed clock and End recording action.
+- **Analysis:** Standard footage, four stage indicators (Upload, Watch, Law, Judge), rotating Gemini spark, scan sweep, caption transitions and arriving findings. Demo stages are simulated and labelled. Live mode shows actual upload progress, then waits for the server's single review response without inventing agent progress.
+- **Cases:** play original footage, seek to findings, include/exclude offences, expand reasoning and citations, and edit missing facts. Location and description remain visible; All details contains plate, vehicle, date/time and optional model. Gemini’s work preserves the original response separately from user changes.
+- **WhatsApp:** open a live draft for the case's jurisdiction; synthetic demos require a separate test number in Settings → Developer. Attach the original video separately. Opening WhatsApp does not mark a report sent. The user confirms sending, with an eight-second Undo and a lasting “Mark as not sent” action.
 - **Impact:** filter by date, offence, plate and local reporting status. Sent and fine counters count distinct known plates independently. Live authority outcomes remain unknown because the server does not provide them.
-- **Developer:** import MP4/MOV/WebM files up to 300 MB, configure the API connection, retry retained clips or run a clearly labelled synthetic demo.
+- **Developer:** available from Settings, with test recipient, API connection, retained-clip retry and synthetic demo controls. The main navigation is Home / Cases / Impact.
 - **Settings:** jurisdiction-specific recipients, optional reporter details, locale and reduced motion. Profile details are opt-in for WhatsApp and are never sent to the analysis API.
 
 The initial screen is always Home. Previous DriveReport evidence remains in local storage and completed reviews migrate into the new case model. Demo cases and real records remain separate. Simulator defaults to demo; a physical device defaults to live recording. Demo recording captures no camera footage, and demo findings are not real incidents.

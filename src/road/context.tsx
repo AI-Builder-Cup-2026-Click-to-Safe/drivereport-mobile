@@ -12,6 +12,7 @@ import * as Device from "expo-device";
 import { useStore } from "../lib/store";
 import {
   fromLegacy,
+  editCase,
   restoreEvidence,
   correctStatus,
   validation,
@@ -232,7 +233,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         if (c.id !== id) return c;
         if (c.reporting.status === "sent" && !patch.reporting)
           throw Error("Mark this report as not sent before editing.");
-        const n = { ...c, ...patch, version: c.version + 1 };
+        const n = editCase(c, patch);
         if (patch.reporting?.status === "sent" && validation(n))
           throw Error(validation(n));
         n.reporting = { ...n.reporting, status: correctStatus(n) };
@@ -302,6 +303,16 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         ) as RoadCase;
         base.id = `DEMO-${Date.now().toString(36).toUpperCase()}`;
         base.incident.location = null;
+        base.analysis = {
+          vehicle: { ...base.vehicle },
+          incident: { ...base.incident },
+          offences: base.offences.map((o) => ({
+            ...o,
+            lawSources: o.lawSources.map((s) => ({ ...s })),
+          })),
+          timeline: [],
+        };
+        base.edited = [];
         base.reporting.status = "needs_info";
         base.region = "MY";
         await persistCases([base, ...cr.current]);

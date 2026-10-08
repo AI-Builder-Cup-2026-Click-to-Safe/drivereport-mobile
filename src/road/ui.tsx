@@ -17,30 +17,24 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { setStatusBarStyle } from "expo-status-bar";
 import { router, usePathname } from "expo-router";
-import Svg, {
-  Defs,
-  RadialGradient,
-  Rect,
-  Stop,
-  SvgXml,
-} from "react-native-svg";
+import { SvgXml } from "react-native-svg";
 import icons from "./icons.json";
 import { BrandMark } from "./brand";
-import { MorphIcon, Motion, DecorationViewport, FadeArrival } from "./motion";
+import { Motion, DecorationViewport, FadeArrival } from "./motion";
 import { useRoad } from "./context";
 export const C = {
-  bg: "#f3f0f6",
-  surface: "#fcfafe",
-  ink: "#2b2531",
-  muted: "#615968",
-  line: "#d1c8d4",
-  mint: "#dcefe3",
-  lilac: "#e8dcf0",
-  peach: "#f2dfd5",
-  accent: "#4e625a",
-  warning: "#864a34",
-  warningBg: "#f6e3d7",
-  dark: "#20282b",
+  bg: "#FFFFFF",
+  surface: "#F3F4F6",
+  ink: "#111318",
+  muted: "#5D6270",
+  line: "#E3E5E9",
+  mint: "#E8F6EC",
+  lilac: "#E9EBEF",
+  peach: "#FFF4E5",
+  accent: "#1A56DB",
+  warning: "#A84B0A",
+  warningBg: "#FFF4E5",
+  dark: "#000000",
 };
 export const showError = (e: unknown) =>
   Alert.alert("Click-to-Safe", e instanceof Error ? e.message : String(e));
@@ -64,7 +58,7 @@ export function T({ style, ...p }: TextProps) {
     <Text
       {...p}
       style={[
-        { fontFamily: "Manrope", fontSize: 14, lineHeight: 21, color: C.ink },
+        { fontFamily: "Manrope", fontSize: 16, lineHeight: 23, color: C.ink },
         style,
       ]}
     />
@@ -136,20 +130,20 @@ export function Action({
         onPress={onPress}
         style={({ pressed }) => [
           {
-            minHeight: small ? 44 : 50,
-            borderRadius: 12,
+            minHeight: small ? 44 : 56,
+            borderRadius: 999,
             paddingHorizontal: 16,
             paddingVertical: 12,
             flexDirection: "row",
             alignItems: "center",
             justifyContent: "center",
             gap: 10,
-            borderWidth: secondary ? 1 : 0,
+            borderWidth: secondary ? 1.5 : 0,
             borderColor: C.line,
             backgroundColor: disabled
-              ? "#e8e3ec"
+              ? C.lilac
               : secondary
-                ? C.surface
+                ? C.bg
                 : pressed
                   ? C.accent
                   : C.ink,
@@ -167,6 +161,7 @@ export function Action({
         <T
           style={{
             fontWeight: "700",
+            fontSize: 17,
             color: disabled ? C.muted : secondary ? C.ink : "white",
             textAlign: "center",
           }}
@@ -207,7 +202,11 @@ export function Quiet({
       })}
     >
       {icon && <Icon name={icon} size={20} />}
-      {!compact && <T style={{ fontSize: 12, fontWeight: "600" }}>{title}</T>}
+      {!compact && (
+        <T style={{ fontSize: 15, fontWeight: "600", color: C.muted }}>
+          {title}
+        </T>
+      )}
     </Pressable>
   );
 }
@@ -225,7 +224,7 @@ export function Notice({
         style={{
           padding: 13,
           borderRadius: 10,
-          backgroundColor: error ? C.warningBg : C.mint,
+          backgroundColor: error ? C.warningBg : C.surface,
           flexDirection: "row",
           gap: 9,
           alignItems: "flex-start",
@@ -256,16 +255,16 @@ export function Intro({ title, body }: { title: string; body?: string }) {
       <T
         accessibilityRole="header"
         style={{
-          fontSize: 25,
+          fontSize: 30,
           lineHeight: 33,
-          fontWeight: "700",
+          fontWeight: "800",
           letterSpacing: -0.65,
         }}
       >
         {title}
       </T>
       {body && (
-        <T style={{ color: C.muted, fontSize: 14, lineHeight: 22 }}>{body}</T>
+        <T style={{ color: C.muted, fontSize: 16, lineHeight: 23 }}>{body}</T>
       )}
     </View>
   );
@@ -276,8 +275,9 @@ export function Field({
   onChangeText,
   missing = false,
   multiline = false,
+  textColor = C.ink,
   ...rest
-}: TextInputProps & { label: string; missing?: boolean }) {
+}: TextInputProps & { label: string; missing?: boolean; textColor?: string }) {
   const [height, setHeight] = useState(84);
   const [focused, setFocused] = useState(false);
   return (
@@ -300,16 +300,16 @@ export function Field({
           multiline &&
           setHeight(Math.max(84, e.nativeEvent.contentSize.height + 22))
         }
-        placeholderTextColor={missing ? "#925d45" : "#81727e"}
+        placeholderTextColor={missing ? C.warning : C.muted}
         style={{
           fontFamily: "Manrope",
           fontSize: 16,
           lineHeight: 23,
-          color: C.ink,
+          color: textColor,
           borderWidth: 1,
-          borderColor: missing ? "#925d45" : C.line,
+          borderColor: focused ? C.accent : missing ? "#F3B46B" : C.line,
           backgroundColor: missing ? C.warningBg : C.surface,
-          borderRadius: 10,
+          borderRadius: 12,
           padding: 12,
           minHeight: 48,
           ...(multiline ? { height, textAlignVertical: "top" as const } : {}),
@@ -345,7 +345,7 @@ export const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: C.line,
-    borderRadius: 12,
+    borderRadius: 16,
     backgroundColor: C.surface,
     gap: 14,
   },
@@ -381,27 +381,11 @@ export function Page({
       edges={["top", "left", "right"]}
       style={{ flex: 1, backgroundColor: C.bg }}
     >
-      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <Svg width="100%" height="100%">
-          <Defs>
-            <RadialGradient id="rose-edge" cx="100%" cy="0%" rx="65%" ry="27%">
-              <Stop offset="0" stopColor="#e8d5ed" stopOpacity=".55" />
-              <Stop offset="1" stopColor="#f3f0f6" stopOpacity="0" />
-            </RadialGradient>
-            <RadialGradient id="mint-edge" cx="0%" cy="0%" rx="55%" ry="22%">
-              <Stop offset="0" stopColor="#d4ebdf" stopOpacity=".6" />
-              <Stop offset="1" stopColor="#f3f0f6" stopOpacity="0" />
-            </RadialGradient>
-          </Defs>
-          <Rect width="100%" height="100%" fill="url(#rose-edge)" />
-          <Rect width="100%" height="100%" fill="url(#mint-edge)" />
-        </Svg>
-      </View>
       <FadeArrival identity={path} duration={160} distance={0}>
         <View
           style={{
-            height: 62,
-            paddingHorizontal: 21,
+            height: 56,
+            paddingHorizontal: 20,
             flexDirection: "row",
             alignItems: "center",
             justifyContent: "space-between",
@@ -411,17 +395,31 @@ export function Page({
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
             >
-              <BrandMark />
+              <BrandMark color={C.ink} />
               <T style={{ fontWeight: "700", fontSize: 17 }}>Click-to-Safe</T>
             </View>
           ) : (
-            <Quiet title="Back" icon="ChevronLeft" onPress={() => go("home")} />
+            <Quiet
+              title="Back"
+              compact
+              icon="ChevronLeft"
+              onPress={() =>
+                go(
+                  path === "/work" || path === "/handoff"
+                    ? "review"
+                    : path === "/review"
+                      ? "impact"
+                      : "home",
+                )
+              }
+            />
           )}
           {!home && <T style={{ fontWeight: "700", fontSize: 16 }}>{title}</T>}
           {home ? (
             <Quiet
               onFocus={onActionFocus}
               title="Settings"
+              compact
               icon="Settings"
               onPress={() => go("settings")}
             />
@@ -444,8 +442,8 @@ export function Page({
             contentContainerStyle={{
               flexGrow: centered ? 1 : undefined,
               justifyContent: centered ? "center" : undefined,
-              paddingHorizontal: centered ? 20 : 24,
-              paddingTop: 16,
+              paddingHorizontal: 20,
+              paddingTop: 8,
               paddingBottom: 26,
               gap: 22,
             }}
@@ -468,11 +466,13 @@ export function Page({
           <FadeArrival identity={path} distance={0}>
             <View
               style={{
-                paddingHorizontal: 24,
+                paddingHorizontal: 20,
                 paddingTop: 10,
                 paddingBottom: 14,
                 gap: 9,
                 backgroundColor: C.bg,
+                borderTopWidth: 1,
+                borderTopColor: C.line,
               }}
             >
               {footer}
@@ -487,7 +487,11 @@ export function Page({
               accessibilityRole="button"
               accessibilityLabel="Review completed analysis"
               onPress={() => go("analysis")}
-              style={{ backgroundColor: C.mint, padding: 12, borderRadius: 10 }}
+              style={{
+                backgroundColor: C.surface,
+                padding: 12,
+                borderRadius: 16,
+              }}
             >
               <T style={{ fontSize: 12, fontWeight: "700" }}>
                 Report completed. Your draft is ready to review. →
@@ -497,21 +501,10 @@ export function Page({
         </FadeArrival>
       )}
       {rr.undo && (
-        <View
-          style={{
-            padding: 12,
-            backgroundColor: C.mint,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <T style={{ fontSize: 12 }}>Report marked sent.</T>
-          <Quiet
-            title="Undo"
-            onPress={() => void rr.undoSent().catch(showError)}
-          />
-        </View>
+        <SentToast
+          until={rr.undo.until}
+          onUndo={() => void rr.undoSent().catch(showError)}
+        />
       )}
       {nav ? (
         <Navigation onActionFocus={onActionFocus} />
@@ -519,6 +512,110 @@ export function Page({
         <SafeAreaView edges={["bottom"]} />
       )}
     </SafeAreaView>
+  );
+}
+function SentToast({ until, onUndo }: { until: number; onUndo: () => void }) {
+  const { reduced, foreground } = useRoad();
+  const progress = useRef(new Animated.Value(1)).current;
+  const pop = useRef(new Animated.Value(1)).current;
+  React.useEffect(() => {
+    const remaining = Math.max(0, until - Date.now());
+    progress.setValue(remaining / 8000);
+    pop.setValue(1);
+    if (reduced || !foreground) return;
+    pop.setValue(0.85);
+    const a = Animated.parallel([
+      Animated.timing(progress, {
+        toValue: 0,
+        duration: remaining,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.timing(pop, {
+          toValue: 1.12,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pop, {
+          toValue: 1,
+          duration: 170,
+          useNativeDriver: true,
+        }),
+      ]),
+    ]);
+    a.start();
+    return () => a.stop();
+  }, [until, reduced, foreground, progress, pop]);
+  return (
+    <View
+      style={{
+        margin: 12,
+        padding: 14,
+        backgroundColor: C.ink,
+        borderRadius: 16,
+        overflow: "hidden",
+      }}
+    >
+      <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+        <Animated.View style={{ transform: [{ scale: pop }] }}>
+          <Icon name="Check" color="white" />
+        </Animated.View>
+        <T style={{ color: "white", flex: 1, fontSize: 15 }}>
+          Report marked sent.
+        </T>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Undo"
+          onPress={onUndo}
+          style={{ backgroundColor: "white", borderRadius: 24, padding: 12 }}
+        >
+          <T style={{ fontWeight: "700" }}>Undo</T>
+        </Pressable>
+      </View>
+      {!reduced && (
+        <Animated.View
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            height: 3,
+            backgroundColor: "#4F8BFF",
+            transformOrigin: "left center",
+            transform: [{ scaleX: progress }],
+          }}
+        />
+      )}
+    </View>
+  );
+}
+function TabHighlight({ active }: { active: boolean }) {
+  const { reduced, foreground } = useRoad();
+  const value = useRef(new Animated.Value(active ? 1 : 0)).current;
+  React.useEffect(() => {
+    if (reduced || !foreground) {
+      value.setValue(active ? 1 : 0);
+      return;
+    }
+    const a = Animated.timing(value, {
+      toValue: active ? 1 : 0,
+      duration: 250,
+      useNativeDriver: true,
+    });
+    a.start();
+    return () => a.stop();
+  }, [active, reduced, foreground, value]);
+  return (
+    <Animated.View
+      style={{
+        position: "absolute",
+        width: 56,
+        height: 30,
+        borderRadius: 15,
+        backgroundColor: C.lilac,
+        transform: [{ scaleX: value }],
+      }}
+    />
   );
 }
 export function Navigation({ onActionFocus }: { onActionFocus?: () => void }) {
@@ -530,7 +627,6 @@ export function Navigation({ onActionFocus }: { onActionFocus?: () => void }) {
       : path.slice(1) === "impact"
         ? "history"
         : path.slice(1);
-  const [tap, setTap] = useState({ key: "", n: 0 });
   const pending = rr.cases.filter((c) =>
     ["ready", "needs_info", "opened"].includes(c.reporting.status),
   ).length;
@@ -538,21 +634,20 @@ export function Navigation({ onActionFocus }: { onActionFocus?: () => void }) {
     <SafeAreaView
       edges={["bottom"]}
       style={{
-        backgroundColor: C.surface,
+        backgroundColor: C.bg,
         borderTopWidth: 1,
-        borderColor: "#e8e3ec",
+        borderColor: C.line,
       }}
     >
-      <View style={{ height: 68, flexDirection: "row", paddingHorizontal: 7 }}>
-        {(["home", "review", "history", "developer"] as const).map((key, i) => (
+      <View style={{ height: 68, flexDirection: "row", paddingHorizontal: 14 }}>
+        {(["home", "review", "history"] as const).map((key, i) => (
           <Pressable
             key={key}
             onFocus={onActionFocus}
             accessibilityRole="tab"
-            accessibilityLabel={["Home", "Review", "Impact", "Developer"][i]}
+            accessibilityLabel={["Home", "Cases", "Impact"][i]}
             accessibilityState={{ selected: active === key }}
             onPress={() => {
-              setTap({ key, n: tap.n + 1 });
               if (active !== key) go(key === "history" ? "impact" : key);
             }}
             style={{
@@ -565,18 +660,16 @@ export function Navigation({ onActionFocus }: { onActionFocus?: () => void }) {
             <View
               style={{
                 height: 33,
-                width: 39,
+                width: 56,
                 alignItems: "center",
                 justifyContent: "center",
-                borderWidth: key === "developer" && active !== key ? 1 : 0,
-                borderColor: C.muted,
-                borderRadius: 8,
+                borderRadius: 18,
               }}
             >
-              <MorphIcon
-                name={key}
-                active={active === key}
-                pulse={tap.key === key ? tap.n : 0}
+              <TabHighlight active={active === key} />
+              <Icon
+                name={(["House", "FileCheck2", "History"] as const)[i]}
+                color={active === key ? C.ink : C.muted}
               />
             </View>
             <T
@@ -587,7 +680,7 @@ export function Navigation({ onActionFocus }: { onActionFocus?: () => void }) {
                 fontWeight: "600",
               }}
             >
-              {["Home", "Review", "Impact", "Developer"][i]}
+              {["Home", "Cases", "Impact"][i]}
             </T>
             {key === "review" && pending > 0 && (
               <View
@@ -595,12 +688,14 @@ export function Navigation({ onActionFocus }: { onActionFocus?: () => void }) {
                   position: "absolute",
                   right: 20,
                   top: 3,
-                  backgroundColor: C.lilac,
+                  backgroundColor: C.warning,
                   paddingHorizontal: 5,
                   borderRadius: 5,
                 }}
               >
-                <T style={{ fontSize: 10, lineHeight: 16 }}>{pending}</T>
+                <T style={{ fontSize: 10, lineHeight: 16, color: "white" }}>
+                  {pending}
+                </T>
               </View>
             )}
           </Pressable>
@@ -635,7 +730,7 @@ export function Segments({
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
       style={{
         flexDirection: "row",
-        backgroundColor: "#e8e3ec",
+        backgroundColor: C.lilac,
         padding: 3,
         borderRadius: 8,
       }}

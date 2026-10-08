@@ -201,7 +201,7 @@ export function Recording() {
                 width: 8,
                 height: 8,
                 borderRadius: 4,
-                backgroundColor: error ? "#615968" : "#f16c69",
+                backgroundColor: error ? "#9A9EA5" : "#FF4B4B",
               }}
             />
             <T
@@ -209,7 +209,8 @@ export function Recording() {
               style={{
                 color: "#eeeae4",
                 fontVariant: ["tabular-nums"],
-                fontSize: 15,
+                fontSize: 22,
+                lineHeight: 28,
               }}
             >
               {duration(elapsed)}
@@ -231,15 +232,16 @@ export function Recording() {
         >
           <T
             style={{
-              fontSize: 25,
+              fontSize: 32,
               lineHeight: 36,
               textAlign: "center",
               color: "#eeeae4",
-              fontWeight: "500",
+              fontWeight: "800",
             }}
           >
             {"Don’t worry.\nI’ve got your back."}
           </T>
+          <T style={{ color: "#9A9EA5", textAlign: "center" }}>Eyes on the road. Gemini reads the clip after you stop.</T>
           {error && (
             <T style={{ color: "#f2b3a0", fontSize: 12, textAlign: "center" }}>
               {error}
@@ -256,7 +258,7 @@ export function Recording() {
           onPress={() => void end()}
           style={{
             height: 62,
-            borderRadius: 12,
+            borderRadius: 999,
             backgroundColor: "#eeeae4",
             alignItems: "center",
             justifyContent: "center",

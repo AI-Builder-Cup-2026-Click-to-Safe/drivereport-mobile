@@ -8,6 +8,7 @@ export type Offence = {
   atSeconds: number;
   confidence: number;
   included: boolean;
+  reasoning?: string;
   lawSources: { title?: string; url?: string; section?: string }[];
 };
 export type RoadCase = {
@@ -39,6 +40,13 @@ export type RoadCase = {
   };
   provenance: { isDemo: boolean; factsSource: string; legalRetrieval: string };
   sourceId?: string;
+  analysis?: {
+    vehicle: RoadCase["vehicle"];
+    incident: RoadCase["incident"];
+    offences: Offence[];
+    timeline: { start_seconds: number; end_seconds: number; event: string }[];
+  };
+  edited?: string[];
 };
 export type Preferences = {
   region: Region;
@@ -52,6 +60,7 @@ export type Preferences = {
   phone: string;
   email: string;
   demo: boolean;
+  testRecipient?: string;
 };
 export const categories = [
   ["red_light", "Red light"],
@@ -124,10 +133,14 @@ export function correctStatus(c: RoadCase): Status {
           : "ready";
 }
 export function recipient(p: Preferences, c: RoadCase) {
-  const v = p.recipients[c.region].replace(/[\s()+-]/g, "");
+  const v = (
+    c.provenance.isDemo ? p.testRecipient || "" : p.recipients[c.region]
+  ).replace(/[\s()+-]/g, "");
   if (!/^[1-9]\d{7,14}$/.test(v))
     throw Error(
-      `Add an Authority WhatsApp number for ${regionNames[c.region]} in Settings.`,
+      c.provenance.isDemo
+        ? "Add your test WhatsApp number in Settings → Developer. Demo reports only go to your test number."
+        : `Add an Authority WhatsApp number for ${regionNames[c.region]} in Settings.`,
     );
   return v;
 }
@@ -255,6 +268,7 @@ export function fromLegacy(i: LegacyIncident, region: Region): RoadCase[] {
         atSeconds: f.start_seconds,
         confidence: f.confidence,
         included: true,
+        reasoning: f.reasoning,
         lawSources: [{ title: f.legal_basis }],
       })),
       evidence: {
@@ -276,13 +290,44 @@ export function fromLegacy(i: LegacyIncident, region: Region): RoadCase[] {
         legalRetrieval: "backend_review",
       },
     };
+    c.analysis = {
+      vehicle: { ...c.vehicle },
+      incident: { ...c.incident },
+      offences: c.offences.map((o) => ({
+        ...o,
+        lawSources: o.lawSources.map((s) => ({ ...s })),
+      })),
+      timeline: (i.result!.evidence?.timeline || []).map((t) => ({ ...t })),
+    };
     // Only carry user facts to the explicitly selected vehicle; never duplicate a plate across vehicles.
     if (ids.length === 1 || vehicleId === i.selectedVehicleId) {
       c.vehicle.plate = i.plate || null;
       c.incident.location = i.location || null;
+      c.edited = [i.plate ? "plate" : "", i.location ? "location" : ""].filter(
+        Boolean,
+      );
     }
     return c;
   });
+}
+
+/** Preserve the original model response while tracking explicitly edited facts. */
+export function editCase(c: RoadCase, patch: Partial<RoadCase>): RoadCase {
+  const edited = new Set(c.edited || []);
+  if (patch.vehicle)
+    for (const key of ["plate", "type", "model"] as const)
+      if (patch.vehicle[key] !== c.vehicle[key])
+        edited.add(key === "type" ? "vehicle" : key);
+  if (patch.incident)
+    for (const key of ["date", "time", "location", "description"] as const)
+      if (patch.incident[key] !== c.incident[key]) edited.add(key);
+  return {
+    ...c,
+    ...patch,
+    analysis: c.analysis,
+    edited: [...edited],
+    version: c.version + 1,
+  };
 }
 
 /** iOS may relocate Documents on app updates. Resolve local evidence through the

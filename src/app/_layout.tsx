@@ -10,7 +10,7 @@ function ReadySplash() {
   const { ready } = useRoad();
   const path = usePathname();
   useEffect(() => {
-    if (ready && path !== "/") SplashScreen.hide();
+    if (ready) SplashScreen.hide();
   }, [ready, path]);
   return null;
 }
@@ -28,7 +28,7 @@ export default function Layout() {
           screenOptions={{
             headerShown: false,
             animation: "none",
-            contentStyle: { backgroundColor: "#f3f0f6" },
+            contentStyle: { backgroundColor: "#FFFFFF" },
           }}
         />
       </RoadProvider>

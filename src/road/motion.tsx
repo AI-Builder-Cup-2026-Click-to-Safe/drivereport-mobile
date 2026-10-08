@@ -105,7 +105,7 @@ export function Motion({
     if (reduced || !foreground) return;
     const a = Animated.timing(value, {
       toValue: 1,
-      duration: durationMs ?? (small ? 180 : 280),
+      duration: durationMs ?? (small ? 180 : 300),
       easing: Easing.bezier(0.16, 1, 0.3, 1),
       useNativeDriver: true,
     });
@@ -117,13 +117,13 @@ export function Motion({
       style={{
         opacity: value.interpolate({
           inputRange: [0, 1],
-          outputRange: [0.58, 1],
+          outputRange: [0, 1],
         }),
         transform: [
           {
             translateX: value.interpolate({
               inputRange: [0, 1],
-              outputRange: [direction * (distance ?? (small ? 12 : 24)), 0],
+              outputRange: [direction * (distance ?? (small ? 12 : 28)), 0],
             }),
           },
         ],
@@ -397,8 +397,8 @@ export function ImpactBar({ ratio, index }: { ratio: number; index: number }) {
     }
     const animation = Animated.timing(v, {
       toValue: ratio,
-      duration: 360,
-      delay: Math.min(84, index * 28),
+      duration: 520,
+      delay: 60 + index * 60,
       easing: Easing.bezier(0.16, 1, 0.3, 1),
       useNativeDriver: true,
       isInteraction: false,
@@ -407,11 +407,11 @@ export function ImpactBar({ ratio, index }: { ratio: number; index: number }) {
     return () => animation.stop();
   }, [ratio, index, reduced, foreground, v]);
   return (
-    <View style={{ height: 4, backgroundColor: "#d1c8d4", overflow: "hidden" }}>
+    <View style={{ height: 4, backgroundColor: "#E3E5E9", overflow: "hidden" }}>
       <Animated.View
         style={{
           height: 4,
-          backgroundColor: "#4e625a",
+          backgroundColor: "#1A56DB",
           transformOrigin: "left center",
           transform: [{ scaleX: v }],
         }}

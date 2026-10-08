@@ -1,18 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Image, Pressable, Switch, View } from "react-native";
+import { Pressable, Switch, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import * as FS from "expo-file-system/legacy";
 import { useStore } from "../lib/store";
 import { checkConnection } from "../lib/api";
 import { hasBuiltInConnection, validateApiUrl } from "../lib/domain";
 import { useRoad } from "./context";
-import {
-  LivingIntelligence,
-  Motion,
-  ImpactBar,
-  Turn,
-  FadeArrival,
-} from "./motion";
+import { Turn, FadeArrival } from "./motion";
 import {
   Action,
   C,
@@ -29,18 +23,14 @@ import {
   focusControl,
   styles as s,
 } from "./ui";
-import {
-  categories,
-  duration,
-  impact,
-  labels,
-  normalizePlate,
-  regionNames,
-  type Region,
-} from "./model";
+import { regionNames, type Region } from "./model";
 import { replayHomeEntrance } from "./home";
 export { Review, Handoff } from "./review";
-export { Home } from "./home";
+export {
+  StandardHome as Home,
+  StandardAnalysis as Analysis,
+  StandardImpact as Impact,
+} from "./standard";
 export function Developer() {
   const rr = useRoad(),
     store = useStore();
@@ -50,6 +40,7 @@ export function Developer() {
     [chosen, setChosen] = useState(""),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
+  const [testNumber, setTestNumber] = useState(rr.prefs.testRecipient || "");
   const chooseRef = useRef<View>(null);
   const file = store.records.find((i) => i.id === chosen);
   const choose = async () => {
@@ -94,7 +85,36 @@ export function Developer() {
       .catch(showError);
   };
   return (
-    <Page title="Developer options">
+    <Page title="Developer options" nav={false}>
+      <Field
+        label="Test WhatsApp number"
+        value={testNumber}
+        onChangeText={setTestNumber}
+        keyboardType="phone-pad"
+        placeholder="Country code and phone number"
+      />
+      <Action
+        title="Save test number"
+        secondary
+        onPress={() => {
+          const number = testNumber.replace(/[\s()+-]/g, "");
+          if (!/^[1-9]\d{7,14}$/.test(number))
+            return showError(
+              "Enter an international number including country code.",
+            );
+          void rr
+            .setPrefs({ testRecipient: number })
+            .then(() =>
+              setMessage(
+                "Test number saved. Demo reports only go to this number.",
+              ),
+            )
+            .catch(showError);
+        }}
+      />
+      <T style={s.muted}>
+        Synthetic demo reports never use the authority recipient.
+      </T>
       <Intro
         title="Feed me the road drama."
         body="Give me a clip. I’ll do the detective shit."
@@ -278,464 +298,6 @@ export function Developer() {
     </Page>
   );
 }
-const stageCopy = [
-  ["Uploading", "Moving their audacity to the cloud."],
-  [
-    "Analysing video with Gemini",
-    "Asking Gemini: skill issue, or actual offence?",
-  ],
-  [
-    "Fetching RAG on Malaysia law",
-    "Retrieving Malaysian traffic law. Vibes have been evicted.",
-  ],
-  [
-    "Gemini AI agent compiling evidence and drafting report",
-    "Making “what the fuck” sound professional.",
-  ],
-  ["Report completed", "Done. Nothing sent. I’m a snitch with boundaries."],
-];
-export function Analysis() {
-  const rr = useRoad(),
-    j = rr.job;
-  const complete = j?.status === "complete";
-  const running = j?.status === "running";
-  if (!j)
-    return (
-      <Page title="Analysing">
-        <Intro title="I need a clip first." />
-        <Action title="Choose a video" onPress={() => go("developer")} />
-      </Page>
-    );
-  return (
-    <Page
-      title="Analysing"
-      nav={false}
-      footer={
-        <>
-          <Action
-            title={complete ? "Review report" : "Back to home"}
-            onPress={() => {
-              if (complete) {
-                void rr
-                  .setPrefs({ demo: j.mode === "demo" })
-                  .then(() => {
-                    if (j.caseIds[0]) rr.select(j.caseIds[0]);
-                    rr.dismissNotice();
-                    go("review");
-                  })
-                  .catch(showError);
-              } else go("home");
-            }}
-          />
-          <T style={[s.muted, { textAlign: "center", fontSize: 11 }]}>
-            {complete
-              ? "Draft done. Nothing sent. I know my damn boundaries."
-              : j.mode === "demo"
-                ? "Demo preview · upload, Gemini and RAG are simulated."
-                : "Your recording is kept while the server reviews it."}
-          </T>
-        </>
-      }
-    >
-      <Intro
-        title={
-          complete
-            ? "I turned stupid into paperwork."
-            : "I’m putting stupid on paper."
-        }
-        body={
-          complete
-            ? "Your draft’s ready. Fact-check me before the snitching."
-            : "I’ll ping you. Their bullshit is becoming admin."
-        }
-      />
-      <LivingIntelligence stage={j.stage} />
-      <View style={s.row}>
-        <T style={s.muted}>
-          {complete
-            ? "5 of 5 steps complete"
-            : j.mode === "demo"
-              ? `Step ${j.stage + 1} of 5`
-              : j.stage === 0
-                ? "Uploading video"
-                : "Server review in progress"}
-        </T>
-        <T style={{ fontWeight: "700" }}>
-          {j.progress === null ? "Working…" : `${j.progress}%`}
-        </T>
-      </View>
-      <View style={{ height: 4, backgroundColor: C.line, borderRadius: 3 }}>
-        <View
-          style={{
-            height: 4,
-            borderRadius: 3,
-            backgroundColor: C.accent,
-            width: `${j.progress === null ? 35 : j.progress}%`,
-          }}
-        />
-      </View>
-      <View style={{ gap: 8 }}>
-        {stageCopy.map(([title, body], i) => {
-          const done = complete || i < j.stage;
-          const active = running && i === j.stage;
-          return (
-            <Motion
-              key={title}
-              identity={`${i}-${done}-${active}`}
-              small
-              distance={0}
-            >
-              <View
-                style={{
-                  flexDirection: "row",
-                  gap: 12,
-                  paddingVertical: 9,
-                  minHeight: 48,
-                }}
-              >
-                <View
-                  style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: 15,
-                    backgroundColor: done ? C.mint : active ? C.ink : "#e8e3ec",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  {done ? (
-                    <Icon name="Check" size={16} color={C.accent} />
-                  ) : (
-                    <T
-                      style={{
-                        fontSize: 12,
-                        color: active ? "white" : C.muted,
-                      }}
-                    >
-                      {i + 1}
-                    </T>
-                  )}
-                </View>
-                <View style={{ flex: 1, gap: 5 }}>
-                  <T
-                    style={{ fontSize: 13, fontWeight: active ? "700" : "500" }}
-                  >
-                    {title}
-                  </T>
-                  {active ? (
-                    <FadeArrival identity={`${i}-${active}`} distance={0}>
-                      <T style={s.muted}>{body}</T>
-                    </FadeArrival>
-                  ) : (
-                    <T style={{ fontSize: 10, lineHeight: 14, color: C.muted }}>
-                      {done
-                        ? "Done"
-                        : j.mode === "live" && i > 1
-                          ? "Awaiting final result"
-                          : "Next"}
-                    </T>
-                  )}
-                </View>
-              </View>
-            </Motion>
-          );
-        })}
-      </View>
-      {j.mode === "live" && running && j.stage === 1 && (
-        <Notice>
-          The server returns the completed review together. Intermediate legal
-          and drafting stages are not reported separately.
-        </Notice>
-      )}
-      {complete && (
-        <Notice>
-          Report completed. Your draft is ready to review. Nothing sent.
-        </Notice>
-      )}
-      {!running && !complete && (
-        <>
-          <Notice error>{j.error || "Analysis interrupted."}</Notice>
-          <Action
-            title="Retry analysis"
-            secondary
-            onPress={() =>
-              void rr.begin(j.sourceIds, j.mode === "demo").catch(showError)
-            }
-          />
-        </>
-      )}
-      {running && <Quiet title="Stop waiting" onPress={rr.cancel} />}
-    </Page>
-  );
-}
-export function Impact() {
-  const rr = useRoad();
-  const [period, setPeriod] = useState(0),
-    [status, setStatus] = useState(0),
-    [offence, setOffence] = useState(""),
-    [plate, setPlate] = useState("");
-  const data = impact(rr.cases, ["all", "week", "today"][period]);
-  const scoped = data.scoped.filter(
-    (c) =>
-      (!plate || normalizePlate(c.vehicle.plate) === plate) &&
-      (!offence || c.offences.some((o) => o.code === offence)),
-  );
-  const list = scoped.filter(
-    (c) =>
-      status === 0 ||
-      (status === 1 &&
-        ["ready", "opened", "needs_info"].includes(c.reporting.status)) ||
-      (status === 2 && c.reporting.status === "sent"),
-  );
-  const counts = [
-    scoped.length,
-    scoped.filter((c) =>
-      ["ready", "opened", "needs_info"].includes(c.reporting.status),
-    ).length,
-    scoped.filter((c) => c.reporting.status === "sent").length,
-  ];
-  const top = data.recurring;
-  return (
-    <Page title="Impact">
-      <Intro
-        title="Your impact. Their problem."
-        body="I keep receipts. Karma loves paperwork."
-      />
-      <View style={{ flexDirection: "row", gap: 12 }}>
-        {[
-          [String(data.sent), "Assholes\nsnitched on", C.mint],
-          [rr.prefs.demo ? String(data.billed) : "—", "Got billed", C.lilac],
-        ].map(([count, label, color]) => (
-          <View
-            key={label}
-            style={{
-              flex: 1,
-              minHeight: 168,
-              borderWidth: 1,
-              borderColor: C.line,
-              borderRadius: 13,
-              padding: 17,
-              backgroundColor: color,
-              justifyContent: "space-between",
-              overflow: "hidden",
-            }}
-          >
-            <Icon
-              name={label === "Got billed" ? "FileCheck2" : "Video"}
-              color="#a7a1aa"
-              size={24}
-            />
-            <T
-              style={{
-                fontSize: 62,
-                lineHeight: 73,
-                fontWeight: "700",
-                letterSpacing: -3,
-              }}
-            >
-              {count}
-            </T>
-            <T style={{ fontSize: 12, lineHeight: 17, fontWeight: "600" }}>
-              {label}
-            </T>
-          </View>
-        ))}
-      </View>
-      {!rr.prefs.demo && (
-        <T style={s.muted}>Fine outcomes are not connected.</T>
-      )}
-      {top && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Filter cases for ${top[0]}`}
-          onPress={() => {
-            setPlate(plate === top[0] ? "" : top[0]);
-            setOffence("");
-            setStatus(0);
-          }}
-          style={[
-            s.card,
-            {
-              backgroundColor: plate ? C.mint : C.surface,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-            },
-          ]}
-        >
-          <T style={{ fontWeight: "700", fontSize: 23 }}>{top[0]}</T>
-          <View>
-            <T style={{ fontSize: 12 }}>
-              Spotted{" "}
-              <T style={{ fontSize: 20, fontWeight: "700" }}>{top[1]}</T>{" "}
-              {top[1] === 1 ? "time." : "times."}
-            </T>
-            <T style={s.muted}>Same car, same energy.</T>
-          </View>
-        </Pressable>
-      )}
-      {plate && (
-        <Quiet
-          title="Clear plate filter"
-          icon="X"
-          onPress={() => setPlate("")}
-        />
-      )}
-      <View style={{ gap: 16 }}>
-        <T style={s.section}>By offence</T>
-        <Segments
-          items={["All time", "Last 7 days", "Today"]}
-          value={period}
-          onChange={setPeriod}
-        />
-        <T style={s.muted}>Pick their bullshit. I’ll find the clip.</T>
-        {categories.map(([code, label], index) => (
-          <Pressable
-            key={code}
-            accessibilityRole="checkbox"
-            accessibilityLabel={`Filter ${label}`}
-            accessibilityState={{ checked: offence === code }}
-            onPress={() => setOffence(offence === code ? "" : code)}
-            style={{
-              padding: 9,
-              borderRadius: 8,
-              backgroundColor: offence === code ? "#e4dbee" : "transparent",
-              gap: 10,
-              minHeight: 50,
-            }}
-          >
-            <View style={s.row}>
-              <T style={{ fontSize: 12 }}>
-                {label}
-                {offence === code ? " ✓" : ""}
-              </T>
-              <T style={{ fontSize: 12, fontWeight: "700" }}>
-                {data.counts[code]}
-              </T>
-            </View>
-            <ImpactBar
-              index={index}
-              ratio={
-                data.counts[code] / Math.max(1, ...Object.values(data.counts))
-              }
-            />
-          </Pressable>
-        ))}
-      </View>
-      <Segments
-        items={[
-          `All ${counts[0]}`,
-          `Needs you ${counts[1]}`,
-          `Sent ${counts[2]}`,
-        ]}
-        value={status}
-        onChange={setStatus}
-      />
-      {list.length === 0 ? (
-        <View style={s.card}>
-          <T>No clips here. The clowns took a day off.</T>
-          <Quiet
-            title="Clear filters"
-            onPress={() => {
-              setStatus(0);
-              setOffence("");
-              setPlate("");
-              setPeriod(0);
-            }}
-          />
-        </View>
-      ) : (
-        list.map((c) => (
-          <FadeArrival
-            key={c.id}
-            identity={`${period}-${status}-${plate}-${offence}`}
-            distance={0}
-          >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Open case ${c.id} ${c.vehicle.plate || "Plate unreadable"}`}
-              onPress={() => {
-                rr.select(c.id);
-                go("review");
-              }}
-              style={{
-                flexDirection: "row",
-                gap: 14,
-                paddingVertical: 8,
-                minHeight: 83,
-                alignItems: "center",
-              }}
-            >
-              <View style={{ flex: 1, gap: 4 }}>
-                <T style={{ fontWeight: "700", fontSize: 15 }}>
-                  {c.vehicle.plate ||
-                    (!c.offences.length
-                      ? "Suspiciously civil"
-                      : "Plate unreadable")}
-                </T>
-                <T style={s.muted}>
-                  {c.offences.length
-                    ? `${c.offences.length} offences`
-                    : "No offence"}{" "}
-                  · {c.incident.date || "Date unknown"}
-                </T>
-                <T
-                  style={{
-                    fontSize: 11,
-                    color:
-                      c.reporting.status === "sent"
-                        ? "#215841"
-                        : c.reporting.status === "needs_info"
-                          ? "#774009"
-                          : "#55327c",
-                  }}
-                >
-                  {labels[c.reporting.status]}
-                </T>
-              </View>
-              <View
-                style={{
-                  width: 80,
-                  height: 60,
-                  backgroundColor: C.dark,
-                  borderRadius: 7,
-                  overflow: "hidden",
-                }}
-              >
-                {(c.provenance.isDemo || c.evidence.thumbnailUrl) && (
-                  <Image
-                    source={
-                      c.provenance.isDemo
-                        ? require("../../assets/road/images/dashcam-evidence-demo.jpg")
-                        : { uri: c.evidence.thumbnailUrl! }
-                    }
-                    style={{ width: 80, height: 60 }}
-                  />
-                )}
-                <T
-                  style={{
-                    position: "absolute",
-                    bottom: 3,
-                    right: 4,
-                    color: "white",
-                    fontSize: 10,
-                    backgroundColor: "#20282bcc",
-                    paddingHorizontal: 3,
-                  }}
-                >
-                  {duration(c.evidence.durationSeconds)}
-                </T>
-              </View>
-            </Pressable>
-          </FadeArrival>
-        ))
-      )}
-      <T style={[s.muted, { fontSize: 11 }]}>
-        {rr.prefs.demo ? "Demo cases. " : ""}“Sent” means you confirmed sending.
-      </T>
-    </Page>
-  );
-}
 export function Settings() {
   const rr = useRoad(),
     p = rr.prefs;
@@ -776,7 +338,7 @@ export function Settings() {
   const save = (patch: Parameters<typeof rr.setPrefs>[0]) =>
     void rr.setPrefs(patch).catch(showError);
   return (
-    <Page title="Settings">
+    <Page title="Settings" nav={false}>
       <T style={s.section}>Reporting</T>
       <Pressable
         accessibilityRole="button"
@@ -939,6 +501,11 @@ export function Settings() {
         </View>
       </View>
       {message && <Notice>{message}</Notice>}
+      <Quiet
+        title="Developer"
+        icon="Settings"
+        onPress={() => go("developer")}
+      />
       <T style={[s.muted, { textAlign: "center" }]}>
         I do the boring shit. You tap Send.
       </T>

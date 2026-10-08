@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { URL } from "node:url";
 import {
   correctStatus,
+  editCase,
   fromLegacy,
   restoreEvidence,
   impact,
@@ -37,6 +38,7 @@ const prefs: Preferences = {
   phone: "",
   email: "",
   demo: true,
+  testRecipient: "60123456789",
 };
 test("review gates all required facts and at least one offence, but not personal details", () => {
   const c = base();
@@ -59,7 +61,7 @@ test("review gates all required facts and at least one offence, but not personal
 test("report uses case jurisdiction, encoded factual draft and opt-in private details", () => {
   const c = base();
   c.incident.description = "A & B / café?";
-  assert.equal(recipient(prefs, c), "60134498997");
+  assert.equal(recipient(prefs, c), "60123456789");
   const url = whatsapp(c, prefs);
   assert.ok(decodeURIComponent(url).includes("A & B / café?"));
   assert.ok(!reportText(c, prefs).includes("Private name"));
@@ -67,8 +69,42 @@ test("report uses case jurisdiction, encoded factual draft and opt-in private de
     reportText(c, { ...prefs, includePersonal: true }).includes("Private name"),
   );
   assert.ok(reportText(c, prefs).includes("DEMO"));
+  c.provenance.isDemo = false;
+  assert.equal(recipient(prefs, c), "60134498997");
   c.region = "SG";
   assert.throws(() => whatsapp(c, prefs), /Singapore/);
+});
+
+test("demo drafts require an explicit test recipient and never fall back to authority", () => {
+  const c = base();
+  assert.throws(
+    () => whatsapp(c, { ...prefs, testRecipient: "" }),
+    /test WhatsApp/,
+  );
+  assert.ok(whatsapp(c, prefs).startsWith("https://wa.me/60123456789?"));
+});
+
+test("editing facts preserves original model evidence and records user provenance", () => {
+  const c = base();
+  c.analysis = {
+    vehicle: { ...c.vehicle },
+    incident: { ...c.incident },
+    offences: structuredClone(c.offences),
+    timeline: [],
+  };
+  const original = structuredClone(c.analysis);
+  const updated = editCase(c, {
+    vehicle: { ...c.vehicle, plate: "USER 2" },
+    incident: { ...c.incident, location: "User location" },
+  });
+  assert.deepEqual(updated.analysis, original);
+  assert.deepEqual(updated.edited, ["plate", "location"]);
+  assert.equal(updated.vehicle.plate, "USER 2");
+  const changedAgain = editCase(updated, {
+    reporting: { status: "opened", confirmedByUser: false },
+  });
+  assert.deepEqual(changedAgain.analysis, original);
+  assert.deepEqual(changedAgain.edited, ["plate", "location"]);
 });
 test("reporting completion, opening, sending and fine outcome remain independent", () => {
   const c = base();
