@@ -103,6 +103,8 @@ export const categories = [
   ["dangerous", "Reckless and dangerous driving"],
 ] as const;
 export const regionNames = { MY: "Malaysia", SG: "Singapore", JP: "Japan" };
+/** JPJ's public traffic-offence WhatsApp hotline, normalized for wa.me. */
+export const MALAYSIA_JPJ_WHATSAPP = "60134498997";
 export const labels: Record<Status, string> = {
   needs_info: "Needs details",
   ready: "Review",
@@ -168,7 +170,11 @@ export function correctStatus(c: RoadCase): Status {
 }
 export function recipient(p: Preferences, c: RoadCase) {
   const v = (
-    c.provenance.isDemo ? p.testRecipient || "" : p.recipients[c.region]
+    c.provenance.isDemo
+      ? p.testRecipient || ""
+      : c.region === "MY"
+        ? MALAYSIA_JPJ_WHATSAPP
+        : p.recipients[c.region]
   ).replace(/[\s()+-]/g, "");
   if (!/^[1-9]\d{7,14}$/.test(v))
     throw Error(

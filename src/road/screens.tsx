@@ -25,6 +25,7 @@ import {
 } from "./ui";
 import {
   defaultWhatsAppTestMessage,
+  MALAYSIA_JPJ_WHATSAPP,
   regionNames,
   whatsappTest,
   type Region,
@@ -386,15 +387,21 @@ export function Settings() {
         accessibilityRole="button"
         ref={recipientRef}
         accessibilityState={{ expanded: open === "recipient" }}
-        accessibilityLabel="Authority WhatsApp"
+        accessibilityLabel={
+          p.region === "MY" ? "Official JPJ WhatsApp" : "Authority WhatsApp"
+        }
         onPress={() => setOpen(open === "recipient" ? "" : "recipient")}
         style={s.row}
       >
         <Icon name="MessageCircle" />
         <View style={{ flex: 1 }}>
-          <T style={{ fontWeight: "700" }}>Authority WhatsApp</T>
+          <T style={{ fontWeight: "700" }}>
+            {p.region === "MY" ? "Official JPJ WhatsApp" : "Authority WhatsApp"}
+          </T>
           <T style={s.muted}>
-            {p.recipients[p.region]
+            {p.region === "MY"
+              ? "+60 13-449 8997"
+              : p.recipients[p.region]
               ? `+${p.recipients[p.region]}`
               : "Add a number for this region"}
           </T>
@@ -406,35 +413,54 @@ export function Settings() {
       {open === "recipient" && (
         <FadeArrival distance={8}>
           <View style={{ gap: 12 }}>
-            <Field
-              label="Recipient number"
-              value={recipient}
-              onChangeText={setRecipient}
-              keyboardType="phone-pad"
-            />
-            <Action
-              title="Save recipient"
-              disabled={saving}
-              secondary
-              onPress={() => {
-                const n = recipient.replace(/[\s()+-]/g, "");
-                if (!/^[1-9]\d{7,14}$/.test(n)) {
-                  setMessage(
-                    "Enter an international number including country code.",
-                  );
-                  return;
-                }
-                saveAndClose(
-                  { recipients: { ...p.recipients, [p.region]: n } },
-                  recipientRef,
-                  "Recipient saved for " + regionNames[p.region] + ".",
-                );
-              }}
-            />
-            <T style={s.muted}>
-              I’ll use this for {regionNames[p.region]} drafts. Malaysia’s
-              default is the supplied demo number.
-            </T>
+            {p.region === "MY" ? (
+              <>
+                <Notice>
+                  Live Malaysia reports open a draft to JPJ’s traffic-offence
+                  WhatsApp hotline, +60 13-449 8997. Nothing is sent until you
+                  tap Send in WhatsApp.
+                </Notice>
+                <T style={s.muted}>
+                  The draft includes the Case facts and evidence links. JPJ may
+                  require your full name, identity number, postal address and
+                  phone number to investigate the complaint.
+                </T>
+                <T style={[s.muted, { fontSize: 11 }]}>
+                  wa.me/{MALAYSIA_JPJ_WHATSAPP}
+                </T>
+              </>
+            ) : (
+              <>
+                <Field
+                  label="Recipient number"
+                  value={recipient}
+                  onChangeText={setRecipient}
+                  keyboardType="phone-pad"
+                />
+                <Action
+                  title="Save recipient"
+                  disabled={saving}
+                  secondary
+                  onPress={() => {
+                    const n = recipient.replace(/[\s()+-]/g, "");
+                    if (!/^[1-9]\d{7,14}$/.test(n)) {
+                      setMessage(
+                        "Enter an international number including country code.",
+                      );
+                      return;
+                    }
+                    saveAndClose(
+                      { recipients: { ...p.recipients, [p.region]: n } },
+                      recipientRef,
+                      "Recipient saved for " + regionNames[p.region] + ".",
+                    );
+                  }}
+                />
+                <T style={s.muted}>
+                  I’ll use this for {regionNames[p.region]} drafts.
+                </T>
+              </>
+            )}
           </View>
         </FadeArrival>
       )}

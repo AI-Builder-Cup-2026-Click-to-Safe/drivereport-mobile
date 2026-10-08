@@ -10,6 +10,7 @@ import {
   restoreEvidence,
   impact,
   inPeriod,
+  MALAYSIA_JPJ_WHATSAPP,
   missing,
   normalizePlate,
   recipient,
@@ -72,7 +73,15 @@ test("report uses case jurisdiction, encoded factual draft and opt-in private de
   );
   assert.ok(reportText(c, prefs).includes("DEMO"));
   c.provenance.isDemo = false;
-  assert.equal(recipient(prefs, c), "60134498997");
+  assert.equal(recipient(prefs, c), MALAYSIA_JPJ_WHATSAPP);
+  assert.equal(
+    recipient(
+      { ...prefs, recipients: { ...prefs.recipients, MY: "60111111111" } },
+      c,
+    ),
+    MALAYSIA_JPJ_WHATSAPP,
+  );
+  assert.ok(whatsapp(c, prefs).startsWith("https://wa.me/60134498997?"));
   c.region = "SG";
   assert.throws(() => whatsapp(c, prefs), /Singapore/);
 });

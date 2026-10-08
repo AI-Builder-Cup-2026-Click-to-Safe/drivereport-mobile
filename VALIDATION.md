@@ -14,6 +14,7 @@ Backend reference: `Lorem-Ipsum-AI-Builder-Cup-2026/prototype` **5ff78ce**, depl
 - New server review `ada0b6b68b6f4d94b380880bb18d7d62` returned Case `RR-ADA0B6B6`, status `ready`, one `queue_cut` offence at 00:01, one track, a decision trail with two retrieved citations and two disclosed retrieval gaps, plus signed original, annotated and cited-excerpt videos.
 - HEAD requests to all three signed video URLs returned **200 video/mp4**. The app added a fourth live Case and opened it with the same blue-sedan description, 00:01 offence, Sections 43(1) and 42(1), timeline, reasoning, retrieval gaps and **Watch cited evidence excerpt** action. The **How Gemini decided** screen displayed the exact server Case ID.
 - The client correctly changed the actionable UI state to `needs_info` because the server did not establish plate, date, time or location. This is intentional local validation; the stored server Case remains `ready` until a reporting state is explicitly synchronized.
+- Confirmed that live Malaysia drafts resolve to JPJ's published traffic-offence WhatsApp hotline `+60 13-449 8997` (`wa.me/60134498997`) even if an older saved preference contains another Malaysia recipient. Settings now presents this as a fixed official destination; demo drafts remain isolated on the tester's own number. No message was sent during verification.
 
 ---
 
