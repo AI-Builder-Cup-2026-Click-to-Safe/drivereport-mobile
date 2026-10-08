@@ -1,6 +1,8 @@
+> Superseded by [Hackathon Submission](SUBMISSION_SYNC.md) on 2026-10-08. Retained for provenance.
+
 # Standard native implementation
 
-The active mobile UI follows `whyteaz/road-receipts-handover`, commit `25f5108`, `variants/standard` (last Standard change `4f60eb9`). Other design documents in this directory describe the previous Prototype implementation.
+Historical baseline: the mobile UI followed `whyteaz/road-receipts-handover`, commit `25f5108`, `variants/standard` (last Standard change `4f60eb9`). Other design documents in this directory describe the previous Prototype implementation.
 
 ## Screen map
 

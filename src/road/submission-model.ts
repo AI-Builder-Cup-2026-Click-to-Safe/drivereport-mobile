@@ -1,0 +1,58 @@
+import { normalizePlate, type RoadCase } from "./model.ts";
+export const submissionSource = "submission_fixture_v1";
+export const isSubmissionDemo = (c: RoadCase) =>
+  c.provenance.isDemo && c.provenance.factsSource === submissionSource;
+export const pendingCases = (cases: RoadCase[]) =>
+  cases.filter((c) =>
+    ["ready", "needs_info", "opened"].includes(c.reporting.status),
+  );
+export const casePoints = (c: RoadCase) =>
+  c.offences
+    .filter((o) => o.included)
+    .reduce((sum, o) => sum + (o.demeritPoints ?? 0), 0);
+// The current API has no licence lookup. Never use the sample record for live footage.
+export function licenceRecord(c: RoadCase) {
+  return isSubmissionDemo(c) && normalizePlate(c.vehicle.plate) === "WXY2048"
+    ? { points: 10, summonses: 1 }
+    : null;
+}
+export function topOffender(cases: RoadCase[]) {
+  const plates = new Map<
+    string,
+    { case: RoadCase; record: number; pending: number }
+  >();
+  for (const c of [...cases].sort((a, b) =>
+    (b.incident.date || "").localeCompare(a.incident.date || ""),
+  )) {
+    const key = normalizePlate(c.vehicle.plate);
+    if (!key) continue;
+    const entry = plates.get(key) || {
+      case: c,
+      record: licenceRecord(c)?.points ?? 0,
+      pending: 0,
+    };
+    if (c.reporting.status === "sent" && c.authorityOutcome.status !== "issued")
+      entry.pending += casePoints(c);
+    plates.set(key, entry);
+  }
+  return [...plates.values()]
+    .filter((x) => x.record + x.pending > 0)
+    .sort((a, b) => b.record + b.pending - a.record - a.pending)[0];
+}
+export const deathStats = [
+  [18, "Malaysian"],
+  [564, "Indian"],
+  [85, "Indonesian"],
+  [50, "Thai"],
+  [47, "Vietnamese"],
+  [30, "Philippine"],
+  [10, "South Korean"],
+  [9, "Japanese"],
+  [3, "Australian"],
+  [1, "New Zealand"],
+  [1, "Singapore"],
+] as const;
+export function deathSentence(index: number) {
+  const [n, place] = deathStats[index];
+  return `${n} ${n === 1 ? "person dies" : "people die"} on ${place} roads ${place === "Singapore" ? "every 3 days." : "every day."}`;
+}

@@ -252,3 +252,15 @@ test("app updates relink local evidence without changing reviews or remote/demo 
   c.provenance.isDemo = true;
   assert.equal(restoreEvidence(c, source), c);
 });
+
+test("submission sample drafts let the tester choose a chat, never default to JPJ", () => {
+  const c = base();
+  c.provenance.factsSource = "submission_fixture_v1";
+  const link = new URL(whatsapp(c, { ...prefs, testRecipient: "" }));
+  assert.equal(link.pathname, "/");
+  assert.match(link.searchParams.get("text")!, /DEMO/);
+  assert.doesNotMatch(link.searchParams.get("text")!, /demerit points/i);
+  c.provenance.isDemo = false;
+  c.region = "MY";
+  assert.equal(new URL(whatsapp(c, prefs)).pathname, "/60134498997");
+});

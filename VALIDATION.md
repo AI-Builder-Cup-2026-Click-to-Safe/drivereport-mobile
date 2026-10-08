@@ -1,3 +1,19 @@
+# Hackathon Submission sync — 2026-10-08
+
+Reference: `whyteaz/road-receipts-handover` **9b9f293**, `variants/hackathon-submission`. Implemented on `feat/standard-design`; see [the sync notes](design/SUBMISSION_SYNC.md) for scope and integration differences.
+
+- TypeScript and ESLint passed. **34 automated tests passed**, including two-case queue/gating, per-plate record plus sent/unissued points, isolation of live results from demo licence data, inclusion and edited-plate behavior, recipientless sample WhatsApp routing and authored 72-point geometry.
+- Exercised the native development app on **iPhone 16 Pro / iOS 18.6 Simulator** with the updated Metro bundle. Home → preloaded sample → staged analysis → Case works. Completed analysis now displays law, points, licence lookup and sample cost above the fixed footer without clipping at this size. Replaying analysis leaves two pending cases rather than duplicating the readable sample.
+- Cases pages between readable and unreadable samples. Blank plate disables reporting; entering WXY 2048 enables it and shows user provenance, while the original synthetic glare frame stays unchanged. Restoring blank disables reporting again. The on-screen keyboard does not prevent editing or returning to the footer.
+- Opened the recipientless sample draft in Safari's WhatsApp page. Simulator has no WhatsApp app, so its attempt to open the app reports an invalid address. No message was sent. Returned to Click-to-Safe and exercised the synthetic **Yes, I sent it** state: printing receipt, Reported stamp, 10 recorded + 10 potential points, then See your impact with the Undo banner. **Mark as not sent** restored the count from four to three and the pending queue from one to two. The short Undo banner was observed; its timed press was not independently established in this pass.
+- Impact renders separate 3/1 counters, the prior-record versus potential-points meter, offence chart and cases. Counter/pill/icon transitions and Home rolling statistics were exercised and captured to a local motion video.
+- App Reduce motion holds the Home statistic at Malaysia and displays settled content. Restored it to off; the statistic resumed rotating. Native page fades remain under reduced motion.
+- Removed newly introduced module cycles by separating navigation animation primitives; corrected SVG percentage stops. Terminated and relaunched the app: Home and the two-case queue restored, the updated bundle loaded, and no fresh warnings/errors appeared in Metro.
+
+No backend change, new live AI request, physical-camera test, Android run or TestFlight release occurred in this UI sync. Sample points, lookup and cost remain explicitly synthetic; no new authority integration is claimed. Large-text and smaller-iPhone layouts were not certified in this pass.
+
+---
+
 # Click-to-Safe design update validation — 2026-10-05
 
 Source handover: `whyteaz/road-receipts-handover` commit `3ae6b66` (previous native baseline `3b64312`). The following section records this design update; earlier build and live-AI results are retained below as historical evidence.

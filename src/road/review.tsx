@@ -10,13 +10,14 @@ import {
   duration,
   labels,
   missing,
-  regionNames,
   reportText,
   validation,
   whatsapp,
   type RoadCase,
 } from "./model";
-import { Disclosure, Plate } from "./standard-ui";
+import { PointsChip, Receipt, Stamp, SampleOverlay } from "./submission-motion";
+import { pendingCases, licenceRecord, casePoints } from "./submission-model";
+import { Arrival, Disclosure, Plate } from "./standard-ui";
 import {
   Action,
   C,
@@ -116,11 +117,42 @@ function Evidence({
   revision: number;
   onTime: (time: number) => void;
 }) {
+  const [playing, setPlaying] = useState(false);
+  const [time, setTime] = useState(Math.max(0, seek));
+  useEffect(() => {
+    setTime(Math.max(0, seek));
+    setPlaying(false);
+  }, [seek, revision]);
+  useEffect(() => {
+    if (!playing) return;
+    const timer = setInterval(
+      () =>
+        setTime((t) => {
+          const n = Math.min(c.evidence.durationSeconds, t + 0.25);
+          return n;
+        }),
+      250,
+    );
+    return () => clearInterval(timer);
+  }, [playing, c.evidence.durationSeconds]);
+  useEffect(() => {
+    if (c.provenance.isDemo) onTime(time);
+    if (time >= c.evidence.durationSeconds) setPlaying(false);
+  }, [time, onTime, c.provenance.isDemo, c.evidence.durationSeconds]);
+  const caption = c.analysis?.timeline.find(
+    (t) => time >= t.start_seconds && time < t.end_seconds,
+  )?.event;
   return c.provenance.isDemo ? (
     <View
       style={{ borderRadius: 12, overflow: "hidden", backgroundColor: C.dark }}
     >
-      <Image source={demoFrameFor(c)} style={{ width: "100%", height: 194 }} />
+      <View style={{ aspectRatio: 16 / 9 }}>
+        <Image
+          source={demoFrameFor(c)}
+          style={{ width: "100%", height: "100%" }}
+        />
+        <SampleOverlay caption={caption} unread={!c.analysis?.vehicle.plate} />
+      </View>
       <View
         style={{
           position: "absolute",
@@ -136,16 +168,44 @@ function Evidence({
       </View>
       <View
         style={{
-          padding: 12,
+          paddingHorizontal: 12,
+          alignItems: "center",
           flexDirection: "row",
           justifyContent: "space-between",
         }}
       >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            playing ? "Pause sample timeline" : "Play sample timeline"
+          }
+          onPress={() => {
+            if (time >= c.evidence.durationSeconds) setTime(0);
+            setPlaying(!playing);
+          }}
+          style={{ minWidth: 44, minHeight: 44, justifyContent: "center" }}
+        >
+          <Icon name={playing ? "Pause" : "Play"} color="white" />
+        </Pressable>
+        <View
+          style={{
+            flex: 1,
+            marginHorizontal: 8,
+            alignSelf: "center",
+            height: 3,
+            backgroundColor: "#555",
+          }}
+        >
+          <View
+            style={{
+              height: 3,
+              width: `${(time / c.evidence.durationSeconds) * 100}%`,
+              backgroundColor: "white",
+            }}
+          />
+        </View>
         <T style={{ color: "white", fontSize: 11 }}>
-          Demo evidence · not a video
-        </T>
-        <T style={{ color: "white", fontSize: 11 }}>
-          {duration(Math.max(0, seek))} / {duration(c.evidence.durationSeconds)}
+          {duration(time)} / {duration(c.evidence.durationSeconds)}
         </T>
       </View>
     </View>
@@ -278,11 +338,9 @@ function DateField({
 }
 export function Review() {
   const rr = useRoad();
-  const index = Math.max(
-    0,
-    rr.cases.findIndex((c) => c.id === rr.selected),
-  );
-  const c = rr.cases[index];
+  const queue = pendingCases(rr.cases);
+  const c = rr.cases.find((c) => c.id === rr.selected) || queue[0];
+  const index = c ? queue.indexOf(c) : -1;
   return c ? (
     <CaseReview key={c.id} c={c} index={index} />
   ) : (
@@ -298,9 +356,12 @@ export function Review() {
 
 function CaseReview({ c, index }: { c: RoadCase; index: number }) {
   const rr = useRoad();
-  const [seek, setSeek] = useState(-1),
+  const queue = pendingCases(rr.cases);
+  const record = licenceRecord(c);
+  const points = casePoints(c);
+  const [seek, setSeek] = useState(!c.vehicle.plate ? 20 : 12),
     [revision, setRevision] = useState(0),
-    [playhead, setPlayhead] = useState(-1);
+    [playhead, setPlayhead] = useState(!c.vehicle.plate ? 20 : 12);
   const [busy, setBusy] = useState(false),
     [descriptionNote, setDescriptionNote] = useState(false);
   // Keep fields mounted while typing, even after the first character resolves a missing fact.
@@ -358,12 +419,17 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
         }
         value={value || ""}
         missing={key !== "model" && !value?.trim()}
+        hint={false}
         editable={!locked}
         multiline={key === "description"}
         placeholder={
-          key === "location"
-            ? "Add road or nearby landmark"
-            : "Add " + label.toLowerCase()
+          key === "plate"
+            ? "e.g. ABC 1234"
+            : key === "location"
+              ? "Road or nearby landmark"
+              : key === "vehicle"
+                ? "e.g. Blue hatchback"
+                : "What the vehicle did"
         }
         onChangeText={(v) =>
           update(
@@ -397,7 +463,40 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
   );
   return (
     <Page
-      title="Case"
+      gap={16}
+      title={
+        index >= 0 && queue.length > 1
+          ? `Case ${index + 1} of ${queue.length}`
+          : "Case"
+      }
+      headerLeft={
+        index >= 0 ? (
+          queue.length > 1 ? (
+            <Quiet
+              title="Previous case"
+              compact
+              icon="ChevronLeft"
+              disabled={index === 0}
+              onPress={() => rr.select(queue[index - 1].id)}
+            />
+          ) : (
+            <View style={{ width: 44 }} />
+          )
+        ) : undefined
+      }
+      headerRight={
+        index >= 0 && queue.length > 1 ? (
+          <Quiet
+            title="Next case"
+            compact
+            icon="ChevronRight"
+            disabled={index === queue.length - 1}
+            onPress={() => rr.select(queue[index + 1].id)}
+          />
+        ) : (
+          <T style={s.muted}>{c.id.replace("SUB-", "")}</T>
+        )
+      }
       footer={
         c.offences.length ? (
           locked ? (
@@ -422,18 +521,14 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
           ) : (
             <>
               <Action
-                title={
-                  c.provenance.isDemo
-                    ? "Open test WhatsApp draft"
-                    : "Report via WhatsApp"
-                }
+                title="Report via WhatsApp"
                 icon="MessageCircle"
                 disabled={!!error || busy}
                 onPress={() => void send()}
               />
-              <T style={[s.muted, { textAlign: "center" }]}>
-                {error || "I write it. You attach the clip and tap Send."}
-              </T>
+              {!!error && (
+                <T style={[s.muted, { textAlign: "center" }]}>{error}</T>
+              )}
             </>
           )
         ) : (
@@ -445,37 +540,17 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
         )
       }
     >
-      <View style={s.row}>
-        <T style={[s.muted, { flex: 1 }]}>
-          {regionNames[c.region]}
-          {c.region === "MY" ? " / JPJ" : ""}
-        </T>
+      {["opened", "sent"].includes(c.reporting.status) && (
         <T
           style={{
             fontSize: 13,
             fontWeight: "700",
-            color: locked ? "#15803D" : error ? C.warning : C.ink,
+            color: locked ? "#15803D" : C.ink,
           }}
         >
           {labels[c.reporting.status]}
         </T>
-        <Quiet
-          compact
-          title="Previous case"
-          icon="ChevronLeft"
-          onPress={() =>
-            rr.select(
-              rr.cases[(index - 1 + rr.cases.length) % rr.cases.length].id,
-            )
-          }
-        />
-        <Quiet
-          compact
-          title="Next case"
-          icon="ChevronRight"
-          onPress={() => rr.select(rr.cases[(index + 1) % rr.cases.length].id)}
-        />
-      </View>
+      )}
       {!c.offences.length && (
         <Intro
           title="No assholes? Plot twist."
@@ -484,7 +559,9 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
       )}
       <View style={{ gap: 8 }}>
         <Evidence c={c} seek={seek} revision={revision} onTime={setPlayhead} />
-        {line && <T style={{ color: C.accent, fontSize: 13 }}>{line.event}</T>}
+        {line && !c.provenance.isDemo && (
+          <T style={{ color: C.accent, fontSize: 13 }}>{line.event}</T>
+        )}
       </View>
       <View
         style={{
@@ -534,15 +611,20 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
               }}
             >
               <T style={{ fontWeight: "800", fontSize: 21, lineHeight: 27 }}>
-                {askKeys.length === 1 && askKeys[0] === "location"
-                  ? "Where was this?"
-                  : "Gemini needs you"}
+                {askKeys.length === 1 && askKeys[0] === "plate"
+                  ? "What’s the plate?"
+                  : askKeys.length === 1 && askKeys[0] === "location"
+                    ? "Where was this?"
+                    : "Gemini needs you"}
               </T>
               {askKeys.map(fact)}
             </View>
           )}
           <View style={{ gap: 10 }}>
-            <T style={s.section}>Suspected offences</T>
+            <View style={s.row}>
+              <T style={s.section}>Suspected offences</T>
+              <T style={s.muted}>In report</T>
+            </View>
             {c.offences.map((o) => (
               <View
                 key={o.id}
@@ -591,15 +673,8 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                     >
                       {o.label}
                     </T>
-                    <T
-                      style={{
-                        fontSize: 12,
-                        color: o.confidence >= 0.9 ? C.accent : C.warning,
-                      }}
-                    >
-                      {o.confidence >= 0.9 ? "Clear" : "Unclear"}
-                    </T>
                   </View>
+                  <PointsChip points={o.demeritPoints ?? 0} />
                   <Pressable
                     accessibilityRole="checkbox"
                     accessibilityLabel={`Include ${o.label}`}
@@ -634,52 +709,54 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                       }}
                     >
                       {o.included && (
-                        <Icon name="Check" size={22} color="white" />
+                        <Stamp>
+                          <Icon name="Check" size={22} color="white" />
+                        </Stamp>
                       )}
                     </View>
                   </Pressable>
                 </View>
-                <Disclosure title="Why, and the law">
-                  <T style={{ color: C.accent }}>{o.reasoning || o.label}</T>
-                  <T style={s.muted}>
-                    {duration(o.atSeconds)} ·{" "}
-                    {o.confidence >= 0.9 ? "Clear" : "Unclear"}
-                  </T>
-                  {o.lawSources.map((law, n) => (
-                    <View key={n} style={s.card}>
-                      <T style={{ color: C.accent, fontWeight: "700" }}>
-                        {law.title || "Legal basis"}
-                      </T>
-                      {law.section && <T>{law.section}</T>}
-                      {law.url && /^https:\/\//.test(law.url) && (
-                        <Quiet
-                          title="Read the source"
-                          icon="ArrowUpRight"
-                          onPress={() =>
-                            void Linking.openURL(law.url!).catch(showError)
-                          }
-                        />
-                      )}
-                      {c.provenance.isDemo && (
-                        <T style={s.muted}>Sample citation · synthetic demo.</T>
-                      )}
-                    </View>
-                  ))}
-                </Disclosure>
+                {o.lawSources.map((law, n) => (
+                  <View
+                    key={n}
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <T style={{ fontSize: 13, fontWeight: "700" }}>
+                      {law.act || law.title}
+                      {law.section ? ", " + law.section : ""}
+                    </T>
+                    {law.url?.startsWith("https://") && (
+                      <Quiet
+                        title="Read the law"
+                        icon="ArrowUpRight"
+                        onPress={() =>
+                          void Linking.openURL(law.url!).catch(showError)
+                        }
+                      />
+                    )}
+                  </View>
+                ))}
+                {!!o.demeritPoints && record && (
+                  <Arrival identity={c.vehicle.plate || ""} distance={6}>
+                    <T
+                      style={{
+                        fontSize: 13,
+                        color: "#C81E1E",
+                        fontWeight: "700",
+                      }}
+                    >
+                      {c.vehicle.plate} already has {record.points}. This could
+                      make it {record.points + points}: licence suspended.
+                    </T>
+                  </Arrival>
+                )}
               </View>
             ))}
-          </View>
-          <View
-            style={{
-              borderTopWidth: 1,
-              borderColor: C.line,
-              paddingTop: 18,
-              gap: 16,
-            }}
-          >
-            {["location", "description"]
-              .filter((k) => locked || !askKeys.includes(k))
-              .map(fact)}
           </View>
           {descriptionNote && (
             <T style={s.muted}>
@@ -687,10 +764,10 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
             </T>
           )}
           <Disclosure
-            title="All details"
+            title="Edit details"
             note={locked ? "Read only" : "Tap to edit"}
           >
-            {["plate", "vehicle", "date", "time"]
+            {["plate", "vehicle", "date", "time", "location", "description"]
               .filter((k) => locked || !askKeys.includes(k))
               .map(fact)}
             {fact("model")}
@@ -698,7 +775,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
         </>
       )}
       <Quiet
-        title="Gemini’s work"
+        title="How Gemini decided"
         onPress={() => {
           rr.select(c.id);
           go("work");
@@ -727,6 +804,43 @@ export function Handoff() {
         <Action title="Back to Review" onPress={() => go("review")} />
       </Page>
     );
+  if (c.reporting.status === "sent")
+    return (
+      <Page
+        title="WhatsApp"
+        nav={false}
+        footer={
+          <Action
+            title="See your impact"
+            icon="History"
+            onPress={() => {
+              rr.startUndo(c.id);
+              go("impact");
+            }}
+          />
+        }
+      >
+        <Intro
+          title="Reported. Your part’s done."
+          body="Here’s your receipt."
+        />
+        <Receipt c={c} />
+        <Arrival delay={1400}>
+          <Intro
+            title={
+              licenceRecord(c) && casePoints(c) + licenceRecord(c)!.points >= 20
+                ? `If JPJ agrees, ${c.vehicle.plate} loses their licence.`
+                : "Your report is ready for the authority’s review."
+            }
+            body={
+              c.provenance.isDemo
+                ? "Sample receipt · no authority outcome has been recorded."
+                : "You confirmed sending. The authority decides the outcome."
+            }
+          />
+        </Arrival>
+      </Page>
+    );
   return (
     <Page
       title="WhatsApp"
@@ -734,44 +848,44 @@ export function Handoff() {
       footer={
         <>
           <Action
-            title="Mark report sent"
-            onPress={() =>
+            title="Yes, I sent it"
+            icon="Check"
+            disabled={busy}
+            onPress={() => {
+              setBusy(true);
               void rr
-                .confirmSent(c.id)
-                .then(() => go("impact"))
+                .confirmSent(c.id, true)
                 .catch(showError)
-            }
+                .finally(() => setBusy(false));
+            }}
           />
-          <Quiet title="Not sent yet" onPress={() => go("review")} />
-          <T style={[s.muted, { textAlign: "center" }]}>
-            Only you can confirm sending. Opening WhatsApp doesn’t send a
-            report.
-          </T>
+          <Action
+            title="Not yet"
+            icon="Clock"
+            secondary
+            onPress={() => go("review")}
+          />
+          <Quiet
+            title="Open WhatsApp again"
+            icon="MessageCircle"
+            onPress={() => void openWhatsAppDraft(c, rr.prefs).catch(showError)}
+          />
         </>
       }
     >
       <Intro
-        title="I drafted it. Go snitch."
-        body="The report text is copied too. Attach the original clip, tap Send in WhatsApp, then come back and tell me."
+        title="Did you send it?"
+        body="Attach the clip, tap Send in WhatsApp, then tell me here."
       />
       <View
         style={[
-          s.card,
-          {
-            backgroundColor: C.surface,
-            paddingVertical: 30,
-            alignItems: "center",
-          },
+          s.row,
+          { padding: 16, backgroundColor: C.surface, borderRadius: 16 },
         ]}
       >
-        <Icon name="MessageCircle" size={45} />
-        <T style={{ fontSize: 18, fontWeight: "700" }}>{c.vehicle.plate}</T>
-        <T>Draft opened · not confirmed sent</T>
+        <Plate value={c.vehicle.plate} />
+        <T style={{ fontSize: 12, fontWeight: "700" }}>Draft opened</T>
       </View>
-      <Intro
-        title="Did you send it?"
-        body="I can draft reports. I can’t read your damn mind."
-      />
       {message ? <Notice>{message}</Notice> : null}
       {!c.provenance.isDemo &&
         c.evidence.originalVideoUrl?.startsWith("file:") && (
@@ -780,34 +894,9 @@ export function Handoff() {
             secondary
             icon="Upload"
             disabled={busy}
-            onPress={() => {
-              setBusy(true);
-              void shareOriginal(c)
-                .then(() =>
-                  setMessage(
-                    "The share sheet opened. Select WhatsApp and the same chat; sharing does not prove it was sent.",
-                  ),
-                )
-                .catch(showError)
-                .finally(() => setBusy(false));
-            }}
+            onPress={() => void shareOriginal(c).catch(showError)}
           />
         )}
-      <Action
-        title="Reopen WhatsApp draft"
-        secondary
-        icon="MessageCircle"
-        disabled={busy}
-        onPress={() => {
-          setBusy(true);
-          void openWhatsAppDraft(c, rr.prefs)
-            .then(() =>
-              setMessage("WhatsApp draft reopened. Report text copied."),
-            )
-            .catch(showError)
-            .finally(() => setBusy(false));
-        }}
-      />
       <Quiet
         title="Copy report text"
         onPress={() =>

@@ -91,8 +91,8 @@ export function Spark({
         <Defs>
           <LinearGradient id="gemini" x1="0%" y1="100%" x2="100%" y2="0%">
             <Stop offset="0" stopColor="#4C8DF6" />
-            <Stop offset=".45" stopColor="#9B72CB" />
-            <Stop offset=".72" stopColor="#D96570" />
+            <Stop offset="45%" stopColor="#9B72CB" />
+            <Stop offset="72%" stopColor="#D96570" />
             <Stop offset="1" stopColor="#F1A04A" />
           </LinearGradient>
         </Defs>
@@ -159,13 +159,13 @@ export function Plate({
     >
       <T
         style={{
-          backgroundColor: C.ink,
-          color: "#F5F5F0",
+          backgroundColor: value ? C.ink : "transparent",
+          color: value ? "#F5F5F0" : C.muted,
           borderRadius: 7,
           overflow: "hidden",
           paddingHorizontal: 11,
           paddingVertical: 7,
-          fontSize: 20,
+          fontSize: value ? 20 : 15,
           fontWeight: "800",
           letterSpacing: 1.2,
         }}
@@ -222,8 +222,8 @@ export function ScanSweep() {
             <Defs>
               <LinearGradient id="sweep">
                 <Stop offset="0" stopColor="#4F8BFF" stopOpacity="0" />
-                <Stop offset=".9" stopColor="#4F8BFF" stopOpacity=".35" />
-                <Stop offset=".96" stopColor="white" stopOpacity=".85" />
+                <Stop offset="90%" stopColor="#4F8BFF" stopOpacity={0.35} />
+                <Stop offset="96%" stopColor="white" stopOpacity={0.85} />
                 <Stop offset="1" stopColor="white" stopOpacity="0" />
               </LinearGradient>
             </Defs>
@@ -235,7 +235,7 @@ export function ScanSweep() {
   );
 }
 
-export function Count({ value }: { value: number }) {
+export function Count({ value, size = 72 }: { value: number; size?: number }) {
   const { reduced, foreground } = useRoad();
   const [shown, setShown] = useState(value);
   useEffect(() => {
@@ -256,8 +256,8 @@ export function Count({ value }: { value: number }) {
   return (
     <T
       style={{
-        fontSize: 84,
-        lineHeight: 90,
+        fontSize: size,
+        lineHeight: size + 4,
         fontWeight: "800",
         letterSpacing: -4,
         fontVariant: ["tabular-nums"],

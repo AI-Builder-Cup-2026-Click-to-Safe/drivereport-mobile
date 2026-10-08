@@ -1,0 +1,629 @@
+{
+  "allCases": [
+    {
+      "id": "SUB-RR-025",
+      "version": 1,
+      "region": "MY",
+      "vehicle": {
+        "plate": "WXY 2048",
+        "type": "Blue hatchback",
+        "model": null
+      },
+      "incident": {
+        "date": "2026-10-03",
+        "time": "08:42",
+        "timeZone": "Asia/Kuala_Lumpur",
+        "location": "Jalan Tun Razak, Kuala Lumpur",
+        "description": "The vehicle passed the stop line while the signal was red and carried on through the junction."
+      },
+      "offences": [
+        {
+          "id": "RR-025-1",
+          "code": "red_light",
+          "label": "Ran a red light",
+          "atSeconds": 12,
+          "confidence": 0.96,
+          "included": true,
+          "reasoning": "Signal is red from 00:11. The car crosses the stop line at 00:12 without stopping.",
+          "lawSources": [
+            {
+              "act": "Road Transport Act 1987",
+              "title": "Failing to obey a traffic signal",
+              "section": "s.79(2)",
+              "url": "https://lom.agc.gov.my/ilims/upload/portal/akta/outputaktap/1871744_BI/Act%20333_Final_15%20Oct%202023%20(25.3.24).pdf"
+            }
+          ],
+          "demeritPoints": 10
+        }
+      ],
+      "evidence": {
+        "durationSeconds": 24,
+        "originalVideoUrl": null,
+        "annotatedVideoUrl": null,
+        "thumbnailUrl": null,
+        "tracks": [],
+        "isSynthetic": true
+      },
+      "reporting": {
+        "status": "ready",
+        "confirmedByUser": false
+      },
+      "authorityOutcome": {
+        "status": "unknown",
+        "source": null,
+        "updatedAt": null
+      },
+      "provenance": {
+        "isDemo": true,
+        "factsSource": "submission_fixture_v1",
+        "legalRetrieval": "sample_reference"
+      },
+      "analysis": {
+        "vehicle": {
+          "plate": "WXY 2048",
+          "type": "Blue hatchback",
+          "model": null
+        },
+        "incident": {
+          "date": "2026-10-03",
+          "time": "08:42",
+          "timeZone": "Asia/Kuala_Lumpur",
+          "location": "Jalan Tun Razak, Kuala Lumpur",
+          "description": "The vehicle passed the stop line while the signal was red and carried on through the junction."
+        },
+        "offences": [
+          {
+            "id": "RR-025-1",
+            "code": "red_light",
+            "label": "Ran a red light",
+            "atSeconds": 12,
+            "confidence": 0.96,
+            "included": true,
+            "reasoning": "Signal is red from 00:11. The car crosses the stop line at 00:12 without stopping.",
+            "lawSources": [
+              {
+                "act": "Road Transport Act 1987",
+                "title": "Failing to obey a traffic signal",
+                "section": "s.79(2)",
+                "url": "https://lom.agc.gov.my/ilims/upload/portal/akta/outputaktap/1871744_BI/Act%20333_Final_15%20Oct%202023%20(25.3.24).pdf"
+              }
+            ],
+            "demeritPoints": 10
+          }
+        ],
+        "timeline": [
+          {
+            "start_seconds": 1,
+            "end_seconds": 6,
+            "event": "Daytime, dry road. A blue hatchback approaches the junction."
+          },
+          {
+            "start_seconds": 6,
+            "end_seconds": 11,
+            "event": "The traffic light turns amber."
+          },
+          {
+            "start_seconds": 11,
+            "end_seconds": 12,
+            "event": "The light turns red."
+          },
+          {
+            "start_seconds": 12,
+            "end_seconds": 20,
+            "event": "The hatchback crosses the stop line while the light is red."
+          },
+          {
+            "start_seconds": 20,
+            "end_seconds": 24,
+            "event": "Its plate reads WXY 2048."
+          }
+        ]
+      },
+      "edited": []
+    },
+    {
+      "id": "SUB-RR-026",
+      "version": 1,
+      "region": "MY",
+      "vehicle": {
+        "plate": null,
+        "type": "Blue hatchback",
+        "model": null
+      },
+      "incident": {
+        "date": "2026-10-02",
+        "time": "17:56",
+        "timeZone": "Asia/Kuala_Lumpur",
+        "location": "Jalan Sultan Ismail, Kuala Lumpur",
+        "description": "The vehicle passed the stop line while the signal was red and carried on through the junction."
+      },
+      "offences": [
+        {
+          "id": "RR-026-1",
+          "code": "red_light",
+          "label": "Ran a red light",
+          "atSeconds": 12,
+          "confidence": 0.96,
+          "included": true,
+          "reasoning": "Signal is red from 00:11. The car crosses the stop line at 00:12 without stopping.",
+          "lawSources": [
+            {
+              "act": "Road Transport Act 1987",
+              "title": "Failing to obey a traffic signal",
+              "section": "s.79(2)",
+              "url": "https://lom.agc.gov.my/ilims/upload/portal/akta/outputaktap/1871744_BI/Act%20333_Final_15%20Oct%202023%20(25.3.24).pdf"
+            }
+          ],
+          "demeritPoints": 10
+        }
+      ],
+      "evidence": {
+        "durationSeconds": 24,
+        "originalVideoUrl": null,
+        "annotatedVideoUrl": null,
+        "thumbnailUrl": null,
+        "tracks": [],
+        "isSynthetic": true
+      },
+      "reporting": {
+        "status": "needs_info",
+        "confirmedByUser": false
+      },
+      "authorityOutcome": {
+        "status": "unknown",
+        "source": null,
+        "updatedAt": null
+      },
+      "provenance": {
+        "isDemo": true,
+        "factsSource": "submission_fixture_v1",
+        "legalRetrieval": "sample_reference"
+      },
+      "analysis": {
+        "vehicle": {
+          "plate": null,
+          "type": "Blue hatchback",
+          "model": null
+        },
+        "incident": {
+          "date": "2026-10-02",
+          "time": "17:56",
+          "timeZone": "Asia/Kuala_Lumpur",
+          "location": "Jalan Sultan Ismail, Kuala Lumpur",
+          "description": "The vehicle passed the stop line while the signal was red and carried on through the junction."
+        },
+        "offences": [
+          {
+            "id": "RR-026-1",
+            "code": "red_light",
+            "label": "Ran a red light",
+            "atSeconds": 12,
+            "confidence": 0.96,
+            "included": true,
+            "reasoning": "Signal is red from 00:11. The car crosses the stop line at 00:12 without stopping.",
+            "lawSources": [
+              {
+                "act": "Road Transport Act 1987",
+                "title": "Failing to obey a traffic signal",
+                "section": "s.79(2)",
+                "url": "https://lom.agc.gov.my/ilims/upload/portal/akta/outputaktap/1871744_BI/Act%20333_Final_15%20Oct%202023%20(25.3.24).pdf"
+              }
+            ],
+            "demeritPoints": 10
+          }
+        ],
+        "timeline": [
+          {
+            "start_seconds": 1,
+            "end_seconds": 6,
+            "event": "Daytime, dry road. A blue hatchback approaches the junction."
+          },
+          {
+            "start_seconds": 6,
+            "end_seconds": 11,
+            "event": "The traffic light turns amber."
+          },
+          {
+            "start_seconds": 11,
+            "end_seconds": 12,
+            "event": "The light turns red."
+          },
+          {
+            "start_seconds": 12,
+            "end_seconds": 20,
+            "event": "The hatchback crosses the stop line while the light is red."
+          },
+          {
+            "start_seconds": 20,
+            "end_seconds": 24,
+            "event": "Glare on the plate. I can\u2019t read it."
+          }
+        ]
+      },
+      "edited": []
+    },
+    {
+      "id": "SUB-RR-024",
+      "version": 1,
+      "region": "MY",
+      "vehicle": {
+        "plate": "BQQ 993",
+        "type": "Blue hatchback",
+        "model": null
+      },
+      "incident": {
+        "date": "2026-10-02",
+        "time": "18:21",
+        "timeZone": "Asia/Kuala_Lumpur",
+        "location": "Jalan Pudu, Kuala Lumpur",
+        "description": "Reckless and dangerous driving."
+      },
+      "offences": [
+        {
+          "id": "RR-024-1",
+          "code": "dangerous",
+          "label": "Reckless and dangerous driving",
+          "atSeconds": 12,
+          "confidence": 0.96,
+          "included": true,
+          "reasoning": "Reckless and dangerous driving",
+          "lawSources": [
+            {
+              "act": "Road Transport Act 1987",
+              "title": "Reckless and dangerous driving",
+              "section": "s.42",
+              "url": "https://lom.agc.gov.my/ilims/upload/portal/akta/outputaktap/1871744_BI/Act%20333_Final_15%20Oct%202023%20(25.3.24).pdf"
+            }
+          ]
+        },
+        {
+          "id": "RR-024-2",
+          "code": "dangerous",
+          "label": "Reckless and dangerous driving",
+          "atSeconds": 18,
+          "confidence": 0.96,
+          "included": true,
+          "reasoning": "Reckless and dangerous driving",
+          "lawSources": [
+            {
+              "act": "Road Transport Act 1987",
+              "title": "Reckless and dangerous driving",
+              "section": "s.42",
+              "url": "https://lom.agc.gov.my/ilims/upload/portal/akta/outputaktap/1871744_BI/Act%20333_Final_15%20Oct%202023%20(25.3.24).pdf"
+            }
+          ]
+        }
+      ],
+      "evidence": {
+        "durationSeconds": 24,
+        "originalVideoUrl": null,
+        "annotatedVideoUrl": null,
+        "thumbnailUrl": null,
+        "tracks": [],
+        "isSynthetic": true
+      },
+      "reporting": {
+        "status": "sent",
+        "confirmedByUser": true
+      },
+      "authorityOutcome": {
+        "status": "unknown",
+        "source": null,
+        "updatedAt": null
+      },
+      "provenance": {
+        "isDemo": true,
+        "factsSource": "submission_fixture_v1",
+        "legalRetrieval": "sample_reference"
+      },
+      "analysis": {
+        "vehicle": {
+          "plate": "BQQ 993",
+          "type": "Blue hatchback",
+          "model": null
+        },
+        "incident": {
+          "date": "2026-10-02",
+          "time": "18:21",
+          "timeZone": "Asia/Kuala_Lumpur",
+          "location": "Jalan Pudu, Kuala Lumpur",
+          "description": "Reckless and dangerous driving."
+        },
+        "offences": [
+          {
+            "id": "RR-024-1",
+            "code": "dangerous",
+            "label": "Reckless and dangerous driving",
+            "atSeconds": 12,
+            "confidence": 0.96,
+            "included": true,
+            "reasoning": "Reckless and dangerous driving",
+            "lawSources": [
+              {
+                "act": "Road Transport Act 1987",
+                "title": "Reckless and dangerous driving",
+                "section": "s.42",
+                "url": "https://lom.agc.gov.my/ilims/upload/portal/akta/outputaktap/1871744_BI/Act%20333_Final_15%20Oct%202023%20(25.3.24).pdf"
+              }
+            ]
+          },
+          {
+            "id": "RR-024-2",
+            "code": "dangerous",
+            "label": "Reckless and dangerous driving",
+            "atSeconds": 18,
+            "confidence": 0.96,
+            "included": true,
+            "reasoning": "Reckless and dangerous driving",
+            "lawSources": [
+              {
+                "act": "Road Transport Act 1987",
+                "title": "Reckless and dangerous driving",
+                "section": "s.42",
+                "url": "https://lom.agc.gov.my/ilims/upload/portal/akta/outputaktap/1871744_BI/Act%20333_Final_15%20Oct%202023%20(25.3.24).pdf"
+              }
+            ]
+          }
+        ],
+        "timeline": [
+          {
+            "start_seconds": 1,
+            "end_seconds": 6,
+            "event": "Daytime, dry road. A blue hatchback approaches the junction."
+          },
+          {
+            "start_seconds": 6,
+            "end_seconds": 11,
+            "event": "The traffic light turns amber."
+          },
+          {
+            "start_seconds": 11,
+            "end_seconds": 12,
+            "event": "The light turns red."
+          },
+          {
+            "start_seconds": 12,
+            "end_seconds": 20,
+            "event": "The hatchback crosses the stop line while the light is red."
+          },
+          {
+            "start_seconds": 20,
+            "end_seconds": 24,
+            "event": "Its plate reads WXY 2048."
+          }
+        ]
+      },
+      "edited": []
+    },
+    {
+      "id": "SUB-RR-023",
+      "version": 1,
+      "region": "MY",
+      "vehicle": {
+        "plate": "VBN 7712",
+        "type": "Blue hatchback",
+        "model": null
+      },
+      "incident": {
+        "date": "2026-10-02",
+        "time": "09:10",
+        "timeZone": "Asia/Kuala_Lumpur",
+        "location": "Jalan Ampang, Kuala Lumpur",
+        "description": "Overtook across double lines."
+      },
+      "offences": [
+        {
+          "id": "RR-023-1",
+          "code": "double_line",
+          "label": "Overtook across double lines",
+          "atSeconds": 12,
+          "confidence": 0.96,
+          "included": true,
+          "reasoning": "Overtook across double lines",
+          "lawSources": []
+        },
+        {
+          "id": "RR-023-2",
+          "code": "double_line",
+          "label": "Overtook across double lines",
+          "atSeconds": 18,
+          "confidence": 0.96,
+          "included": true,
+          "reasoning": "Overtook across double lines",
+          "lawSources": []
+        }
+      ],
+      "evidence": {
+        "durationSeconds": 24,
+        "originalVideoUrl": null,
+        "annotatedVideoUrl": null,
+        "thumbnailUrl": null,
+        "tracks": [],
+        "isSynthetic": true
+      },
+      "reporting": {
+        "status": "sent",
+        "confirmedByUser": true
+      },
+      "authorityOutcome": {
+        "status": "issued",
+        "source": null,
+        "updatedAt": null
+      },
+      "provenance": {
+        "isDemo": true,
+        "factsSource": "submission_fixture_v1",
+        "legalRetrieval": "sample_reference"
+      },
+      "analysis": {
+        "vehicle": {
+          "plate": "VBN 7712",
+          "type": "Blue hatchback",
+          "model": null
+        },
+        "incident": {
+          "date": "2026-10-02",
+          "time": "09:10",
+          "timeZone": "Asia/Kuala_Lumpur",
+          "location": "Jalan Ampang, Kuala Lumpur",
+          "description": "Overtook across double lines."
+        },
+        "offences": [
+          {
+            "id": "RR-023-1",
+            "code": "double_line",
+            "label": "Overtook across double lines",
+            "atSeconds": 12,
+            "confidence": 0.96,
+            "included": true,
+            "reasoning": "Overtook across double lines",
+            "lawSources": []
+          },
+          {
+            "id": "RR-023-2",
+            "code": "double_line",
+            "label": "Overtook across double lines",
+            "atSeconds": 18,
+            "confidence": 0.96,
+            "included": true,
+            "reasoning": "Overtook across double lines",
+            "lawSources": []
+          }
+        ],
+        "timeline": [
+          {
+            "start_seconds": 1,
+            "end_seconds": 6,
+            "event": "Daytime, dry road. A blue hatchback approaches the junction."
+          },
+          {
+            "start_seconds": 6,
+            "end_seconds": 11,
+            "event": "The traffic light turns amber."
+          },
+          {
+            "start_seconds": 11,
+            "end_seconds": 12,
+            "event": "The light turns red."
+          },
+          {
+            "start_seconds": 12,
+            "end_seconds": 20,
+            "event": "The hatchback crosses the stop line while the light is red."
+          },
+          {
+            "start_seconds": 20,
+            "end_seconds": 24,
+            "event": "Its plate reads WXY 2048."
+          }
+        ]
+      },
+      "edited": []
+    },
+    {
+      "id": "SUB-RR-022",
+      "version": 1,
+      "region": "MY",
+      "vehicle": {
+        "plate": "JSA 401",
+        "type": "Blue hatchback",
+        "model": null
+      },
+      "incident": {
+        "date": "2026-10-01",
+        "time": "14:35",
+        "timeZone": "Asia/Kuala_Lumpur",
+        "location": "MRR2, Kuala Lumpur",
+        "description": "Drove against traffic."
+      },
+      "offences": [
+        {
+          "id": "RR-022-1",
+          "code": "wrong_way",
+          "label": "Drove against traffic",
+          "atSeconds": 12,
+          "confidence": 0.96,
+          "included": true,
+          "reasoning": "Drove against traffic",
+          "lawSources": []
+        }
+      ],
+      "evidence": {
+        "durationSeconds": 24,
+        "originalVideoUrl": null,
+        "annotatedVideoUrl": null,
+        "thumbnailUrl": null,
+        "tracks": [],
+        "isSynthetic": true
+      },
+      "reporting": {
+        "status": "sent",
+        "confirmedByUser": true
+      },
+      "authorityOutcome": {
+        "status": "unknown",
+        "source": null,
+        "updatedAt": null
+      },
+      "provenance": {
+        "isDemo": true,
+        "factsSource": "submission_fixture_v1",
+        "legalRetrieval": "sample_reference"
+      },
+      "analysis": {
+        "vehicle": {
+          "plate": "JSA 401",
+          "type": "Blue hatchback",
+          "model": null
+        },
+        "incident": {
+          "date": "2026-10-01",
+          "time": "14:35",
+          "timeZone": "Asia/Kuala_Lumpur",
+          "location": "MRR2, Kuala Lumpur",
+          "description": "Drove against traffic."
+        },
+        "offences": [
+          {
+            "id": "RR-022-1",
+            "code": "wrong_way",
+            "label": "Drove against traffic",
+            "atSeconds": 12,
+            "confidence": 0.96,
+            "included": true,
+            "reasoning": "Drove against traffic",
+            "lawSources": []
+          }
+        ],
+        "timeline": [
+          {
+            "start_seconds": 1,
+            "end_seconds": 6,
+            "event": "Daytime, dry road. A blue hatchback approaches the junction."
+          },
+          {
+            "start_seconds": 6,
+            "end_seconds": 11,
+            "event": "The traffic light turns amber."
+          },
+          {
+            "start_seconds": 11,
+            "end_seconds": 12,
+            "event": "The light turns red."
+          },
+          {
+            "start_seconds": 12,
+            "end_seconds": 20,
+            "event": "The hatchback crosses the stop line while the light is red."
+          },
+          {
+            "start_seconds": 20,
+            "end_seconds": 24,
+            "event": "Its plate reads WXY 2048."
+          }
+        ]
+      },
+      "edited": []
+    }
+  ]
+}

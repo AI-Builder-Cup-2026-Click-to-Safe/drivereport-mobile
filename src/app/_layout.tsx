@@ -14,6 +14,25 @@ function ReadySplash() {
   }, [ready, path]);
   return null;
 }
+function Navigator() {
+  const { reduced } = useRoad();
+  return (
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        animation: reduced ? "fade" : "slide_from_right",
+        animationDuration: reduced ? 180 : 440,
+        contentStyle: { backgroundColor: "#FFFFFF" },
+      }}
+    >
+      <Stack.Screen name="index" options={{ animation: "fade" }} />
+      <Stack.Screen name="review" options={{ animation: "fade" }} />
+      <Stack.Screen name="impact" options={{ animation: "fade" }} />
+      <Stack.Screen name="analysis" options={{ animation: "fade" }} />
+      <Stack.Screen name="recording" options={{ animation: "fade" }} />
+    </Stack>
+  );
+}
 export default function Layout() {
   const [loaded, error] = useFonts({
     Manrope: require("../../assets/road/fonts/Manrope-variable-latin.ttf"),
@@ -24,13 +43,7 @@ export default function Layout() {
       <RoadProvider>
         <ReadySplash />
         <StatusBar style="dark" />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            animation: "none",
-            contentStyle: { backgroundColor: "#FFFFFF" },
-          }}
-        />
+        <Navigator />
       </RoadProvider>
     </StoreProvider>
   );

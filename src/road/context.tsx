@@ -21,7 +21,8 @@ import {
   type Preferences,
   type Region,
 } from "./model";
-import fixtures from "./fixtures.json";
+import fixtures from "./submission-fixtures.json";
+import { isSubmissionDemo } from "./submission-model";
 export type Job = {
   id: string;
   mode: "demo" | "live";
@@ -66,7 +67,8 @@ type Context = {
   foreground: boolean;
   seed: () => Promise<void>;
   undo: { id: string; until: number } | null;
-  confirmSent: (id: string) => Promise<void>;
+  confirmSent: (id: string, deferUndo?: boolean) => Promise<void>;
+  startUndo: (id: string) => void;
   undoSent: () => Promise<void>;
 };
 const RoadContext = createContext<Context | null>(null);
@@ -169,8 +171,11 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
           .filter((i) => i.result && !known.has(i.id))
           .flatMap((i) => fromLegacy(i, "MY"));
         const next = [...restored, ...migrated];
-        if (!data && p.demo)
-          next.push(...JSON.parse(JSON.stringify(fixtures.allCases)));
+        if (p.demo)
+          for (const sample of fixtures.allCases) {
+            if (!next.some((c) => c.id === sample.id))
+              next.push(JSON.parse(JSON.stringify(sample)));
+          }
         await persistCases(next);
         select(next.find((c) => c.provenance.isDemo === p.demo)?.id || "");
         if (savedJob) {
@@ -243,11 +248,11 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
       }),
     );
   };
-  const confirmSent = async (id: string) => {
+  const confirmSent = async (id: string, deferUndo = false) => {
     await changeCase(id, {
       reporting: { status: "sent", confirmedByUser: true },
     });
-    setUndo({ id, until: Date.now() + 8000 });
+    if (!deferUndo) setUndo({ id, until: Date.now() + 8000 });
   };
   const undoSent = async () => {
     if (!undo || Date.now() > undo.until) return;
@@ -257,9 +262,12 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     setUndo(null);
   };
   const seed = async () => {
-    if (!cr.current.some((c) => c.provenance.isDemo))
+    const additions = fixtures.allCases.filter(
+      (f) => !cr.current.some((c) => c.id === f.id),
+    );
+    if (additions.length)
       await persistCases([
-        ...JSON.parse(JSON.stringify(fixtures.allCases)),
+        ...JSON.parse(JSON.stringify(additions)),
         ...cr.current,
       ]);
     await setPrefs({ demo: true });
@@ -303,21 +311,14 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         const base = JSON.parse(
           JSON.stringify(fixtures.allCases[0]),
         ) as RoadCase;
-        base.id = `DEMO-${Date.now().toString(36).toUpperCase()}`;
-        base.incident.location = null;
-        base.analysis = {
-          vehicle: { ...base.vehicle },
-          incident: { ...base.incident },
-          offences: base.offences.map((o) => ({
-            ...o,
-            lawSources: o.lawSources.map((s) => ({ ...s })),
-          })),
-          timeline: [],
-        };
-        base.edited = [];
-        base.reporting.status = "needs_info";
-        base.region = "MY";
-        await persistCases([base, ...cr.current]);
+        // Replay the waiting sample without duplicating it or overwriting a sent report.
+        const previous = cr.current.find((c) => c.id === base.id);
+        if (previous?.reporting.status === "sent")
+          base.id = `SUB-REPLAY-${Date.now()}`;
+        await persistCases([
+          base,
+          ...cr.current.filter((c) => c.id !== base.id),
+        ]);
         j.caseIds = [base.id];
         select(base.id);
       } else {
@@ -379,7 +380,9 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
       value={{
         ready: ready && legacy.ready && motionReady,
         error,
-        cases: cases.filter((c) => c.provenance.isDemo === prefs.demo),
+        cases: cases.filter((c) =>
+          prefs.demo ? isSubmissionDemo(c) : !c.provenance.isDemo,
+        ),
         allCases: cases,
         prefs,
         setPrefs,
@@ -397,6 +400,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         seed,
         undo,
         confirmSent,
+        startUndo: (id) => setUndo({ id, until: Date.now() + 8000 }),
         undoSent,
       }}
     >

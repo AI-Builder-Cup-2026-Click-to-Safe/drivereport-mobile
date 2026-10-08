@@ -11,6 +11,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
   type TextProps,
   type TextInputProps,
 } from "react-native";
@@ -22,6 +23,8 @@ import icons from "./icons.json";
 import { BrandMark } from "./brand";
 import { Motion, DecorationViewport, FadeArrival } from "./motion";
 import { useRoad } from "./context";
+import { SubmissionIcon, SlidingPill } from "./submission-navigation";
+import { pendingCases } from "./submission-model";
 export const C = {
   bg: "#FFFFFF",
   surface: "#F3F4F6",
@@ -51,7 +54,9 @@ export const go = (name: string) => {
       : 1;
   currentDestination = name;
   setStatusBarStyle(name === "recording" ? "light" : "dark", false);
-  router.replace((name === "home" ? "/" : `/${name}`) as never);
+  const path = (name === "home" ? "/" : `/${name}`) as never;
+  if (["home", "review", "impact"].includes(name)) router.navigate(path);
+  else router.push(path);
 };
 export function T({ style, ...p }: TextProps) {
   return (
@@ -145,9 +150,10 @@ export function Action({
               : secondary
                 ? C.bg
                 : pressed
-                  ? C.accent
+                  ? "#000000"
                   : C.ink,
             opacity: pressed ? 0.85 : 1,
+            transform: [{ scale: pressed && !reduced ? 0.97 : 1 }],
           },
         ]}
       >
@@ -177,12 +183,14 @@ export function Quiet({
   onPress,
   icon,
   compact = false,
+  disabled = false,
   onFocus,
 }: {
   title: string;
   onPress: () => void;
   icon?: keyof typeof icons;
   compact?: boolean;
+  disabled?: boolean;
   onFocus?: () => void;
 }) {
   return (
@@ -191,6 +199,8 @@ export function Quiet({
       accessibilityLabel={title}
       onPress={onPress}
       onFocus={onFocus}
+      disabled={disabled}
+      accessibilityState={{ disabled }}
       style={({ pressed }) => ({
         minHeight: 44,
         paddingHorizontal: 7,
@@ -198,7 +208,7 @@ export function Quiet({
         alignItems: "center",
         justifyContent: "center",
         gap: 7,
-        opacity: pressed ? 0.5 : 1,
+        opacity: disabled ? 0.3 : pressed ? 0.5 : 1,
       })}
     >
       {icon && <Icon name={icon} size={20} />}
@@ -274,10 +284,16 @@ export function Field({
   value,
   onChangeText,
   missing = false,
+  hint = true,
   multiline = false,
   textColor = C.ink,
   ...rest
-}: TextInputProps & { label: string; missing?: boolean; textColor?: string }) {
+}: TextInputProps & {
+  label: string;
+  missing?: boolean;
+  hint?: boolean;
+  textColor?: string;
+}) {
   const [height, setHeight] = useState(84);
   const [focused, setFocused] = useState(false);
   return (
@@ -324,7 +340,7 @@ export function Field({
           rest.onBlur?.(e);
         }}
       />
-      {missing && (
+      {missing && hint && (
         <T style={{ fontSize: 11, color: C.warning }}>
           I need this before I snitch.
         </T>
@@ -357,7 +373,10 @@ export function Page({
   footer,
   nav = true,
   centered = false,
-  animateContent = true,
+  animateContent = false,
+  headerLeft,
+  headerRight,
+  gap = 24,
   onScrollStart,
   onActionFocus,
 }: {
@@ -368,6 +387,9 @@ export function Page({
   nav?: boolean;
   centered?: boolean;
   animateContent?: boolean;
+  headerLeft?: React.ReactNode;
+  headerRight?: React.ReactNode;
+  gap?: number;
   onScrollStart?: () => void;
   onActionFocus?: () => void;
 }) {
@@ -391,41 +413,47 @@ export function Page({
             justifyContent: "space-between",
           }}
         >
-          {home ? (
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-            >
-              <BrandMark color={C.ink} />
-              <T style={{ fontWeight: "700", fontSize: 17 }}>Click-to-Safe</T>
-            </View>
-          ) : (
-            <Quiet
-              title="Back"
-              compact
-              icon="ChevronLeft"
-              onPress={() =>
-                go(
-                  path === "/work" || path === "/handoff"
-                    ? "review"
-                    : path === "/review"
-                      ? "impact"
-                      : "home",
-                )
-              }
-            />
-          )}
+          {headerLeft ??
+            (home ? (
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
+                <BrandMark color={C.ink} />
+                <T style={{ fontWeight: "700", fontSize: 17 }}>Click-to-Safe</T>
+              </View>
+            ) : path === "/impact" ? (
+              <View style={{ width: 44 }} />
+            ) : (
+              <Quiet
+                title="Back"
+                compact
+                icon="ChevronLeft"
+                onPress={() =>
+                  router.canGoBack()
+                    ? router.back()
+                    : go(
+                        path === "/work" || path === "/handoff"
+                          ? "review"
+                          : path === "/review"
+                            ? "impact"
+                            : "home",
+                      )
+                }
+              />
+            ))}
           {!home && <T style={{ fontWeight: "700", fontSize: 16 }}>{title}</T>}
-          {home ? (
-            <Quiet
-              onFocus={onActionFocus}
-              title="Settings"
-              compact
-              icon="Settings"
-              onPress={() => go("settings")}
-            />
-          ) : (
-            <View style={{ width: 44 }} />
-          )}
+          {headerRight ??
+            (home ? (
+              <Quiet
+                onFocus={onActionFocus}
+                title="Settings"
+                compact
+                icon="Settings"
+                onPress={() => go("settings")}
+              />
+            ) : (
+              <View style={{ width: 44 }} />
+            ))}
         </View>
       </FadeArrival>
       <KeyboardAvoidingView
@@ -454,7 +482,7 @@ export function Page({
                 direction={navigationDirection}
                 durationMs={animateContent ? undefined : 0}
               >
-                <View style={{ gap: 24 }}>
+                <View style={{ gap }}>
                   {rr.error && <Notice error>{rr.error}</Notice>}
                   {children}
                 </View>
@@ -494,7 +522,7 @@ export function Page({
               }}
             >
               <T style={{ fontSize: 12, fontWeight: "700" }}>
-                Report completed. Your draft is ready to review. →
+                I’ve documented the audacity. See the case →
               </T>
             </Pressable>
           </View>
@@ -589,35 +617,6 @@ function SentToast({ until, onUndo }: { until: number; onUndo: () => void }) {
     </View>
   );
 }
-function TabHighlight({ active }: { active: boolean }) {
-  const { reduced, foreground } = useRoad();
-  const value = useRef(new Animated.Value(active ? 1 : 0)).current;
-  React.useEffect(() => {
-    if (reduced || !foreground) {
-      value.setValue(active ? 1 : 0);
-      return;
-    }
-    const a = Animated.timing(value, {
-      toValue: active ? 1 : 0,
-      duration: 250,
-      useNativeDriver: true,
-    });
-    a.start();
-    return () => a.stop();
-  }, [active, reduced, foreground, value]);
-  return (
-    <Animated.View
-      style={{
-        position: "absolute",
-        width: 56,
-        height: 30,
-        borderRadius: 15,
-        backgroundColor: C.lilac,
-        transform: [{ scaleX: value }],
-      }}
-    />
-  );
-}
 export function Navigation({ onActionFocus }: { onActionFocus?: () => void }) {
   const path = usePathname(),
     rr = useRoad();
@@ -627,9 +626,9 @@ export function Navigation({ onActionFocus }: { onActionFocus?: () => void }) {
       : path.slice(1) === "impact"
         ? "history"
         : path.slice(1);
-  const pending = rr.cases.filter((c) =>
-    ["ready", "needs_info", "opened"].includes(c.reporting.status),
-  ).length;
+  const pending = pendingCases(rr.cases).length;
+  const { width } = useWindowDimensions();
+  const tabIndex = ["home", "review", "history"].indexOf(active);
   return (
     <SafeAreaView
       edges={["bottom"]}
@@ -640,6 +639,7 @@ export function Navigation({ onActionFocus }: { onActionFocus?: () => void }) {
       }}
     >
       <View style={{ height: 68, flexDirection: "row", paddingHorizontal: 14 }}>
+        <SlidingPill index={Math.max(0, tabIndex)} width={width} />
         {(["home", "review", "history"] as const).map((key, i) => (
           <Pressable
             key={key}
@@ -648,7 +648,11 @@ export function Navigation({ onActionFocus }: { onActionFocus?: () => void }) {
             accessibilityLabel={["Home", "Cases", "Impact"][i]}
             accessibilityState={{ selected: active === key }}
             onPress={() => {
-              if (active !== key) go(key === "history" ? "impact" : key);
+              if (active !== key) {
+                if (key === "review")
+                  rr.select(pendingCases(rr.cases)[0]?.id || "");
+                go(key === "history" ? "impact" : key);
+              }
             }}
             style={{
               flex: 1,
@@ -666,11 +670,7 @@ export function Navigation({ onActionFocus }: { onActionFocus?: () => void }) {
                 borderRadius: 18,
               }}
             >
-              <TabHighlight active={active === key} />
-              <Icon
-                name={(["House", "FileCheck2", "History"] as const)[i]}
-                color={active === key ? C.ink : C.muted}
-              />
+              <SubmissionIcon name={key} active={active === key} />
             </View>
             <T
               style={{

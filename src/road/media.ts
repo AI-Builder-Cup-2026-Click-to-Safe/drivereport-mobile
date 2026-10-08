@@ -1,4 +1,4 @@
-import fixtures from "./fixtures.json";
+import fixtures from "./submission-fixtures.json";
 import { normalizePlate, type RoadCase } from "./model";
 
 const frames: Record<string, number> = {

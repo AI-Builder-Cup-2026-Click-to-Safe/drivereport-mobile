@@ -22,6 +22,20 @@ import {
 import { Arrival, Count, Disclosure, ScanSweep, Spark } from "./standard-ui";
 import { ImpactBar } from "./motion";
 import {
+  RoadStat,
+  MeterBar,
+  PointsChip,
+  SampleOverlay,
+  CostCounter,
+} from "./submission-motion";
+import {
+  topOffender,
+  licenceRecord,
+  casePoints,
+  isSubmissionDemo,
+} from "./submission-model";
+import submissionFixtures from "./submission-fixtures.json";
+import {
   categories,
   duration,
   impact,
@@ -42,23 +56,35 @@ export function StandardHome() {
         <Arrival delay={80}>
           <Spark size={44} />
         </Arrival>
+        <RoadStat />
         <Arrival delay={170}>
           <T
             accessibilityRole="header"
             style={{
-              fontSize: width < 350 ? 38 : 46,
-              lineHeight: width < 350 ? 40 : 48,
+              fontSize: width < 350 ? 34 : 42,
+              lineHeight: width < 350 ? 36 : 44,
               fontWeight: "800",
               letterSpacing: -1.6,
             }}
           >
-            Spotted an asshole?
+            Spotted an asshole?{"\n"}
+            <T
+              style={{
+                fontSize: width < 350 ? 34 : 42,
+                lineHeight: width < 350 ? 36 : 44,
+                fontWeight: "800",
+                letterSpacing: -1.6,
+                color: C.accent,
+              }}
+            >
+              Let’s take their licence.
+            </T>
           </T>
         </Arrival>
         <Arrival delay={260}>
           <T style={{ fontSize: 18, lineHeight: 26, color: C.muted }}>
-            Show me the clip. Gemini finds the offence, reads the plate and
-            cites the law. You tap Send.
+            Gemini finds the offence, the law and the demerit points. You tap
+            Send. JPJ does the rest.
           </T>
         </Arrival>
         <Arrival delay={350}>
@@ -90,7 +116,7 @@ export function Clip() {
   const rr = useRoad(),
     store = useStore();
   const [chosen, setChosen] = useState("");
-  const [demo, setDemo] = useState(false);
+  const [demo, setDemo] = useState(true);
   const [busy, setBusy] = useState(false);
   const file = store.records.find((r) => r.id === chosen);
   const choose = async () => {
@@ -131,7 +157,8 @@ export function Clip() {
         throw Error(
           "Live legal analysis currently supports Malaysia. Change the region in Settings or use the demo clip.",
         );
-      await rr.setPrefs({ demo });
+      if (demo) await rr.seed();
+      else await rr.setPrefs({ demo: false });
       void rr.begin(demo ? [] : [chosen], demo).catch(showError);
       go("analysis");
     } catch (e) {
@@ -152,7 +179,6 @@ export function Clip() {
         />
       }
     >
-      <Intro title="Your clip" />
       {file || demo ? (
         <View style={{ gap: 12 }}>
           <View
@@ -191,11 +217,11 @@ export function Clip() {
             )}
           </View>
           <T style={{ fontSize: 17, fontWeight: "700" }}>
-            {demo ? "Kuala Lumpur · demo clip" : file!.name}
+            {demo ? "dashcam_kl_0842.mp4" : file!.name}
           </T>
           <T style={s.muted}>
             {demo
-              ? "Simulated analysis · no upload"
+              ? "00:24 · 2.8 MB · Kuala Lumpur · Daylight"
               : `${(file!.size / 1e6).toFixed(1)} MB · saved on this device`}
           </T>
         </View>
@@ -204,7 +230,7 @@ export function Clip() {
       )}
       <Action
         secondary
-        title={file || demo ? "Use a different clip" : "Choose a file"}
+        title={file || demo ? "Change video" : "Choose a file"}
         disabled={busy}
         icon="Upload"
         onPress={() => void choose()}
@@ -216,9 +242,23 @@ export function Clip() {
           setChosen("");
         }}
       />
-      <T style={s.muted}>
-        Small daylight clips, please. Gemini bills us. We are really poor.
-      </T>
+      <T style={s.section}>For the best result</T>
+      <View style={{ flexDirection: "row", gap: 12 }}>
+        <Icon name="Sun" />
+        <View style={{ flex: 1 }}>
+          <T style={{ fontWeight: "700" }}>Daylight footage</T>
+          <T style={s.muted}>Gemini has to read the plate.</T>
+        </View>
+      </View>
+      <View style={{ flexDirection: "row", gap: 12 }}>
+        <Icon name="Clock" />
+        <View style={{ flex: 1 }}>
+          <T style={{ fontWeight: "700" }}>Short clips, up to 300 MB</T>
+          <T style={s.muted}>
+            Gemini bills us by the second. We are really poor.
+          </T>
+        </View>
+      </View>
       {store.records.length > 0 && (
         <Disclosure
           title="Saved recordings"
@@ -262,9 +302,15 @@ export function StandardAnalysis() {
     );
   const done = j.status === "complete",
     running = j.status === "running";
-  const result = rr.allCases.find((c) => j.caseIds.includes(c.id));
+  const result =
+    rr.allCases.find((c) => j.caseIds.includes(c.id)) ||
+    (j.mode === "demo"
+      ? (submissionFixtures.allCases[0] as RoadCase)
+      : undefined);
   const file = store.records.find((r) => j.sourceIds.includes(r.id));
   const stage = done ? 4 : j.stage;
+  const awarded = result ? casePoints(result) : 0;
+  const prior = result ? licenceRecord(result) : null;
   const captions = [
     ["Uploading your clip", "Moving their audacity to the cloud."],
     [
@@ -279,10 +325,14 @@ export function StandardAnalysis() {
     [
       result && missing(result).length
         ? "One thing I couldn’t see"
-        : "Case ready",
+        : awarded
+          ? `+${awarded} demerit points.`
+          : "Case ready",
       result && missing(result).length
         ? "Check the case and fill in the missing details."
-        : "Nothing sent. I’m a snitch with boundaries.",
+        : prior && result
+          ? `${result.vehicle.plate} already has ${prior.points}. This could make it ${prior.points + awarded}: licence suspended.`
+          : "Nothing sent. I’m a snitch with boundaries.",
     ],
   ];
   const review = () => {
@@ -299,13 +349,14 @@ export function StandardAnalysis() {
     <Page
       title="Gemini at work"
       nav={false}
+      gap={10}
       footer={
         done ? (
           <Action
             title={
               result && missing(result).length
                 ? "Add missing details"
-                : "See the case"
+                : "Review the report"
             }
             onPress={review}
           />
@@ -319,7 +370,7 @@ export function StandardAnalysis() {
     >
       <View
         style={{
-          aspectRatio: 16 / 9,
+          aspectRatio: 2.05,
           backgroundColor: C.dark,
           borderRadius: 16,
           overflow: "hidden",
@@ -365,6 +416,15 @@ export function StandardAnalysis() {
             }}
           />
         )}
+        {j.mode === "demo" && stage >= 1 && (
+          <SampleOverlay
+            caption={
+              stage === 1
+                ? "The light turns red. A blue hatchback approaches the junction."
+                : "The hatchback crosses the stop line while the light is red."
+            }
+          />
+        )}
         {running && stage === 1 && <ScanSweep />}
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
@@ -372,16 +432,34 @@ export function StandardAnalysis() {
           {["Upload", "Watch", "Law", "Judge"].map((name, i) => (
             <View
               key={name}
-              accessible
-              accessibilityLabel={`${name}: ${done || i < stage ? "complete" : i === stage ? "working" : "awaiting result"}`}
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: 4,
-                backgroundColor:
-                  done || i < stage ? C.accent : i === stage ? C.ink : C.lilac,
-              }}
-            />
+              style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+            >
+              <View
+                key={name}
+                accessible
+                accessibilityLabel={`${name}: ${done || i < stage ? "complete" : i === stage ? "working" : "awaiting result"}`}
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  backgroundColor:
+                    done || i < stage
+                      ? C.accent
+                      : i === stage
+                        ? C.ink
+                        : C.lilac,
+                }}
+              />
+              <T
+                style={{
+                  fontSize: 11,
+                  fontWeight: "700",
+                  color: done || i < stage ? C.accent : C.muted,
+                }}
+              >
+                {name}
+              </T>
+            </View>
           ))}
         </View>
         <T style={s.muted}>
@@ -402,15 +480,15 @@ export function StandardAnalysis() {
               accessibilityRole="header"
               accessibilityLiveRegion="polite"
               style={{
-                fontSize: 27,
-                lineHeight: 31,
+                fontSize: 25,
+                lineHeight: 29,
                 fontWeight: "800",
                 letterSpacing: -0.6,
               }}
             >
               {running || done ? captions[stage][0] : "Analysis interrupted"}
             </T>
-            <T style={{ color: C.muted }}>
+            <T style={{ color: C.muted, fontSize: 14, lineHeight: 20 }}>
               {running || done
                 ? captions[stage][1]
                 : j.error || "Your recording is still saved."}
@@ -418,7 +496,7 @@ export function StandardAnalysis() {
           </View>
         </View>
       </Arrival>
-      {result && done && (
+      {result && (done || j.mode === "demo") && (
         <View
           style={{
             backgroundColor: C.surface,
@@ -426,48 +504,99 @@ export function StandardAnalysis() {
             overflow: "hidden",
           }}
         >
-          {result.offences.map((o, i) => (
-            <Arrival key={o.id} delay={i * 240} distance={10}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  gap: 10,
-                  alignItems: "center",
-                  padding: 14,
-                  borderBottomWidth: 1,
-                  borderColor: C.line,
-                }}
-              >
-                <Icon name="Check" size={18} color={C.accent} />
-                <T style={s.muted}>{duration(o.atSeconds)}</T>
-                <T style={{ color: C.accent, flex: 1, fontSize: 15 }}>
-                  {o.label}
-                </T>
-                <T
+          {(done || stage >= 1) && (
+            <FindingRow
+              label="Watched"
+              value={
+                j.mode === "demo"
+                  ? "24 frames · plate read"
+                  : "Recording reviewed"
+              }
+            />
+          )}
+          {(done || stage >= 2) &&
+            result.offences
+              .flatMap((o) => o.lawSources)
+              .slice(0, 1)
+              .map((law, i) => (
+                <FindingRow
+                  key={i}
+                  label="Law"
+                  value={[law.act || law.title, law.section]
+                    .filter(Boolean)
+                    .join(", ")}
+                />
+              ))}
+          {(done || stage >= 3) &&
+            result.offences.map((o, i) => (
+              <Arrival key={o.id} delay={i * 240}>
+                <View
                   style={{
-                    color: o.confidence >= 0.9 ? C.accent : C.warning,
-                    fontSize: 12,
+                    padding: 10,
+                    flexDirection: "row",
+                    gap: 8,
+                    alignItems: "center",
                   }}
                 >
-                  {o.confidence >= 0.9 ? "Clear" : "Unclear"}
-                </T>
-              </View>
-            </Arrival>
-          ))}
+                  <T style={s.muted}>{duration(o.atSeconds)}</T>
+                  <T
+                    style={{
+                      flex: 1,
+                      color: C.accent,
+                      fontWeight: "700",
+                      fontSize: 14,
+                    }}
+                  >
+                    {o.label}
+                  </T>
+                  <PointsChip
+                    points={o.demeritPoints ?? 0}
+                    delay={260 + i * 240}
+                  />
+                </View>
+              </Arrival>
+            ))}
+          {done && (
+            <FindingRow
+              label="Record"
+              value={
+                licenceRecord(result)
+                  ? `${result.vehicle.plate} · ${licenceRecord(result)!.points} pts on record`
+                  : "Licence lookup unavailable"
+              }
+            />
+          )}
         </View>
       )}
-      {done &&
-        result?.analysis?.timeline.map((line, i) => (
-          <Arrival key={i} delay={i * 90}>
-            <View style={{ flexDirection: "row", gap: 12 }}>
-              <T style={s.muted}>{duration(line.start_seconds)}</T>
-              <T style={{ flex: 1, color: C.accent }}>{line.event}</T>
-            </View>
-          </Arrival>
-        ))}
+      <View
+        style={{
+          borderWidth: 1.5,
+          borderStyle: "dashed",
+          borderColor: "#C9CDD4",
+          borderRadius: 16,
+          padding: 12,
+          flexDirection: "row",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <View>
+          <T style={{ fontSize: 13, fontWeight: "700" }}>Estimated AI cost</T>
+          <T style={s.muted}>
+            {j.mode === "demo"
+              ? "24 s sample · estimate"
+              : "Not supplied by the API"}
+          </T>
+        </View>
+        {j.mode === "demo" ? (
+          <CostCounter value={0.0012 * (done ? 1 : stage / 4)} />
+        ) : (
+          <T style={{ color: C.accent }}>—</T>
+        )}
+      </View>
       {j.mode === "demo" && (
         <T style={s.muted}>
-          Demo preview · upload, Gemini and law retrieval are simulated.
+          Sample analysis · simulated findings and licence record.
         </T>
       )}
       {!running && !done && (
@@ -505,45 +634,117 @@ export function StandardImpact() {
     (c) =>
       status === 0 || (status === 1 ? needs(c) : c.reporting.status === "sent"),
   );
-  const top =
-    data.recurring && data.recurring[1] > 1 ? data.recurring : undefined;
+  const top = topOffender(data.scoped);
+  const { width } = useWindowDimensions();
   return (
     <Page title="Impact">
       <Intro title="Your impact. Their problem." />
-      <View>
-        <Count value={data.sent} />
-        <T style={{ fontSize: 18, fontWeight: "600" }}>assholes snitched on</T>
+      <T style={s.muted}>I keep receipts. Karma loves paperwork.</T>
+      <View style={{ flexDirection: "row", gap: 10 }}>
+        {[
+          [data.sent, "Assholes reported"],
+          [data.billed, "Got billed"],
+        ].map(([value, label]) => (
+          <View
+            key={String(label)}
+            style={{
+              flex: 1,
+              minHeight: 150,
+              padding: 16,
+              backgroundColor: C.surface,
+              borderRadius: 16,
+              overflow: "hidden",
+            }}
+          >
+            <Count value={Number(value)} size={width < 350 ? 54 : 72} />
+            <T style={{ fontSize: 14, fontWeight: "700" }}>{label}</T>
+          </View>
+        ))}
       </View>
-      <T style={{ fontWeight: "700" }}>
-        {rr.prefs.demo
-          ? `${data.billed} got billed`
-          : "Authority response not tracked"}
-        <T style={s.muted}>{rr.prefs.demo ? " · demo outcome" : ""}</T>
-      </T>
-      <Pressable
-        accessibilityRole="button"
-        disabled={!top}
-        accessibilityLabel={
-          top ? `Filter cases for ${top[0]}` : "No repeat guests"
-        }
-        onPress={() => setPlate(plate ? "" : top![0])}
-        style={{
-          padding: 16,
-          borderRadius: 16,
-          borderWidth: 1,
-          borderColor: plate ? C.accent : C.line,
-          backgroundColor: C.surface,
-        }}
-      >
-        <T style={{ fontWeight: "700" }}>
-          {top ? `${top[0]} · Spotted ${top[1]} times.` : "No repeat guests."}
-        </T>
-        <T style={s.muted}>
-          {top
-            ? `Same car, same energy.${rr.prefs.demo ? " Demo sightings." : ""}`
-            : "I’m keeping an eye out."}
-        </T>
-      </Pressable>
+      <Arrival>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            top
+              ? `Filter cases for ${top.case.vehicle.plate}`
+              : "Top offender: nobody yet"
+          }
+          disabled={!top}
+          onPress={() =>
+            setPlate(plate ? "" : normalizePlate(top!.case.vehicle.plate))
+          }
+          style={{
+            padding: 16,
+            borderRadius: 16,
+            backgroundColor: C.ink,
+            gap: 14,
+            borderWidth: plate ? 3 : 0,
+            borderColor: C.accent,
+          }}
+        >
+          <View style={s.row}>
+            <T style={{ fontSize: 20, fontWeight: "800", color: "white" }}>
+              Top offender
+            </T>
+            {top && (
+              <T
+                style={{
+                  fontSize: 18,
+                  fontWeight: "800",
+                  color: C.ink,
+                  backgroundColor: "#F5F5F0",
+                  padding: 5,
+                  borderRadius: 6,
+                }}
+              >
+                {top.case.vehicle.plate}
+              </T>
+            )}
+          </View>
+          <T style={{ fontWeight: "800", color: top ? "#FF9B8F" : "#B6BAC2" }}>
+            {top
+              ? top.record + top.pending >= 20
+                ? "Your report could take their licence."
+                : `${20 - top.record - top.pending} more points and they’re taking the bus.`
+              : rr.prefs.demo
+                ? "Nobody yet. Report a red-light runner and they land here."
+                : "Licence records are not available yet."}
+          </T>
+          <MeterBar record={top?.record ?? 0} pending={top?.pending ?? 0} />
+          {top && (
+            <T style={{ color: "white", fontSize: 12 }}>
+              {top.record} on record · {top.pending} from your report
+              {isSubmissionDemo(top.case) ? " · demo" : ""}
+            </T>
+          )}
+        </Pressable>
+      </Arrival>
+      <T style={s.section}>By offence</T>
+      <Segments
+        items={["All time", "Last 7 days", "Today"]}
+        value={period}
+        onChange={setPeriod}
+      />
+      {categories.map(([code, name], i) => (
+        <Pressable
+          key={code}
+          accessibilityRole="button"
+          accessibilityLabel={`Filter ${name}`}
+          onPress={() => setOffence(offence === code ? "" : code)}
+          style={{ gap: 8 }}
+        >
+          <View style={s.row}>
+            <T style={{ fontSize: 14, flex: 1 }}>{name}</T>
+            <T>{data.counts[code]}</T>
+          </View>
+          <ImpactBar
+            index={i}
+            ratio={
+              data.counts[code] / Math.max(1, ...Object.values(data.counts))
+            }
+          />
+        </Pressable>
+      ))}
       <Segments
         items={[
           `All ${scoped.length}`,
@@ -565,66 +766,68 @@ export function StandardImpact() {
         />
       )}
       <View>
-        {list.map((c) => (
-          <Pressable
-            key={c.id}
-            accessibilityRole="button"
-            accessibilityLabel={`Open case ${c.vehicle.plate || c.id}`}
-            onPress={() => {
-              rr.select(c.id);
-              go("review");
-            }}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-              paddingVertical: 15,
-              borderBottomWidth: 1,
-              borderColor: C.line,
-            }}
-          >
-            <Image
-              source={
-                c.provenance.isDemo
-                  ? demoFrameFor(c)
-                  : c.evidence.thumbnailUrl
-                    ? { uri: c.evidence.thumbnailUrl }
-                    : undefined
-              }
-              style={{
-                width: 54,
-                height: 54,
-                borderRadius: 10,
-                backgroundColor: C.lilac,
+        {list.map((c, i) => (
+          <Arrival key={c.id} delay={Math.min(i * 55, 220)} distance={8}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Open case ${c.vehicle.plate || c.id}`}
+              onPress={() => {
+                rr.select(c.id);
+                go("review");
               }}
-            />
-            <View style={{ flex: 1, gap: 4 }}>
-              <T style={{ fontWeight: "700" }}>
-                {c.vehicle.plate ||
-                  (c.offences.length
-                    ? "Plate unreadable"
-                    : "Suspiciously civil")}
-              </T>
-              <T style={s.muted}>
-                {c.offences.length} offence{c.offences.length === 1 ? "" : "s"}{" "}
-                · {c.incident.date || "Date unknown"}
-              </T>
-            </View>
-            <T
               style={{
-                fontSize: 12,
-                fontWeight: "700",
-                color:
-                  c.reporting.status === "sent"
-                    ? "#15803D"
-                    : c.reporting.status === "needs_info"
-                      ? C.warning
-                      : C.ink,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+                paddingVertical: 15,
+                borderBottomWidth: 1,
+                borderColor: C.line,
               }}
             >
-              {labels[c.reporting.status]}
-            </T>
-          </Pressable>
+              <Image
+                source={
+                  c.provenance.isDemo
+                    ? demoFrameFor(c)
+                    : c.evidence.thumbnailUrl
+                      ? { uri: c.evidence.thumbnailUrl }
+                      : undefined
+                }
+                style={{
+                  width: 54,
+                  height: 54,
+                  borderRadius: 10,
+                  backgroundColor: C.lilac,
+                }}
+              />
+              <View style={{ flex: 1, gap: 4 }}>
+                <T style={{ fontWeight: "700" }}>
+                  {c.vehicle.plate ||
+                    (c.offences.length
+                      ? "Plate unreadable"
+                      : "Suspiciously civil")}
+                </T>
+                <T style={s.muted}>
+                  {c.offences.length} offence
+                  {c.offences.length === 1 ? "" : "s"} ·{" "}
+                  {c.incident.date || "Date unknown"}
+                </T>
+              </View>
+              <T
+                style={{
+                  fontSize: 12,
+                  fontWeight: "700",
+                  color:
+                    c.reporting.status === "sent"
+                      ? "#15803D"
+                      : c.reporting.status === "needs_info"
+                        ? C.warning
+                        : C.ink,
+                }}
+              >
+                {labels[c.reporting.status]}
+              </T>
+            </Pressable>
+          </Arrival>
         ))}
         {!list.length && (
           <T style={{ color: C.muted }}>
@@ -635,36 +838,6 @@ export function StandardImpact() {
       <T style={s.muted}>
         {rr.prefs.demo ? "Demo cases. " : ""}“Sent” means you confirmed sending.
       </T>
-      <Disclosure
-        title="By offence"
-        note={["All time", "Last 7 days", "Today"][period]}
-      >
-        <Segments
-          items={["All time", "Last 7 days", "Today"]}
-          value={period}
-          onChange={setPeriod}
-        />
-        {categories.map(([code, name], i) => (
-          <Pressable
-            key={code}
-            accessibilityRole="button"
-            accessibilityLabel={`Filter ${name}`}
-            onPress={() => setOffence(offence === code ? "" : code)}
-            style={{ gap: 8, paddingVertical: 8 }}
-          >
-            <View style={s.row}>
-              <T>{name}</T>
-              <T>{data.counts[code]}</T>
-            </View>
-            <ImpactBar
-              index={i}
-              ratio={
-                data.counts[code] / Math.max(1, ...Object.values(data.counts))
-              }
-            />
-          </Pressable>
-        ))}
-      </Disclosure>
     </Page>
   );
 }
@@ -675,7 +848,7 @@ export function Work() {
   const c = rr.cases.find((c) => c.id === rr.selected) || rr.cases[0];
   if (!c)
     return (
-      <Page title="Gemini’s work" nav={false}>
+      <Page title="How Gemini decided" nav={false}>
         <Intro title="I need a case first." />
         <Action title="Analyse a clip" onPress={() => go("clip")} />
       </Page>
@@ -696,9 +869,9 @@ export function Work() {
         }))
       : []);
   return (
-    <Page title="Gemini’s work" nav={false}>
+    <Page title="How Gemini decided" nav={false}>
       <Intro
-        title="Gemini’s work"
+        title="How Gemini decided"
         body={`What the model saw, found and cited for ${c.id}.`}
       />
       {c.provenance.isDemo && (
@@ -756,8 +929,31 @@ export function Work() {
           details are available on the Case screen.
         </T>
       )}
+      {isSubmissionDemo(c) && (
+        <View
+          style={{
+            backgroundColor: C.surface,
+            borderRadius: 16,
+            padding: 16,
+            gap: 10,
+          }}
+        >
+          <T style={s.section}>Sample run estimate</T>
+          <View style={s.row}>
+            <T>24-second clip</T>
+            <CostCounter value={0.0012} />
+          </View>
+          <T style={s.muted}>
+            30-min drive: US$0.09 · A month of driving: US$6.51
+          </T>
+          <T style={s.muted}>
+            Design reference estimates, not measured billing for this demo.
+          </T>
+        </View>
+      )}
       <T style={s.muted}>
-        Timing, token usage and frame counts are not supplied by this API.
+        The API does not return its model ID, timing, token usage or frame
+        counts.
       </T>
       {(original || storedResult) && (
         <Disclosure title="What Gemini returned" note="Structured JSON">
@@ -767,5 +963,29 @@ export function Work() {
         </Disclosure>
       )}
     </Page>
+  );
+}
+
+function FindingRow({ label, value }: { label: string; value: string }) {
+  return (
+    <Arrival distance={8}>
+      <View
+        style={{
+          padding: 10,
+          flexDirection: "row",
+          gap: 8,
+          borderBottomWidth: 1,
+          borderColor: C.line,
+        }}
+      >
+        <Icon name="Check" color={C.accent} size={16} />
+        <T style={[s.muted, { width: 58 }]}>{label}</T>
+        <T
+          style={{ color: C.accent, fontSize: 14, flex: 1, fontWeight: "600" }}
+        >
+          {value}
+        </T>
+      </View>
+    </Arrival>
   );
 }

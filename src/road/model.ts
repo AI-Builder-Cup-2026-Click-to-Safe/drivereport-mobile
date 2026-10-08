@@ -9,7 +9,13 @@ export type Offence = {
   confidence: number;
   included: boolean;
   reasoning?: string;
-  lawSources: { title?: string; url?: string; section?: string }[];
+  demeritPoints?: number;
+  lawSources: {
+    act?: string;
+    title?: string;
+    url?: string;
+    section?: string;
+  }[];
 };
 export type RoadCase = {
   id: string;
@@ -64,10 +70,10 @@ export type Preferences = {
   testMessage?: string;
 };
 export const categories = [
-  ["red_light", "Red light"],
-  ["queue_cut", "Queue cutting"],
-  ["road_rage", "Road rage"],
-  ["counter_flow", "Counter traffic flow"],
+  ["red_light", "Ran a red light"],
+  ["double_line", "Overtook across double lines"],
+  ["wrong_way", "Drove against traffic"],
+  ["dangerous", "Reckless and dangerous driving"],
 ] as const;
 export const regionNames = { MY: "Malaysia", SG: "Singapore", JP: "Japan" };
 export const labels: Record<Status, string> = {
@@ -189,7 +195,7 @@ export function reportText(c: RoadCase, p: Preferences) {
     .join("\n");
 }
 export function whatsapp(c: RoadCase, p: Preferences) {
-  return `https://wa.me/${recipient(p, c)}?text=${encodeURIComponent(reportText(c, p))}`;
+  return `https://wa.me/${c.provenance.factsSource === "submission_fixture_v1" && c.provenance.isDemo ? "" : recipient(p, c)}?text=${encodeURIComponent(reportText(c, p))}`;
 }
 export const defaultWhatsAppTestMessage = [
   "DEMO — TRAFFIC REPORT TEST",

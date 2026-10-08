@@ -1,6 +1,6 @@
 # Click-to-Safe Mobile
 
-A native React Native / Expo app using the **Standard** variant from the [Road Receipts handover](https://github.com/whyteaz/road-receipts-handover/tree/25f5108/variants/standard). It uses the supplied Manrope typography, white surfaces, Gemini Blue, pill actions, and native Standard motion. See [the implementation notes](design/STANDARD.md) for provenance and integration boundaries.
+A native React Native / Expo app using the **Hackathon Submission** variant from the [Road Receipts handover](https://github.com/whyteaz/road-receipts-handover/tree/9b9f293/variants/hackathon-submission). It uses the supplied Manrope typography, white surfaces, Gemini Blue, pill actions, and native motion. See [the implementation notes](design/SUBMISSION_SYNC.md) for provenance and integration boundaries.
 
 This repository contains the mobile client. It connects to the existing [GCP review backend](https://github.com/Lorem-Ipsum-AI-Builder-Cup-2026/prototype); no backend deployment is needed for this UI rebuild.
 
@@ -46,11 +46,11 @@ The judging build explicitly embeds the existing test API token from the product
 
 ## App flow
 
-- **Home:** “Spotted an asshole?” with staggered entrances, an Analyse a clip action, and a secondary recording action. The clip tray accepts a file, saved recording or explicit synthetic demo. The black recording screen retains its elapsed clock and End recording action.
-- **Analysis:** Standard footage, four stage indicators (Upload, Watch, Law, Judge), rotating Gemini spark, scan sweep, caption transitions and arriving findings. Demo stages are simulated and labelled. Live mode shows actual upload progress, then waits for the server's single review response without inventing agent progress.
-- **Cases:** play original footage, seek to findings, include/exclude offences, expand reasoning and citations, and edit missing facts. Location and description remain visible; All details contains plate, vehicle, date/time and optional model. Gemini’s work preserves the original response separately from user changes.
-- **WhatsApp:** open a live draft for the case's jurisdiction; synthetic demos require a separate test number in Settings → Developer. Attach the original video separately. Opening WhatsApp does not mark a report sent. The user confirms sending, with an eight-second Undo and a lasting “Mark as not sent” action.
-- **Impact:** filter by date, offence, plate and local reporting status. Sent and fine counters count distinct known plates independently. Live authority outcomes remain unknown because the server does not provide them.
+- **Home:** “Spotted an asshole? Let’s take their licence.” with rolling JAPAC road statistics and staggered entrances, an Analyse a clip action, and a secondary recording action. The clip tray preloads the synthetic sample and accepts a file or saved recording for real analysis. The black recording screen retains its elapsed clock and End recording action.
+- **Analysis:** footage, four stage indicators (Upload, Watch, Law, Judge), rotating Gemini spark, scan sweep, caption transitions, arriving findings, stamped points and a sample cost counter. Demo stages are simulated and labelled. Live mode shows actual upload progress, then waits for the server's single review response without inventing agent progress.
+- **Cases:** page through pending cases, play original footage, seek to findings, include/exclude offences, read citations and fill missing facts. Other facts are under Edit details. How Gemini decided preserves the original response separately from user changes.
+- **WhatsApp:** open a live draft for the case's jurisdiction; the new submission samples open a recipientless chat picker so the tester chooses their own chat. The separate editable Test WhatsApp utility retains the configured test number. Attach the original video separately. Opening WhatsApp does not mark a report sent. The user confirms sending, sees a printing receipt and Reported stamp, then taps See your impact to start the eight-second Undo window. A lasting “Mark as not sent” action remains available.
+- **Impact:** filter by date, offence, plate and local reporting status. Sent and fine counters count distinct known plates independently. The sample licence meter distinguishes prior records from potential points on sent reports. Live authority outcomes and licence records remain unknown because the server does not provide them.
 - **Developer:** available from Settings, with test recipient, API connection, retained-clip retry and synthetic demo controls. The main navigation is Home / Cases / Impact.
 - **Settings:** jurisdiction-specific recipients, optional reporter details, locale and reduced motion. Profile details are opt-in for WhatsApp and are never sent to the analysis API.
 
@@ -97,7 +97,7 @@ Wait for the final result, open Review, and check that the original footage and 
 
 ## Motion implementation
 
-Most UI is native React Native. Tab icons interpolate the supplied SVG matched-point geometry over 420 ms; pages, case switches and analysis rows use native-driver transitions. Home has a 3.2-second breathing treatment. Reduced motion respects both the app preference and the system setting.
+Most UI is native React Native. Tab icons interpolate the new supplied 72-point SVG geometry over 540 ms, accompanied by a stretching active pill. Deeper routes slide over the previous screen; tabs fade. Home digits roll and country names wipe every 3.4 seconds; receipts reveal over 900 ms, points/Reported stamps land over 460 ms, and the licence meter fills over 900 ms. Case switches and analysis rows use native-driver transitions. Reduced motion respects both the app preference and the system setting.
 
 Only the 230-point Living intelligence illustration uses a local WebView, to retain the authored Canvas renderer exactly: a bounded 72-particle field, at most 96 connections, a steady Gemini mark, and a settling receipt/check composition. Fonts, image, CSS and JavaScript are embedded locally; the view blocks external navigation and has a restrictive content security policy. Motion pauses outside the measured scroll viewport, in the background and in reduced-motion mode, and the illustration is destroyed when leaving the screen.
 
