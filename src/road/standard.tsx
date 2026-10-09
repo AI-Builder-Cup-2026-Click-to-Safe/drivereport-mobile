@@ -34,6 +34,7 @@ import {
   Spark,
 } from "./standard-ui";
 import { shortDate } from "./format";
+import { SAMPLE_VIDEO, useSamplePreview } from "../lib/sample";
 import { FadeArrival, ImpactBar } from "./motion";
 import {
   RoadStat,
@@ -139,10 +140,16 @@ export function StandardHome() {
 export function Clip() {
   const rr = useRoad(),
     store = useStore();
+  const sample = useSamplePreview();
+  // Empty means the bundled sample. Every clip is uploaded and reviewed for real.
   const [chosen, setChosen] = useState("");
-  const [demo, setDemo] = useState(true);
   const [busy, setBusy] = useState(false);
   const file = store.records.find((r) => r.id === chosen);
+  const saved = store.records.filter(
+    (r) => r.name !== SAMPLE_VIDEO.name || r.dashcamSession,
+  );
+  const thumbnail = file ? file.thumbnail : sample?.thumbnail;
+  const size = file ? file.size : sample?.size;
   const choose = async () => {
     setBusy(true);
     try {
@@ -163,7 +170,6 @@ export function Clip() {
           "Choose a playable MP4, MOV or WebM between 1 byte and 300 MB.",
         );
       setChosen(await store.importVideo(f.uri, f.name, f.mimeType));
-      setDemo(false);
     } catch (e) {
       showError(e);
     } finally {
@@ -173,17 +179,27 @@ export function Clip() {
   const start = async () => {
     setBusy(true);
     try {
-      if (!demo && !store.settings.token)
+      if (!store.settings.token)
         throw Error(
           "Add your API access token in Settings → Developer before analysing.",
         );
-      if (!demo && rr.prefs.region !== "MY")
+      if (rr.prefs.region !== "MY")
         throw Error(
-          "Live legal analysis currently supports Malaysia. Change the region in Settings or use the demo clip.",
+          "Live legal analysis currently supports Malaysia. Change the region in Settings.",
         );
-      if (demo) await rr.seed();
-      else await rr.setPrefs({ demo: false });
-      void rr.begin(demo ? [] : [chosen], demo).catch(showError);
+      let id = file?.id;
+      if (!id) {
+        id = await store.importSample();
+        // Analysing a sample that was already reported starts a new review instead of reopening it.
+        const earlier = rr.allCases.filter((c) => c.sourceId === id);
+        if (
+          earlier.length &&
+          earlier.every((c) => c.reporting.status === "sent")
+        )
+          id = await store.importSample({ fresh: true });
+      }
+      await rr.setPrefs({ demo: false });
+      void rr.begin([id]).catch(showError);
       go("analysis");
     } catch (e) {
       showError(e);
@@ -199,103 +215,91 @@ export function Clip() {
         <Action
           title="Analyse with Gemini"
           leading={<Spark size={18} />}
-          disabled={(!file && !demo) || busy || rr.job?.status === "running"}
+          disabled={busy || rr.job?.status === "running"}
           onPress={() => void start()}
         />
       }
     >
-      {file || demo ? (
-        <View style={{ gap: 14 }}>
-          <View
-            style={{
-              aspectRatio: 16 / 9,
-              backgroundColor: C.dark,
-              borderRadius: 16,
-              overflow: "hidden",
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-          >
-            {demo || file?.thumbnail ? (
-              <Image
-                source={demo ? demoFrame : { uri: file!.thumbnail }}
-                style={{ width: "100%", height: "100%" }}
-              />
-            ) : (
-              <Icon name="Video" color="white" size={44} />
-            )}
-            {demo && <FrameBadge>Synthetic demo · 00:24</FrameBadge>}
-          </View>
-          {/* One row: the file on the left, Change video on the right (it wraps under on narrow screens). */}
-          <View
-            style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
-              alignItems: "center",
-              gap: 12,
-            }}
-          >
-            <View style={{ flex: 1, minWidth: 180, gap: 2 }}>
-              <T
-                numberOfLines={1}
-                style={{ fontSize: 18, lineHeight: 24, fontWeight: "800" }}
-              >
-                {demo ? "dashcam_kl_0842.mp4" : file!.name}
-              </T>
-              <T style={clipMeta}>
-                {demo
-                  ? "00:24 · 2.8 MB"
-                  : `${(file!.size / 1e6).toFixed(1)} MB`}
-              </T>
-              <T style={clipMeta}>
-                {demo ? "Kuala Lumpur · Daylight" : "Saved on this device"}
-              </T>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Change video"
-              accessibilityState={{ disabled: busy }}
-              disabled={busy}
-              onPress={() => void choose()}
-              style={({ pressed }) => ({
-                minHeight: 44,
-                paddingLeft: 12,
-                paddingRight: 14,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 6,
-                borderWidth: 1.5,
-                borderColor: C.line,
-                borderRadius: 999,
-                backgroundColor: pressed ? C.surface : C.bg,
-                opacity: busy ? 0.4 : 1,
-              })}
-            >
-              <Icon name="Upload" size={16} />
-              <T style={{ fontSize: 14, fontWeight: "700" }}>Change video</T>
-            </Pressable>
-          </View>
-        </View>
-      ) : (
-        <>
-          <T style={{ color: C.muted }}>No clip yet.</T>
-          <Action
-            secondary
-            title="Choose a file"
-            disabled={busy}
-            icon="Upload"
-            onPress={() => void choose()}
-          />
-        </>
-      )}
-      {!demo && (
-        <Quiet
-          title="Use the demo clip"
-          onPress={() => {
-            setDemo(true);
-            setChosen("");
+      <View style={{ gap: 14 }}>
+        <View
+          style={{
+            aspectRatio: 16 / 9,
+            backgroundColor: C.dark,
+            borderRadius: 16,
+            overflow: "hidden",
+            justifyContent: "center",
+            alignItems: "center",
           }}
-        />
+        >
+          {thumbnail ? (
+            <Image
+              source={{ uri: thumbnail }}
+              style={{ width: "100%", height: "100%" }}
+            />
+          ) : (
+            <Icon name="Video" color="white" size={44} />
+          )}
+          {!file && (
+            <FrameBadge>
+              {`Sample clip · ${duration(SAMPLE_VIDEO.durationSeconds)}`}
+            </FrameBadge>
+          )}
+        </View>
+        {/* One row: the file on the left, Change video on the right (it wraps under on narrow screens). */}
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <View style={{ flex: 1, minWidth: 180, gap: 2 }}>
+            <T
+              numberOfLines={1}
+              style={{ fontSize: 18, lineHeight: 24, fontWeight: "800" }}
+            >
+              {file ? file.name : SAMPLE_VIDEO.name}
+            </T>
+            <T style={clipMeta}>
+              {[
+                file ? "" : duration(SAMPLE_VIDEO.durationSeconds),
+                size ? `${(size / 1e6).toFixed(1)} MB` : "",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </T>
+            <T style={clipMeta}>
+              {file ? "Saved on this device" : "Real dashcam footage"}
+            </T>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Change video"
+            accessibilityState={{ disabled: busy }}
+            disabled={busy}
+            onPress={() => void choose()}
+            style={({ pressed }) => ({
+              minHeight: 44,
+              paddingLeft: 12,
+              paddingRight: 14,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              borderWidth: 1.5,
+              borderColor: C.line,
+              borderRadius: 999,
+              backgroundColor: pressed ? C.surface : C.bg,
+              opacity: busy ? 0.4 : 1,
+            })}
+          >
+            <Icon name="Upload" size={16} />
+            <T style={{ fontSize: 14, fontWeight: "700" }}>Change video</T>
+          </Pressable>
+        </View>
+      </View>
+      {file && (
+        <Quiet title="Use the sample clip" onPress={() => setChosen("")} />
       )}
       <View>
         <T style={[s.section, { fontSize: 15, marginBottom: 6 }]}>
@@ -344,20 +348,14 @@ export function Clip() {
           </View>
         ))}
       </View>
-      {store.records.length > 0 && (
-        <Disclosure
-          title="Saved recordings"
-          note={String(store.records.length)}
-        >
-          {store.records.map((r) => (
+      {saved.length > 0 && (
+        <Disclosure title="Saved recordings" note={String(saved.length)}>
+          {saved.map((r) => (
             <Pressable
               key={r.id}
               accessibilityRole="button"
               accessibilityLabel={`Select ${r.name}`}
-              onPress={() => {
-                setChosen(r.id);
-                setDemo(false);
-              }}
+              onPress={() => setChosen(r.id)}
               style={{
                 paddingVertical: 12,
                 borderBottomWidth: 1,
@@ -525,7 +523,11 @@ export function StandardAnalysis() {
             ? "Synthetic demo"
             : saving
               ? "Saving on this device"
-              : "Your recording"}
+              : file?.dashcamSession
+                ? "Your recording"
+                : file?.name === SAMPLE_VIDEO.name
+                  ? "Sample clip"
+                  : "Your clip"}
         </FrameBadge>
         {stage === 0 && j.progress !== null && (
           <View

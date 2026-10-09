@@ -225,12 +225,12 @@ export function Developer() {
       />
       {__DEV__ && (
         <Quiet
-          title="Load 12-second test video"
+          title="Load sample video"
           onPress={() => {
             if (busy || rr.job?.status === "running") return;
             setBusy(true);
             void store
-              .importSample()
+              .importSample({ fresh: true })
               .then((id) => {
                 setChosen(id);
                 setMessage(

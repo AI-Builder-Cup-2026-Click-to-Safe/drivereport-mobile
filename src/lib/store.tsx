@@ -9,7 +9,6 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import * as FS from "expo-file-system/legacy";
 import * as Thumbnails from "expo-video-thumbnails";
-import { Asset } from "expo-asset";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import {
   analyseVideo,
@@ -28,6 +27,7 @@ import {
   type Review,
   type ImpactSummary,
 } from "./domain";
+import { SAMPLE_VIDEO, sampleVideoUri } from "./sample";
 
 const RECORDS = "drivereport.records.v1";
 const SETTINGS = "drivereport.settings.v1";
@@ -47,8 +47,9 @@ type Context = {
     name: string,
     mime?: string,
     capture?: { dashcamSession: string; createdAt: string; protected: boolean },
+    thumbnailAtMs?: number,
   ) => Promise<string>;
-  importSample: () => Promise<string>;
+  importSample: (options?: { fresh?: boolean }) => Promise<string>;
   analyse: (
     id: string,
     region?: "MY" | "SG" | "JP",
@@ -154,6 +155,7 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
     name: string,
     suppliedMime?: string,
     capture?: { dashcamSession: string; createdAt: string; protected: boolean },
+    thumbnailAtMs = 0,
   ) => {
     if (error) throw new Error(error);
     const suffix = name.toLowerCase().split(".").pop();
@@ -191,7 +193,9 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
     await FS.copyAsync({ from: uri, to: file });
     let thumbnail: string | undefined;
     try {
-      const t = await Thumbnails.getThumbnailAsync(file, { time: 0 });
+      const t = await Thumbnails.getThumbnailAsync(file, {
+        time: thumbnailAtMs,
+      });
       thumbnail = `${root}${id}.jpg`;
       await FS.copyAsync({ from: t.uri, to: thumbnail });
     } catch {
@@ -216,13 +220,19 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
     ]);
     return id;
   };
-  const importSample = async () => {
-    const asset = Asset.fromModule(require("../../assets/sample-drive.mp4"));
-    await asset.downloadAsync();
+  const importSample = async ({ fresh = false } = {}) => {
+    // Reuse the copy from an earlier run so its upload and review can be reused too.
+    const existing = recordsRef.current.find(
+      (i) => i.name === SAMPLE_VIDEO.name && !i.dashcamSession,
+    );
+    if (!fresh && existing && (await FS.getInfoAsync(existing.file)).exists)
+      return existing.id;
     return importVideo(
-      asset.localUri ?? asset.uri,
-      "Sample dashcam · 12 seconds.mp4",
+      await sampleVideoUri(),
+      SAMPLE_VIDEO.name,
       "video/mp4",
+      undefined,
+      SAMPLE_VIDEO.posterMs,
     );
   };
   const analyse = async (id: string, region: "MY" | "SG" | "JP" = "MY") => {
