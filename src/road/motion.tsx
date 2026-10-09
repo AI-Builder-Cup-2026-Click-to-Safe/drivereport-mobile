@@ -388,7 +388,15 @@ export function FadeArrival({
   );
 }
 
-export function ImpactBar({ ratio, index }: { ratio: number; index: number }) {
+export function ImpactBar({
+  ratio,
+  index,
+  selected = false,
+}: {
+  ratio: number;
+  index: number;
+  selected?: boolean;
+}) {
   const { reduced, foreground } = useRoad();
   const v = useRef(new Animated.Value(reduced ? ratio : 0)).current;
   useEffect(() => {
@@ -408,11 +416,19 @@ export function ImpactBar({ ratio, index }: { ratio: number; index: number }) {
     return () => animation.stop();
   }, [ratio, index, reduced, foreground, v]);
   return (
-    <View style={{ height: 4, backgroundColor: "#E3E5E9", overflow: "hidden" }}>
+    <View
+      style={{
+        height: 8,
+        borderRadius: 999,
+        backgroundColor: "#F3F4F6",
+        overflow: "hidden",
+      }}
+    >
       <Animated.View
         style={{
-          height: 4,
-          backgroundColor: "#1A56DB",
+          height: 8,
+          borderRadius: 999,
+          backgroundColor: selected ? "#1A56DB" : "#111318",
           transformOrigin: "left center",
           transform: [{ scaleX: v }],
         }}

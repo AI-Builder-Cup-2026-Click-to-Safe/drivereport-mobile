@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Linking, Pressable, Switch, View } from "react-native";
+import { Linking, Pressable, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import * as FS from "expo-file-system/legacy";
 import { useStore } from "../lib/store";
@@ -18,6 +18,7 @@ import {
   Quiet,
   Segments,
   T,
+  Toggle,
   go,
   showError,
   focusControl,
@@ -306,7 +307,7 @@ export function Developer() {
           <T style={{ fontWeight: "700" }}>Demo dataset</T>
           <T style={s.muted}>Synthetic cases · no Gemini bill</T>
         </View>
-        <Switch
+        <Toggle
           accessibilityLabel="Demo dataset"
           value={rr.prefs.demo}
           onValueChange={(v) =>
@@ -504,7 +505,7 @@ export function Settings() {
             ))}
             <View style={s.row}>
               <T style={{ flex: 1 }}>Add your details to report drafts</T>
-              <Switch
+              <Toggle
                 accessibilityLabel="Add your details to report drafts"
                 value={personal.includePersonal}
                 onValueChange={(v) =>
@@ -544,7 +545,7 @@ export function Settings() {
       <View style={s.row}>
         <Icon name="Eye" />
         <T style={{ flex: 1, fontWeight: "600" }}>Reduce motion</T>
-        <Switch
+        <Toggle
           accessibilityLabel="Reduce motion"
           value={p.reduced}
           onValueChange={(v) => save({ reduced: v })}

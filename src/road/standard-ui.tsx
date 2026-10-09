@@ -147,13 +147,15 @@ export function Plate({
   value: string | null;
   source?: "ai" | "you";
 }) {
+  // An unread plate stays quiet (Hover Hairline, no source ring) so the ask card is the only place that asks.
+  const ring = value ? source : undefined;
   return (
     <View
       style={{
-        borderWidth: source ? 2 : 0,
-        borderColor: source === "ai" ? C.accent : C.ink,
+        borderWidth: ring ? 2 : 0,
+        borderColor: ring === "ai" ? C.accent : C.ink,
         borderRadius: 10,
-        padding: source ? 3 : 0,
+        padding: ring ? 3 : 0,
         alignSelf: "flex-start",
       }}
     >
@@ -162,15 +164,48 @@ export function Plate({
           backgroundColor: value ? C.ink : "transparent",
           color: value ? "#F5F5F0" : C.muted,
           borderRadius: 7,
+          borderWidth: value ? 0 : 1.5,
+          borderColor: "#C9CDD4",
           overflow: "hidden",
-          paddingHorizontal: 11,
-          paddingVertical: 7,
+          paddingHorizontal: value ? 11 : 12,
+          paddingVertical: value ? 7 : 8,
           fontSize: value ? 20 : 15,
+          lineHeight: value ? 22 : 19,
           fontWeight: "800",
-          letterSpacing: 1.2,
+          letterSpacing: value ? 1.2 : 0.6,
         }}
       >
         {value || "Unreadable"}
+      </T>
+    </View>
+  );
+}
+
+/** The label on demo footage: one size and shape on Your clip, Gemini at work and Case. */
+export function FrameBadge({ children }: { children: string }) {
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        top: 10,
+        left: 10,
+        paddingHorizontal: 9,
+        paddingVertical: 4,
+        borderRadius: 999,
+        backgroundColor: "#111318B8",
+      }}
+    >
+      <T
+        style={{
+          fontSize: 12,
+          lineHeight: 16,
+          fontWeight: "600",
+          color: "white",
+          fontVariant: ["tabular-nums"],
+        }}
+      >
+        {children}
       </T>
     </View>
   );

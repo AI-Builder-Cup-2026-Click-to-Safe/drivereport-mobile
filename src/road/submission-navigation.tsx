@@ -63,39 +63,44 @@ export function SubmissionIcon({
       fill="none"
     >
       <Path d={outline} fill={color} fillOpacity={mix} />
-      <G opacity={1 - mix}>
-        {name === "home" ? (
-          <>
-            <Path d="m9.8 8.5-1.4 7.4m5.8-7.4 1.4 7.4" />
-            <Path d="M12 9v1.7m0 2.6V15" />
-          </>
-        ) : name === "review" ? (
-          <>
-            <Path d="M15 2v4a1 1 0 0 0 1 1h4" />
-            <Path d="M8 13h8M8 17h5" />
-          </>
-        ) : (
-          <Path d="M12 7v5l3 2" />
-        )}
-      </G>
-      <G opacity={mix} stroke="#E9EBEF" fill="#E9EBEF">
-        {name === "home" ? (
-          <Path
-            stroke="none"
-            d="M9.6 22v-7.4a1 1 0 0 1 1-1h2.8a1 1 0 0 1 1 1V22Z"
-          />
-        ) : name === "review" ? (
-          <Path strokeWidth={1.9} d="M8.5 7h7M8.5 10.5h7M8.5 14h4" />
-        ) : (
-          <>
-            <G rotation={-110 * (1 - mix)} origin="12,14">
-              <Path strokeWidth={2} d="m12 14 4.6-4.6" />
-              <Circle cx={12} cy={14} r={2.1} stroke="none" />
-            </G>
-            <Path d="M6.2 14H7.6M16.4 14h1.4M12 7.2v1.4" />
-          </>
-        )}
-      </G>
+      {/* At rest, unmount the hidden detail set: some iOS runtimes ignore a zero group opacity. */}
+      {mix < 1 && (
+        <G opacity={1 - mix}>
+          {name === "home" ? (
+            <>
+              <Path d="m9.8 8.5-1.4 7.4m5.8-7.4 1.4 7.4" />
+              <Path d="M12 9v1.7m0 2.6V15" />
+            </>
+          ) : name === "review" ? (
+            <>
+              <Path d="M15 2v4a1 1 0 0 0 1 1h4" />
+              <Path d="M8 13h8M8 17h5" />
+            </>
+          ) : (
+            <Path d="M12 7v5l3 2" />
+          )}
+        </G>
+      )}
+      {mix > 0 && (
+        <G opacity={mix} stroke="#E9EBEF" fill="#E9EBEF">
+          {name === "home" ? (
+            <Path
+              stroke="none"
+              d="M9.6 22v-7.4a1 1 0 0 1 1-1h2.8a1 1 0 0 1 1 1V22Z"
+            />
+          ) : name === "review" ? (
+            <Path strokeWidth={1.9} d="M8.5 7h7M8.5 10.5h7M8.5 14h4" />
+          ) : (
+            <>
+              <G rotation={-110 * (1 - mix)} origin="12,14">
+                <Path strokeWidth={2} d="m12 14 4.6-4.6" />
+                <Circle cx={12} cy={14} r={2.1} stroke="none" />
+              </G>
+              <Path d="M6.2 14H7.6M16.4 14h1.4M12 7.2v1.4" />
+            </>
+          )}
+        </G>
+      )}
     </Svg>
   );
 }

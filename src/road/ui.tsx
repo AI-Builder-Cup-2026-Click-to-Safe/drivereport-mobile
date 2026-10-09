@@ -8,6 +8,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -73,14 +74,24 @@ export function Icon({
   name,
   size = 22,
   color = C.ink,
+  strokeWidth,
 }: {
   name: keyof typeof icons;
   size?: number;
   color?: string;
+  strokeWidth?: number;
 }) {
+  const xml = icons[name].replaceAll("currentColor", color);
   return (
     <SvgXml
-      xml={icons[name].replaceAll("currentColor", color)}
+      xml={
+        strokeWidth
+          ? xml.replace(
+              /stroke-width="[\d.]+"/,
+              `stroke-width="${strokeWidth}"`,
+            )
+          : xml
+      }
       width={size}
       height={size}
     />
@@ -95,6 +106,7 @@ export function Action({
   small = false,
   fadeOnEnable = false,
   controlRef,
+  leading,
 }: {
   title: string;
   onPress: () => void;
@@ -104,6 +116,8 @@ export function Action({
   small?: boolean;
   fadeOnEnable?: boolean;
   controlRef?: React.Ref<View>;
+  /** A custom glyph before the title, e.g. the Gemini spark. */
+  leading?: React.ReactNode;
 }) {
   const { reduced, foreground } = useRoad();
   const previous = useRef(disabled);
@@ -155,8 +169,10 @@ export function Action({
             opacity: pressed ? 0.85 : 1,
             transform: [{ scale: pressed && !reduced ? 0.97 : 1 }],
           },
+          !secondary && !disabled && primaryLift,
         ]}
       >
+        {leading}
         {icon && (
           <Icon
             name={icon}
@@ -176,6 +192,76 @@ export function Action({
         </T>
       </Pressable>
     </Animated.View>
+  );
+}
+// DESIGN.md "Primary lift": the black primary button is the only lifted surface.
+const primaryLift = {
+  shadowColor: C.ink,
+  shadowOffset: { width: 0, height: 8 },
+  shadowOpacity: 0.28,
+  shadowRadius: 10,
+};
+/** Gemini Blue text action ("How Gemini decided", "Read the law ↗"). */
+export function TextLink({
+  title,
+  onPress,
+  leading,
+  trailingIcon,
+  size = 15,
+  align = "center",
+  inline = false,
+  accessibilityLabel,
+}: {
+  title: string;
+  onPress: () => void;
+  leading?: React.ReactNode;
+  trailingIcon?: keyof typeof icons;
+  size?: number;
+  align?: "center" | "flex-start";
+  /** Keep the line height; the 44pt target comes from hitSlop instead. */
+  inline?: boolean;
+  accessibilityLabel?: string;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="link"
+      accessibilityLabel={accessibilityLabel ?? title}
+      onPress={onPress}
+      hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+      style={({ pressed }) => ({
+        minHeight: inline ? undefined : 44,
+        flexDirection: "row",
+        alignItems: "center",
+        alignSelf: align,
+        gap: 6,
+        opacity: pressed ? 0.5 : 1,
+      })}
+    >
+      {leading}
+      <T
+        style={{
+          fontSize: size,
+          lineHeight: size + 5,
+          fontWeight: "700",
+          color: C.accent,
+        }}
+      >
+        {title}
+      </T>
+      {trailingIcon && (
+        <Icon name={trailingIcon} size={size - 1} color={C.accent} />
+      )}
+    </Pressable>
+  );
+}
+/** Native switch in the design's colours: Gemini Blue on, Hover Hairline off. */
+export function Toggle(props: React.ComponentProps<typeof Switch>) {
+  return (
+    <Switch
+      trackColor={{ true: C.accent, false: "#C9CDD4" }}
+      ios_backgroundColor="#C9CDD4"
+      {...props}
+    />
   );
 }
 export function Quiet({
@@ -393,7 +479,10 @@ export function Page({
   onScrollStart?: () => void;
   onActionFocus?: () => void;
 }) {
-  const path = usePathname();
+  // Keep the route this screen opened on. The global path changes for the outgoing screen
+  // mid-transition, which remounted its scroll view (jumping to the top) while it faded out.
+  const openedOn = usePathname();
+  const [path] = useState(openedOn);
   const rr = useRoad();
   const viewport = useRef<View>(null);
   const [offset, setOffset] = useState(0);
@@ -467,6 +556,8 @@ export function Page({
             scrollEventThrottle={100}
             key={path}
             keyboardShouldPersistTaps="handled"
+            // Scrolling away from a field puts the keyboard away instead of leaving it over the page.
+            keyboardDismissMode="on-drag"
             contentContainerStyle={{
               flexGrow: centered ? 1 : undefined,
               justifyContent: centered ? "center" : undefined,
@@ -674,10 +765,10 @@ export function Navigation({ onActionFocus }: { onActionFocus?: () => void }) {
             </View>
             <T
               style={{
-                fontSize: 11,
+                fontSize: 12,
                 lineHeight: 16,
-                color: C.muted,
-                fontWeight: "600",
+                color: active === key ? C.ink : C.muted,
+                fontWeight: active === key ? "800" : "600",
               }}
             >
               {["Home", "Cases", "Impact"][i]}
@@ -686,14 +777,27 @@ export function Navigation({ onActionFocus }: { onActionFocus?: () => void }) {
               <View
                 style={{
                   position: "absolute",
-                  right: 20,
-                  top: 3,
+                  left: "50%",
+                  marginLeft: 12,
+                  top: 4,
+                  minWidth: 18,
+                  height: 18,
+                  paddingHorizontal: 4,
+                  borderRadius: 9,
+                  alignItems: "center",
+                  justifyContent: "center",
                   backgroundColor: C.warning,
-                  paddingHorizontal: 5,
-                  borderRadius: 5,
                 }}
               >
-                <T style={{ fontSize: 10, lineHeight: 16, color: "white" }}>
+                <T
+                  style={{
+                    fontSize: 11,
+                    lineHeight: 13,
+                    fontWeight: "700",
+                    color: "white",
+                    fontVariant: ["tabular-nums"],
+                  }}
+                >
                   {pending}
                 </T>
               </View>
@@ -730,28 +834,34 @@ export function Segments({
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
       style={{
         flexDirection: "row",
-        backgroundColor: C.lilac,
-        padding: 3,
-        borderRadius: 8,
+        backgroundColor: C.surface,
+        padding: 4,
+        borderRadius: 999,
       }}
     >
       {width > 0 && (
         <Animated.View
           style={{
             position: "absolute",
-            left: 3,
-            top: 3,
-            bottom: 3,
-            width: (width - 6) / items.length,
-            backgroundColor: C.surface,
-            borderRadius: 6,
+            left: 4,
+            top: 4,
+            bottom: 4,
+            width: (width - 8) / items.length,
+            backgroundColor: C.bg,
+            borderRadius: 999,
+            // DESIGN.md "Slab" shadow lifts the selected segment off the track.
+            shadowColor: C.ink,
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.15,
+            shadowRadius: 2,
+            elevation: 1,
             transform: [
               {
                 translateX: v.interpolate({
                   inputRange: [0, items.length - 1],
                   outputRange: [
                     0,
-                    ((width - 6) / items.length) * (items.length - 1),
+                    ((width - 8) / items.length) * (items.length - 1),
                   ],
                 }),
               },
@@ -768,12 +878,21 @@ export function Segments({
           onPress={() => onChange(i)}
           style={{
             flex: 1,
-            minHeight: 41,
+            minHeight: 44,
             justifyContent: "center",
             alignItems: "center",
           }}
         >
-          <T style={{ fontSize: 12, fontWeight: value === i ? "700" : "400" }}>
+          <T
+            numberOfLines={1}
+            style={{
+              fontSize: 14,
+              lineHeight: 18,
+              fontWeight: value === i ? "800" : "600",
+              color: value === i ? C.ink : C.muted,
+              fontVariant: ["tabular-nums"],
+            }}
+          >
             {s}
           </T>
         </Pressable>
