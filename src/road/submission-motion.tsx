@@ -10,6 +10,7 @@ import {
   licenceRecord,
 } from "./submission-model";
 import type { RoadCase } from "./model";
+import { shortDate } from "./format";
 import { T, C, styles as s } from "./ui";
 import { Plate } from "./standard-ui";
 
@@ -79,10 +80,11 @@ export function PointsChip({
       >
         <T
           style={{
-            fontSize: 12,
+            fontSize: 13,
             lineHeight: 18,
             color: "white",
             fontWeight: "800",
+            fontVariant: ["tabular-nums"],
           }}
         >
           +{points} pts
@@ -281,9 +283,8 @@ export function MeterBar({
       accessibilityLabel={`${record} points on record, ${pending} potential points from reports, out of 20`}
       style={{
         height: 18,
-        borderRadius: 6,
+        borderRadius: 9,
         overflow: "hidden",
-        backgroundColor: light ? "#D4D7DD" : "#34363A",
       }}
     >
       <Animated.View
@@ -308,7 +309,10 @@ export function MeterBar({
                     : "#F5F5F0"
                   : i < record + pending
                     ? "#C81E1E"
-                    : "transparent",
+                    : // Empty segments stay visible, so the bar always reads as 20.
+                      light
+                      ? "#D4D7DD"
+                      : "rgba(255,255,255,0.14)",
             }}
           >
             {i >= record && i < record + pending && (
@@ -326,8 +330,91 @@ export function MeterBar({
     </View>
   );
 }
+/** The meter's key: matching swatches, each part shown only when it is non-zero. */
+export function MeterKey({
+  record,
+  pending,
+  demo = false,
+}: {
+  record: number;
+  pending: number;
+  demo?: boolean;
+}) {
+  const label = {
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: "600" as const,
+    color: "#C9CDD4",
+  };
+  const value = {
+    color: "white",
+    fontWeight: "800" as const,
+    fontVariant: ["tabular-nums" as const],
+  };
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        flexWrap: "wrap",
+        alignItems: "center",
+        columnGap: 16,
+        rowGap: 6,
+      }}
+    >
+      {record > 0 && (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <View
+            style={{
+              width: 12,
+              height: 12,
+              borderRadius: 3,
+              backgroundColor: "#F5F5F0",
+            }}
+          />
+          <T style={label}>
+            <T style={[label, value]}>{record}</T> on record
+          </T>
+        </View>
+      )}
+      {pending > 0 && (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <View
+            style={{
+              width: 12,
+              height: 12,
+              borderRadius: 3,
+              overflow: "hidden",
+              backgroundColor: "#C81E1E",
+            }}
+          >
+            <Svg width={12} height={12}>
+              <Path
+                d="M-3 9L9 -3M1 13L13 1M5 17L17 5"
+                stroke="#FF9B8F"
+                strokeWidth={2.2}
+              />
+            </Svg>
+          </View>
+          <T style={label}>
+            <T style={[label, value]}>{pending}</T> from your report
+          </T>
+        </View>
+      )}
+      {demo && <T style={label}>demo</T>}
+    </View>
+  );
+}
+const receiptHead = {
+  fontSize: 13,
+  lineHeight: 16,
+  fontWeight: "800" as const,
+  letterSpacing: 0.8,
+  color: C.muted,
+  fontVariant: ["tabular-nums" as const],
+};
 export function Receipt({ c }: { c: RoadCase }) {
-  const { reduced, foreground } = useRoad();
+  const { reduced, foreground, prefs } = useRoad();
+  const language = prefs.language;
   const [height, setHeight] = useState(0);
   const v = useRef(new Animated.Value(1)).current;
   const record = licenceRecord(c);
@@ -351,8 +438,10 @@ export function Receipt({ c }: { c: RoadCase }) {
         style={{ backgroundColor: C.surface, padding: 16, gap: 18 }}
       >
         <View style={s.row}>
-          <T style={s.muted}>ROAD RECEIPT</T>
-          <T style={s.muted}>{c.id.replace("SUB-", "")}</T>
+          <T style={receiptHead}>ROAD RECEIPT</T>
+          <T style={[receiptHead, { letterSpacing: 0 }]}>
+            {c.id.replace("SUB-", "")}
+          </T>
         </View>
         <View
           style={[
@@ -388,22 +477,31 @@ export function Receipt({ c }: { c: RoadCase }) {
           .map((o) => (
             <View key={o.id} style={{ gap: 5 }}>
               <View style={s.row}>
-                <T style={{ fontWeight: "700", flex: 1, fontSize: 15 }}>
+                <T style={{ fontWeight: "700", flex: 1, fontSize: 16 }}>
                   {o.label}
                 </T>
                 <PointsChip points={o.demeritPoints ?? 0} delay={500} />
               </View>
               {o.lawSources.map((l, i) => (
-                <T key={i} style={s.muted}>
+                <T
+                  key={i}
+                  style={{ fontSize: 14, fontWeight: "600", color: C.muted }}
+                >
                   {l.act || l.title}
                   {l.section ? ", " + l.section : ""}
                 </T>
               ))}
             </View>
           ))}
-        <T style={s.muted}>
-          {c.vehicle.type} · {c.incident.location} · {c.incident.date} ·{" "}
-          {c.incident.time}
+        <T style={{ fontSize: 13, lineHeight: 18, color: C.muted }}>
+          {[
+            c.vehicle.type,
+            c.incident.location,
+            shortDate(c.incident.date, language),
+            c.incident.time,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </T>
         {!!points && (
           <View
@@ -512,15 +610,16 @@ export function SampleOverlay({
             left: 8,
             right: 8,
             bottom: 8,
-            padding: 7,
-            borderRadius: 9,
+            paddingHorizontal: 10,
+            paddingVertical: 7,
+            borderRadius: 10,
             backgroundColor: "#111318BD",
           }}
         >
           <T
             style={{
-              fontSize: 12,
-              lineHeight: 17,
+              fontSize: 13,
+              lineHeight: 18,
               color: "white",
               fontWeight: "600",
             }}

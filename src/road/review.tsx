@@ -17,7 +17,8 @@ import {
 } from "./model";
 import { PointsChip, Receipt, Stamp, SampleOverlay } from "./submission-motion";
 import { pendingCases, licenceRecord, casePoints } from "./submission-model";
-import { Arrival, Disclosure, Plate } from "./standard-ui";
+import { Arrival, Disclosure, FrameBadge, Plate, Spark } from "./standard-ui";
+import { shortDate, typedPlate } from "./format";
 import {
   Action,
   C,
@@ -28,6 +29,7 @@ import {
   Page,
   Quiet,
   T,
+  TextLink,
   go,
   showError,
   styles as s,
@@ -144,7 +146,7 @@ function Evidence({
   )?.event;
   return c.provenance.isDemo ? (
     <View
-      style={{ borderRadius: 12, overflow: "hidden", backgroundColor: C.dark }}
+      style={{ borderRadius: 16, overflow: "hidden", backgroundColor: C.dark }}
     >
       <View style={{ aspectRatio: 16 / 9 }}>
         <Image
@@ -153,22 +155,12 @@ function Evidence({
         />
         <SampleOverlay caption={caption} unread={!c.analysis?.vehicle.plate} />
       </View>
+      <FrameBadge>Synthetic demo frame</FrameBadge>
       <View
         style={{
-          position: "absolute",
-          top: 12,
-          left: 12,
-          paddingHorizontal: 9,
-          paddingVertical: 4,
-          backgroundColor: "#20282bcc",
-          borderRadius: 5,
-        }}
-      >
-        <T style={{ fontSize: 10, color: "white" }}>Synthetic demo frame</T>
-      </View>
-      <View
-        style={{
-          paddingHorizontal: 12,
+          paddingLeft: 6,
+          paddingRight: 16,
+          paddingBottom: 4,
           alignItems: "center",
           flexDirection: "row",
           justifyContent: "space-between",
@@ -183,7 +175,12 @@ function Evidence({
             if (time >= c.evidence.durationSeconds) setTime(0);
             setPlaying(!playing);
           }}
-          style={{ minWidth: 44, minHeight: 44, justifyContent: "center" }}
+          style={{
+            minWidth: 44,
+            minHeight: 44,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
         >
           <Icon name={playing ? "Pause" : "Play"} color="white" />
         </Pressable>
@@ -191,20 +188,61 @@ function Evidence({
           style={{
             flex: 1,
             marginHorizontal: 8,
-            alignSelf: "center",
-            height: 3,
-            backgroundColor: "#555",
+            height: 44,
+            justifyContent: "center",
           }}
         >
           <View
             style={{
-              height: 3,
-              width: `${(time / c.evidence.durationSeconds) * 100}%`,
+              height: 4,
+              borderRadius: 2,
+              backgroundColor: "rgba(255,255,255,0.25)",
+            }}
+          >
+            <View
+              style={{
+                height: 4,
+                borderRadius: 2,
+                width: `${(time / c.evidence.durationSeconds) * 100}%`,
+                backgroundColor: "white",
+              }}
+            />
+          </View>
+          {/* Offence moments on the timeline, as in the reference scrubber. */}
+          {c.offences.map((o) => (
+            <View
+              key={o.id}
+              style={{
+                position: "absolute",
+                left: `${(o.atSeconds / c.evidence.durationSeconds) * 100}%`,
+                width: 4,
+                height: 12,
+                marginLeft: -2,
+                borderRadius: 2,
+                backgroundColor: "#4F8BFF",
+              }}
+            />
+          ))}
+          <View
+            style={{
+              position: "absolute",
+              left: `${(time / c.evidence.durationSeconds) * 100}%`,
+              width: 14,
+              height: 14,
+              marginLeft: -7,
+              borderRadius: 7,
               backgroundColor: "white",
             }}
           />
         </View>
-        <T style={{ color: "white", fontSize: 11 }}>
+        <T
+          style={{
+            color: "white",
+            fontSize: 13,
+            fontWeight: "600",
+            fontVariant: ["tabular-nums"],
+          }}
+        >
           {duration(time)} / {duration(c.evidence.durationSeconds)}
         </T>
       </View>
@@ -434,6 +472,14 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
         hint={false}
         editable={!locked}
         multiline={key === "description"}
+        // Plates are typed as printed: capitals, no autocorrect.
+        {...(key === "plate"
+          ? {
+              autoCapitalize: "characters" as const,
+              autoCorrect: false,
+              spellCheck: false,
+            }
+          : {})}
         placeholder={
           key === "plate"
             ? "e.g. ABC 1234"
@@ -446,7 +492,12 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
         onChangeText={(v) =>
           update(
             vehicleKey
-              ? { vehicle: { ...c.vehicle, [vehicleKey]: v } }
+              ? {
+                  vehicle: {
+                    ...c.vehicle,
+                    [vehicleKey]: key === "plate" ? typedPlate(v) : v,
+                  },
+                }
               : { incident: { ...c.incident, [key]: v } },
           )
         }
@@ -471,6 +522,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
       changing.current = false;
     }
   };
+  const isNow = (at: number) => Math.abs(playhead - at) <= 0.5;
   const line = c.analysis?.timeline.find(
     (t) => playhead >= t.start_seconds && playhead <= t.end_seconds,
   );
@@ -507,7 +559,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
             onPress={() => rr.select(queue[index + 1].id)}
           />
         ) : (
-          <T style={s.muted}>{c.id.replace("SUB-", "")}</T>
+          <CaseId c={c} />
         )
       }
       footer={
@@ -594,18 +646,19 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                 : undefined
           }
         />
-        <View style={{ flex: 1, minWidth: 130 }}>
+        <View style={{ flex: 1, minWidth: 130, gap: 2 }}>
           <T
             style={{
               fontWeight: "700",
+              lineHeight: 20,
               color: c.edited?.includes("vehicle") ? C.ink : C.accent,
             }}
           >
             {c.vehicle.type || "Unknown vehicle"}
             {c.edited?.includes("vehicle") ? " · you" : ""}
           </T>
-          <T style={s.muted}>
-            {c.incident.date || "Date unknown"} ·{" "}
+          <T style={{ fontSize: 14, lineHeight: 18, color: C.muted }}>
+            {shortDate(c.incident.date, rr.prefs.language)} ·{" "}
             {c.incident.time || "Time unknown"}
           </T>
         </View>
@@ -633,44 +686,58 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
               {askKeys.map(fact)}
             </View>
           )}
-          <View style={{ gap: 10 }}>
-            <View style={s.row}>
-              <T style={s.section}>Suspected offences</T>
-              <T style={s.muted}>In report</T>
+          <View style={{ gap: 0 }}>
+            <View style={[s.row, { paddingBottom: 8 }]}>
+              <T style={[s.section, { fontSize: 15 }]}>Suspected offences</T>
+              <T style={{ fontSize: 12, fontWeight: "700", color: C.muted }}>
+                In report
+              </T>
             </View>
             {c.offences.map((o) => (
               <View
                 key={o.id}
-                style={{ gap: 6, opacity: o.included ? 1 : 0.6 }}
+                style={{
+                  gap: 4,
+                  paddingBottom: 12,
+                  borderTopWidth: 1,
+                  borderColor: C.line,
+                  opacity: o.included ? 1 : 0.6,
+                }}
               >
                 <View
                   style={{
                     flexDirection: "row",
-                    gap: 10,
+                    gap: 12,
                     alignItems: "center",
+                    paddingVertical: 8,
                   }}
                 >
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Seek ${o.label}`}
+                    // The chip for the moment under the playhead inverts to Ink.
+                    accessibilityState={{ selected: isNow(o.atSeconds) }}
                     onPress={() => {
                       setSeek(o.atSeconds);
                       setPlayhead(o.atSeconds);
                       setRevision((n) => n + 1);
                     }}
-                    style={{
+                    style={({ pressed }) => ({
                       minHeight: 44,
                       justifyContent: "center",
-                      padding: 8,
-                      borderRadius: 8,
-                      backgroundColor: C.surface,
-                    }}
+                      paddingHorizontal: 12,
+                      borderRadius: 999,
+                      backgroundColor: isNow(o.atSeconds) ? C.ink : C.surface,
+                      transform: [{ scale: pressed && !rr.reduced ? 0.92 : 1 }],
+                    })}
                   >
                     <T
                       style={{
-                        color: C.accent,
-                        fontSize: 13,
+                        color: isNow(o.atSeconds) ? "white" : C.ink,
+                        fontSize: 14,
+                        lineHeight: 18,
                         fontWeight: "700",
+                        fontVariant: ["tabular-nums"],
                       }}
                     >
                       {duration(o.atSeconds)}
@@ -681,7 +748,8 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                       style={{
                         color: C.accent,
                         fontWeight: "700",
-                        fontSize: 15,
+                        fontSize: 16,
+                        lineHeight: 20,
                       }}
                     >
                       {o.label}
@@ -713,17 +781,24 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                   >
                     <View
                       style={{
-                        borderWidth: 1,
-                        borderColor: C.accent,
-                        borderRadius: 5,
+                        borderWidth: 2,
+                        borderColor: o.included ? C.accent : "#A9AEB8",
+                        borderRadius: 7,
                         width: 24,
                         height: 24,
+                        alignItems: "center",
+                        justifyContent: "center",
                         backgroundColor: o.included ? C.accent : C.bg,
                       }}
                     >
                       {o.included && (
                         <Stamp>
-                          <Icon name="Check" size={22} color="white" />
+                          <Icon
+                            name="Check"
+                            size={16}
+                            color="white"
+                            strokeWidth={3}
+                          />
                         </Stamp>
                       )}
                     </View>
@@ -736,17 +811,22 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                       flexDirection: "row",
                       flexWrap: "wrap",
                       alignItems: "center",
-                      gap: 6,
+                      columnGap: 10,
                     }}
                   >
-                    <T style={{ fontSize: 13, fontWeight: "700" }}>
+                    <T
+                      style={{ fontSize: 14, lineHeight: 20, fontWeight: "700" }}
+                    >
                       {law.act || law.title}
                       {law.section ? ", " + law.section : ""}
                     </T>
                     {law.url?.startsWith("https://") && (
-                      <Quiet
+                      <TextLink
                         title="Read the law"
-                        icon="ArrowUpRight"
+                        trailingIcon="ArrowUpRight"
+                        size={14}
+                        inline
+                        accessibilityLabel={`Read ${law.act || law.title}${law.section ? ", " + law.section : ""}`}
                         onPress={() =>
                           void Linking.openURL(law.url!).catch(showError)
                         }
@@ -787,8 +867,10 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
           </Disclosure>
         </>
       )}
-      <Quiet
+      <TextLink
         title="How Gemini decided"
+        align="flex-start"
+        leading={<Spark size={14} />}
         onPress={() => {
           rr.select(c.id);
           go("work");
@@ -804,6 +886,20 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
           />
         )}
     </Page>
+  );
+}
+function CaseId({ c }: { c: RoadCase }) {
+  return (
+    <T
+      style={{
+        fontSize: 13,
+        fontWeight: "600",
+        color: C.muted,
+        fontVariant: ["tabular-nums"],
+      }}
+    >
+      {c.id.replace("SUB-", "")}
+    </T>
   );
 }
 export function Handoff() {
@@ -822,6 +918,7 @@ export function Handoff() {
       <Page
         title="WhatsApp"
         nav={false}
+        headerRight={<CaseId c={c} />}
         footer={
           <Action
             title="See your impact"
@@ -839,18 +936,27 @@ export function Handoff() {
         />
         <Receipt c={c} />
         <Arrival delay={1400}>
-          <Intro
-            title={
-              licenceRecord(c) && casePoints(c) + licenceRecord(c)!.points >= 20
+          {/* The outcome line sits under the receipt at question size, not a second page title. */}
+          <View style={{ gap: 6 }}>
+            <T
+              accessibilityRole="header"
+              style={{
+                fontSize: 21,
+                lineHeight: 25,
+                fontWeight: "800",
+                letterSpacing: -0.3,
+              }}
+            >
+              {licenceRecord(c) && casePoints(c) + licenceRecord(c)!.points >= 20
                 ? `If JPJ agrees, ${c.vehicle.plate} loses their licence.`
-                : "Your report is ready for the authority’s review."
-            }
-            body={
-              c.provenance.isDemo
+                : "Your report is ready for the authority’s review."}
+            </T>
+            <T style={{ fontSize: 16, lineHeight: 23, color: C.muted }}>
+              {c.provenance.isDemo
                 ? "Sample receipt · no authority outcome has been recorded."
-                : "You confirmed sending. The authority decides the outcome."
-            }
-          />
+                : "You confirmed sending. The authority decides the outcome."}
+            </T>
+          </View>
         </Arrival>
       </Page>
     );
@@ -858,6 +964,7 @@ export function Handoff() {
     <Page
       title="WhatsApp"
       nav={false}
+      headerRight={<CaseId c={c} />}
       footer={
         <>
           <Action
@@ -878,9 +985,9 @@ export function Handoff() {
             secondary
             onPress={() => go("review")}
           />
-          <Quiet
+          <TextLink
             title="Open WhatsApp again"
-            icon="MessageCircle"
+            leading={<Icon name="MessageCircle" size={16} color={C.accent} />}
             onPress={() =>
               void rr
                 .refreshEvidence(c.id)
@@ -906,7 +1013,22 @@ export function Handoff() {
         ]}
       >
         <Plate value={c.vehicle.plate} />
-        <T style={{ fontSize: 12, fontWeight: "700" }}>Draft opened</T>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 7,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            borderRadius: 999,
+            backgroundColor: C.lilac,
+          }}
+        >
+          <Icon name="MessageCircle" size={16} />
+          <T style={{ fontSize: 14, lineHeight: 18, fontWeight: "700" }}>
+            Draft opened
+          </T>
+        </View>
       </View>
       {message ? <Notice>{message}</Notice> : null}
       {!c.provenance.isDemo &&

@@ -25,11 +25,20 @@ import {
   showError,
   styles as s,
 } from "./ui";
-import { Arrival, Count, Disclosure, ScanSweep, Spark } from "./standard-ui";
-import { ImpactBar } from "./motion";
+import {
+  Arrival,
+  Count,
+  Disclosure,
+  FrameBadge,
+  ScanSweep,
+  Spark,
+} from "./standard-ui";
+import { shortDate } from "./format";
+import { FadeArrival, ImpactBar } from "./motion";
 import {
   RoadStat,
   MeterBar,
+  MeterKey,
   PointsChip,
   SampleOverlay,
   CostCounter,
@@ -52,6 +61,7 @@ import {
 } from "./model";
 
 export const demoFrame = require("../../assets/road/images/frame-wxy2048.jpg");
+const clipMeta = { fontSize: 15, lineHeight: 20, color: C.muted };
 
 export function StandardHome() {
   const rr = useRoad();
@@ -95,7 +105,11 @@ export function StandardHome() {
         </Arrival>
         <Arrival delay={350}>
           <View style={{ marginTop: 12 }}>
-            <Action title="Analyse a clip" onPress={() => go("clip")} />
+            <Action
+              title="Analyse a clip"
+              leading={<Spark size={18} />}
+              onPress={() => go("clip")}
+            />
           </View>
         </Arrival>
         <Arrival delay={440}>
@@ -184,13 +198,14 @@ export function Clip() {
       footer={
         <Action
           title="Analyse with Gemini"
+          leading={<Spark size={18} />}
           disabled={(!file && !demo) || busy || rr.job?.status === "running"}
           onPress={() => void start()}
         />
       }
     >
       {file || demo ? (
-        <View style={{ gap: 12 }}>
+        <View style={{ gap: 14 }}>
           <View
             style={{
               aspectRatio: 16 / 9,
@@ -209,65 +224,125 @@ export function Clip() {
             ) : (
               <Icon name="Video" color="white" size={44} />
             )}
-            {demo && (
-              <T
-                style={{
-                  position: "absolute",
-                  top: 10,
-                  left: 10,
-                  color: "white",
-                  backgroundColor: "#111318BB",
-                  borderRadius: 12,
-                  padding: 5,
-                  fontSize: 12,
-                }}
-              >
-                Synthetic demo · 00:24
-              </T>
-            )}
+            {demo && <FrameBadge>Synthetic demo · 00:24</FrameBadge>}
           </View>
-          <T style={{ fontSize: 17, fontWeight: "700" }}>
-            {demo ? "dashcam_kl_0842.mp4" : file!.name}
-          </T>
-          <T style={s.muted}>
-            {demo
-              ? "00:24 · 2.8 MB · Kuala Lumpur · Daylight"
-              : `${(file!.size / 1e6).toFixed(1)} MB · saved on this device`}
-          </T>
+          {/* One row: the file on the left, Change video on the right (it wraps under on narrow screens). */}
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 12,
+            }}
+          >
+            <View style={{ flex: 1, minWidth: 180, gap: 2 }}>
+              <T
+                numberOfLines={1}
+                style={{ fontSize: 18, lineHeight: 24, fontWeight: "800" }}
+              >
+                {demo ? "dashcam_kl_0842.mp4" : file!.name}
+              </T>
+              <T style={clipMeta}>
+                {demo
+                  ? "00:24 · 2.8 MB"
+                  : `${(file!.size / 1e6).toFixed(1)} MB`}
+              </T>
+              <T style={clipMeta}>
+                {demo ? "Kuala Lumpur · Daylight" : "Saved on this device"}
+              </T>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Change video"
+              accessibilityState={{ disabled: busy }}
+              disabled={busy}
+              onPress={() => void choose()}
+              style={({ pressed }) => ({
+                minHeight: 44,
+                paddingLeft: 12,
+                paddingRight: 14,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                borderWidth: 1.5,
+                borderColor: C.line,
+                borderRadius: 999,
+                backgroundColor: pressed ? C.surface : C.bg,
+                opacity: busy ? 0.4 : 1,
+              })}
+            >
+              <Icon name="Upload" size={16} />
+              <T style={{ fontSize: 14, fontWeight: "700" }}>Change video</T>
+            </Pressable>
+          </View>
         </View>
       ) : (
-        <T style={{ color: C.muted }}>No clip yet.</T>
+        <>
+          <T style={{ color: C.muted }}>No clip yet.</T>
+          <Action
+            secondary
+            title="Choose a file"
+            disabled={busy}
+            icon="Upload"
+            onPress={() => void choose()}
+          />
+        </>
       )}
-      <Action
-        secondary
-        title={file || demo ? "Change video" : "Choose a file"}
-        disabled={busy}
-        icon="Upload"
-        onPress={() => void choose()}
-      />
-      <Quiet
-        title="Use the demo clip"
-        onPress={() => {
-          setDemo(true);
-          setChosen("");
-        }}
-      />
-      <T style={s.section}>For the best result</T>
-      <View style={{ flexDirection: "row", gap: 12 }}>
-        <Icon name="Sun" />
-        <View style={{ flex: 1 }}>
-          <T style={{ fontWeight: "700" }}>Daylight footage</T>
-          <T style={s.muted}>Gemini has to read the plate.</T>
-        </View>
-      </View>
-      <View style={{ flexDirection: "row", gap: 12 }}>
-        <Icon name="Clock" />
-        <View style={{ flex: 1 }}>
-          <T style={{ fontWeight: "700" }}>Short clips, up to 300 MB</T>
-          <T style={s.muted}>
-            Gemini bills us by the second. We are really poor.
-          </T>
-        </View>
+      {!demo && (
+        <Quiet
+          title="Use the demo clip"
+          onPress={() => {
+            setDemo(true);
+            setChosen("");
+          }}
+        />
+      )}
+      <View>
+        <T style={[s.section, { fontSize: 15, marginBottom: 6 }]}>
+          For the best result
+        </T>
+        {(
+          [
+            ["Sun", "Daylight footage", "Gemini has to read the plate."],
+            [
+              "Clock",
+              "Short clips, up to 300 MB",
+              "Gemini bills us by the second. We are really poor.",
+            ],
+          ] as const
+        ).map(([icon, title, note]) => (
+          <View
+            key={title}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 12,
+              paddingVertical: 10,
+              borderTopWidth: 1,
+              borderBottomWidth: icon === "Clock" ? 1 : 0,
+              borderColor: C.line,
+            }}
+          >
+            <View
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 19,
+                backgroundColor: C.surface,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Icon name={icon} size={20} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <T style={{ fontWeight: "700", lineHeight: 21 }}>{title}</T>
+              <T style={{ fontSize: 13, lineHeight: 18, color: C.muted }}>
+                {note}
+              </T>
+            </View>
+          </View>
+        ))}
       </View>
       {store.records.length > 0 && (
         <Disclosure
@@ -347,6 +422,49 @@ export function StandardAnalysis() {
           : "Nothing sent. I’m a snitch with boundaries.",
     ],
   ];
+  // Each stage leaves one result row: Watched, Law, the offence with its points, then Record.
+  const findings: Finding[] = [];
+  if (result && (done || j.mode === "demo")) {
+    if (done || stage >= 1)
+      findings.push({
+        key: "watched",
+        label: "Watched",
+        value: j.mode === "demo" ? "24 frames · plate read" : "Recording reviewed",
+      });
+    if (done || stage >= 2)
+      result.offences
+        .flatMap((o) => o.lawSources)
+        .slice(0, 1)
+        .forEach((law, i) =>
+          findings.push({
+            key: `law-${i}`,
+            label: "Law",
+            value: [law.act || law.title, law.section]
+              .filter(Boolean)
+              .join(", "),
+          }),
+        );
+    if (done || stage >= 3)
+      result.offences.forEach((o, i) =>
+        findings.push({
+          key: o.id,
+          label: duration(o.atSeconds),
+          value: o.label,
+          delay: i * 240,
+          trailing: (
+            <PointsChip points={o.demeritPoints ?? 0} delay={260 + i * 240} />
+          ),
+        }),
+      );
+    if (done)
+      findings.push({
+        key: "record",
+        label: "Record",
+        value: prior
+          ? `${result.vehicle.plate} · ${prior.points} pts on record`
+          : "Licence lookup unavailable",
+      });
+  }
   const review = () => {
     void rr
       .setPrefs({ demo: j.mode === "demo" })
@@ -402,24 +520,13 @@ export function StandardAnalysis() {
         ) : (
           <Icon name="Video" size={48} color="white" />
         )}
-        <T
-          style={{
-            position: "absolute",
-            top: 10,
-            left: 10,
-            color: "white",
-            backgroundColor: "#111318BB",
-            borderRadius: 12,
-            padding: 5,
-            fontSize: 12,
-          }}
-        >
+        <FrameBadge>
           {j.mode === "demo"
             ? "Synthetic demo"
             : saving
               ? "Saving on this device"
               : "Your recording"}
-        </T>
+        </FrameBadge>
         {stage === 0 && j.progress !== null && (
           <View
             style={{
@@ -470,10 +577,15 @@ export function StandardAnalysis() {
               />
               <T
                 style={{
-                  fontSize: 11,
+                  fontSize: 12,
+                  lineHeight: 16,
                   fontWeight: "700",
                   color:
-                    !preparing && (done || i < stage) ? C.accent : C.muted,
+                    !preparing && (done || i < stage)
+                      ? C.accent
+                      : !preparing && i === stage
+                        ? C.ink
+                        : C.muted,
                 }}
               >
                 {name}
@@ -493,18 +605,21 @@ export function StandardAnalysis() {
                 : `${stage + 1} of 4`}
         </T>
       </View>
-      <Arrival identity={`${j.id}-${stage}-${j.status}`} distance={8}>
+      {/* A short fade: the stage caption changes in place instead of blanking for half a second. */}
+      <FadeArrival identity={`${j.id}-${stage}-${j.status}`} distance={6}>
         <View style={{ flexDirection: "row", gap: 12 }}>
-          <Spark working={running} />
-          <View style={{ flex: 1, gap: 8 }}>
+          <View style={{ paddingTop: 2 }}>
+            <Spark working={running} />
+          </View>
+          <View style={{ flex: 1, gap: 6 }}>
             <T
               accessibilityRole="header"
               accessibilityLiveRegion="polite"
               style={{
-                fontSize: 25,
-                lineHeight: 29,
+                fontSize: 27,
+                lineHeight: 30,
                 fontWeight: "800",
-                letterSpacing: -0.6,
+                letterSpacing: -0.7,
               }}
             >
               {saving
@@ -513,7 +628,7 @@ export function StandardAnalysis() {
                   ? captions[stage][0]
                   : "Analysis interrupted"}
             </T>
-            <T style={{ color: C.muted, fontSize: 14, lineHeight: 20 }}>
+            <T style={{ color: C.muted, fontSize: 16, lineHeight: 22 }}>
               {saving
                 ? j.sourceIds.length
                   ? `${j.sourceIds.length} saved segment${j.sourceIds.length === 1 ? "" : "s"}. Finishing the last file before upload.`
@@ -524,78 +639,22 @@ export function StandardAnalysis() {
             </T>
           </View>
         </View>
-      </Arrival>
-      {result && (done || j.mode === "demo") && (
-        <View
-          style={{
-            backgroundColor: C.surface,
-            borderRadius: 16,
-            overflow: "hidden",
-          }}
-        >
-          {(done || stage >= 1) && (
-            <FindingRow
-              label="Watched"
-              value={
-                j.mode === "demo"
-                  ? "24 frames · plate read"
-                  : "Recording reviewed"
-              }
-            />
-          )}
-          {(done || stage >= 2) &&
-            result.offences
-              .flatMap((o) => o.lawSources)
-              .slice(0, 1)
-              .map((law, i) => (
-                <FindingRow
-                  key={i}
-                  label="Law"
-                  value={[law.act || law.title, law.section]
-                    .filter(Boolean)
-                    .join(", ")}
-                />
-              ))}
-          {(done || stage >= 3) &&
-            result.offences.map((o, i) => (
-              <Arrival key={o.id} delay={i * 240}>
-                <View
-                  style={{
-                    padding: 10,
-                    flexDirection: "row",
-                    gap: 8,
-                    alignItems: "center",
-                  }}
-                >
-                  <T style={s.muted}>{duration(o.atSeconds)}</T>
-                  <T
-                    style={{
-                      flex: 1,
-                      color: C.accent,
-                      fontWeight: "700",
-                      fontSize: 14,
-                    }}
-                  >
-                    {o.label}
-                  </T>
-                  <PointsChip
-                    points={o.demeritPoints ?? 0}
-                    delay={260 + i * 240}
-                  />
-                </View>
-              </Arrival>
+      </FadeArrival>
+      {findings.length > 0 && (
+        // The card arrives with its first row, so it never shows as an empty grey box.
+        <Arrival identity={j.id} distance={8}>
+          <View
+            style={{
+              backgroundColor: C.surface,
+              borderRadius: 16,
+              overflow: "hidden",
+            }}
+          >
+            {findings.map(({ key, ...finding }, i) => (
+              <FindingRow key={key} {...finding} divider={i > 0} />
             ))}
-          {done && (
-            <FindingRow
-              label="Record"
-              value={
-                licenceRecord(result)
-                  ? `${result.vehicle.plate} · ${licenceRecord(result)!.points} pts on record`
-                  : "Licence lookup unavailable"
-              }
-            />
-          )}
-        </View>
+          </View>
+        </Arrival>
       )}
       <View
         style={{
@@ -714,8 +773,10 @@ export function StandardImpact() {
   const { width } = useWindowDimensions();
   return (
     <Page title="Impact">
-      <Intro title="Your impact. Their problem." />
-      <T style={s.muted}>I keep receipts. Karma loves paperwork.</T>
+      <Intro
+        title="Your impact. Their problem."
+        body="I keep receipts. Karma loves paperwork."
+      />
       {!rr.prefs.demo && (
         <Quiet
           title={rr.syncingCases ? "Syncing server cases…" : "Sync server cases"}
@@ -741,7 +802,9 @@ export function StandardImpact() {
             }}
           >
             <Count value={Number(value)} size={width < 350 ? 54 : 72} />
-            <T style={{ fontSize: 14, fontWeight: "700" }}>{label}</T>
+            <T style={{ fontSize: 15, lineHeight: 19, fontWeight: "700" }}>
+              {label}
+            </T>
           </View>
         ))}
       </View>
@@ -771,19 +834,30 @@ export function StandardImpact() {
             {!!topPlate && (
               <T
                 style={{
-                  fontSize: 18,
+                  fontSize: width < 350 ? 18 : 20,
+                  lineHeight: 22,
                   fontWeight: "800",
+                  letterSpacing: 1.2,
                   color: C.ink,
                   backgroundColor: "#F5F5F0",
-                  padding: 5,
-                  borderRadius: 6,
+                  paddingHorizontal: 11,
+                  paddingVertical: 6,
+                  borderRadius: 7,
+                  overflow: "hidden",
                 }}
               >
                 {topPlate}
               </T>
             )}
           </View>
-          <T style={{ fontWeight: "800", color: top ? "#FF9B8F" : "#B6BAC2" }}>
+          <T
+            style={{
+              fontSize: width < 350 ? 16 : 17,
+              lineHeight: 22,
+              fontWeight: top ? "800" : "600",
+              color: top ? "#FF9B8F" : "#C9CDD4",
+            }}
+          >
             {top
               ? top.record + top.pending >= 20
                 ? "Your report could take their licence."
@@ -802,10 +876,11 @@ export function StandardImpact() {
             </T>
           )}
           {top && (
-            <T style={{ color: "white", fontSize: 12 }}>
-              {top.record} on record · {top.pending} from your report
-              {isSubmissionDemo(top.case) ? " · demo" : ""}
-            </T>
+            <MeterKey
+              record={top.record}
+              pending={top.pending}
+              demo={isSubmissionDemo(top.case)}
+            />
           )}
         </Pressable>
       </Arrival>
@@ -820,14 +895,34 @@ export function StandardImpact() {
           key={code}
           accessibilityRole="button"
           accessibilityLabel={`Filter ${name}`}
+          accessibilityState={{ selected: offence === code }}
           onPress={() => setOffence(offence === code ? "" : code)}
-          style={{ gap: 8 }}
+          style={{ gap: 7, paddingVertical: 4 }}
         >
           <View style={s.row}>
-            <T style={{ fontSize: 14, flex: 1 }}>{name}</T>
-            <T>{remote ? remoteOffenceCount(code) : data.counts[code]}</T>
+            <T
+              style={{
+                fontSize: 16,
+                lineHeight: 20,
+                fontWeight: "600",
+                flex: 1,
+                color: offence === code ? C.accent : C.ink,
+              }}
+            >
+              {name}
+            </T>
+            <T
+              style={{
+                fontWeight: "700",
+                fontVariant: ["tabular-nums"],
+                color: offence === code ? C.accent : C.ink,
+              }}
+            >
+              {remote ? remoteOffenceCount(code) : data.counts[code]}
+            </T>
           </View>
           <ImpactBar
+            selected={offence === code}
             index={i}
             ratio={
               (remote ? remoteOffenceCount(code) : data.counts[code]) /
@@ -875,8 +970,8 @@ export function StandardImpact() {
                 flexDirection: "row",
                 alignItems: "center",
                 gap: 12,
-                paddingVertical: 15,
-                borderBottomWidth: 1,
+                paddingVertical: 10,
+                borderTopWidth: 1,
                 borderColor: C.line,
               }}
             >
@@ -889,28 +984,42 @@ export function StandardImpact() {
                       : undefined
                 }
                 style={{
-                  width: 54,
-                  height: 54,
+                  width: 64,
+                  height: 48,
                   borderRadius: 10,
                   backgroundColor: C.lilac,
                 }}
               />
-              <View style={{ flex: 1, gap: 4 }}>
-                <T style={{ fontWeight: "700" }}>
+              <View style={{ flex: 1, gap: 3 }}>
+                <T
+                  style={{
+                    fontSize: 16,
+                    lineHeight: 20,
+                    fontWeight: "800",
+                    letterSpacing: 0.3,
+                  }}
+                >
                   {c.vehicle.plate ||
                     (c.offences.length
                       ? "Plate unreadable"
                       : "Suspiciously civil")}
                 </T>
-                <T style={s.muted}>
-                  {c.offences.length} offence
-                  {c.offences.length === 1 ? "" : "s"} ·{" "}
-                  {c.incident.date || "Date unknown"}
+                <T style={{ fontSize: 13, lineHeight: 17, color: C.muted }}>
+                  {[
+                    `${c.offences.length} offence${c.offences.length === 1 ? "" : "s"}`,
+                    shortDate(c.incident.date, rr.prefs.language, {
+                      timeZone: c.incident.timeZone,
+                      relative: true,
+                    }),
+                    c.incident.time,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </T>
               </View>
               <T
                 style={{
-                  fontSize: 12,
+                  fontSize: 14,
                   fontWeight: "700",
                   color:
                     c.reporting.status === "sent"
@@ -1101,25 +1210,71 @@ export function Work() {
   );
 }
 
-function FindingRow({ label, value }: { label: string; value: string }) {
+type Finding = {
+  key: string;
+  label: string;
+  value: string;
+  delay?: number;
+  trailing?: React.ReactNode;
+};
+// Reference grid: check · label · value · trailing chip, so every row's value starts on the same column.
+function FindingRow({
+  label,
+  value,
+  delay = 0,
+  trailing,
+  divider = false,
+}: Omit<Finding, "key"> & { divider?: boolean }) {
   return (
-    <Arrival distance={8}>
+    <Arrival distance={8} delay={delay}>
       <View
         style={{
-          padding: 10,
+          minHeight: 48,
+          paddingVertical: 9,
+          paddingHorizontal: 14,
           flexDirection: "row",
-          gap: 8,
-          borderBottomWidth: 1,
+          alignItems: "center",
+          gap: 10,
+          borderTopWidth: divider ? 1 : 0,
           borderColor: C.line,
         }}
       >
-        <Icon name="Check" color={C.accent} size={16} />
-        <T style={[s.muted, { width: 58 }]}>{label}</T>
+        <View
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 11,
+            backgroundColor: C.accent,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Icon name="Check" color="white" size={14} strokeWidth={3} />
+        </View>
         <T
-          style={{ color: C.accent, fontSize: 14, flex: 1, fontWeight: "600" }}
+          style={{
+            width: 62,
+            fontSize: 13,
+            lineHeight: 17,
+            fontWeight: "700",
+            color: C.muted,
+            fontVariant: ["tabular-nums"],
+          }}
+        >
+          {label}
+        </T>
+        <T
+          style={{
+            flex: 1,
+            fontSize: 15,
+            lineHeight: 20,
+            fontWeight: "600",
+            color: C.accent,
+          }}
         >
           {value}
         </T>
+        {trailing}
       </View>
     </Arrival>
   );
