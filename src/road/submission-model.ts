@@ -19,7 +19,7 @@ export function licenceRecord(c: RoadCase) {
 export function topOffender(cases: RoadCase[]) {
   const plates = new Map<
     string,
-    { case: RoadCase; record: number; pending: number }
+    { case: RoadCase; record: number; pending: number; reports: number }
   >();
   for (const c of [...cases].sort((a, b) =>
     (b.incident.date || "").localeCompare(a.incident.date || ""),
@@ -30,9 +30,12 @@ export function topOffender(cases: RoadCase[]) {
       case: c,
       record: licenceRecord(c)?.points ?? 0,
       pending: 0,
+      reports: 0,
     };
-    if (c.reporting.status === "sent" && c.authorityOutcome.status !== "issued")
+    if (c.reporting.status === "sent" && c.authorityOutcome.status !== "issued") {
       entry.pending += casePoints(c);
+      entry.reports += 1;
+    }
     plates.set(key, entry);
   }
   return [...plates.values()]

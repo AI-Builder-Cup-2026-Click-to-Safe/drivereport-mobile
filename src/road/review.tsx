@@ -704,7 +704,10 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
           ) : (
             <View />
           )
-        ) : undefined
+        ) : (
+          // Past cases open from Impact; the header must not wait for the route to settle to show Back.
+          <Quiet title="Back" compact icon="ChevronLeft" onPress={() => go("impact")} />
+        )
       }
       headerRight={
         index >= 0 && queue.length > 1 ? (

@@ -761,7 +761,7 @@ export function Page({
         )}
       </KeyboardAvoidingView>
       {/* The tab bar itself is one persistent bar in the root layout; leave room for it. */}
-      <View style={{ height: nav ? TAB_BAR_HEIGHT + insets.bottom : insets.bottom }} />
+      <View style={{ height: nav ? TAB_BAR_HEIGHT + tabBarBottom(insets.bottom) : footerBottom(insets.bottom) }} />
     </SafeAreaView>
   );
 }
@@ -988,7 +988,14 @@ function ToastCard({
 }
 
 /* ---------- the tab bar: one persistent bar under the tab routes ---------- */
-export const TAB_BAR_HEIGHT = 68;
+/**
+ * The submission's bottom chrome is 78pt: a 64pt tab row over 14pt of padding, and footers end
+ * 14pt above the edge. Only the part of the home-indicator inset beyond 20pt is added, so controls
+ * clear the indicator without the extra band a full 34pt inset leaves under every screen.
+ */
+export const TAB_BAR_HEIGHT = 64;
+const tabBarBottom = (inset: number) => Math.max(14, inset - 20);
+const footerBottom = (inset: number) => Math.max(0, inset - 28);
 const TAB_ROUTES = ["/", "/review", "/impact"];
 let lastPending = -1;
 export function Navigation() {
@@ -1016,7 +1023,7 @@ export function Navigation() {
     a.start();
     return () => a.stop();
   }, [shown, rr.reduced, travel]);
-  const height = TAB_BAR_HEIGHT + insets.bottom;
+  const height = TAB_BAR_HEIGHT + tabBarBottom(insets.bottom);
   return (
     <Animated.View
       pointerEvents={shown ? "auto" : "none"}
@@ -1026,7 +1033,7 @@ export function Navigation() {
         right: 0,
         bottom: 0,
         height,
-        paddingBottom: insets.bottom,
+        paddingBottom: tabBarBottom(insets.bottom),
         backgroundColor: C.bg,
         borderTopWidth: 1,
         borderColor: C.line,

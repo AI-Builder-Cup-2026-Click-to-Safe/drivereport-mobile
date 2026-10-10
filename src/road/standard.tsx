@@ -1061,7 +1061,9 @@ export function StandardImpact() {
     ? 20 - top.record - top.pending > 0
       ? `${20 - top.record - top.pending} more points and they’re taking the bus.`
       : top.pending
-        ? "Your report could take their licence."
+        ? top.reports > 1
+          ? "Your reports could take their licence."
+          : "Your report could take their licence."
         : "Licence suspended. Enjoy the bus."
     : remoteCount
       ? `${remoteCount} server case${remoteCount === 1 ? "" : "s"}. Licence records are not available.`
@@ -1210,7 +1212,7 @@ export function StandardImpact() {
             </T>
           )}
           {top && (
-            <MeterKey record={top.record} pending={top.pending} />
+            <MeterKey record={top.record} pending={top.pending} reports={top.reports} />
           )}
         </Pressable>
       </MeterEntrance>

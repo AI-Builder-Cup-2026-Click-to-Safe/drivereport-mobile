@@ -381,10 +381,13 @@ export function MeterBar({
 export function MeterKey({
   record,
   pending,
+  reports = 1,
   demo = false,
 }: {
   record: number;
   pending: number;
+  /** Sent reports behind the striped points; the reference says "your reports" past one. */
+  reports?: number;
   demo?: boolean;
 }) {
   const label = {
@@ -443,7 +446,8 @@ export function MeterKey({
             </Svg>
           </View>
           <T style={label}>
-            <T style={[label, value]}>{pending}</T> from your report
+            <T style={[label, value]}>{pending}</T> from{" "}
+            {reports > 1 ? "your reports" : "your report"}
           </T>
         </View>
       )}
@@ -499,7 +503,9 @@ export function Receipt({ c, before }: { c: RoadCase; before: number }) {
   const [height, setHeight] = useState(0);
   const v = useRef(new Animated.Value(1)).current;
   const out = receiptOutcome(c, before);
-  const record = Math.min(20, before);
+  // This report's points always show in red: on a plate that is already full, they take the
+  // last segments and the points before it fill the rest.
+  const record = Math.min(before, 20 - Math.min(20, out.add));
   const [shown, setShown] = useState(Math.min(20, out.total));
   useEffect(() => {
     v.setValue(reduced || !foreground ? 1 : 0);

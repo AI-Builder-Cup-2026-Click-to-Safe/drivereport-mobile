@@ -155,7 +155,8 @@ export function SlidingPill({
       style={{
         position: "absolute",
         left: 14 + (width - 28) / 6 - 28,
-        top: 9,
+        // Centred on the icon in the 64pt tab row (reference .tab-slab).
+        top: 7.5,
         width: 56,
         height: 30,
         borderRadius: 15,
