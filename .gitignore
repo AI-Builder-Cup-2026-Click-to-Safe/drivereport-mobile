@@ -40,6 +40,9 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+/modules/*/android/build/
+/modules/*/android/.gradle/
+/modules/*/ios/build/
 
 # Local credentials and device provisioning
 .env
