@@ -3,6 +3,7 @@ import { ActivityIndicator, AppState, Linking, Platform, Pressable, StyleSheet, 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Device from "expo-device";
+import Constants from "expo-constants";
 import * as FS from "expo-file-system/legacy";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useStore } from "../lib/store";
@@ -18,7 +19,8 @@ export function Recording() {
     road = useRef(rr);
   current.current = store;
   road.current = rr;
-  const demo = rr.prefs.demo;
+  // Synthetic cases must never replace camera capture on a physical phone.
+  const demo = !Device.isDevice && rr.prefs.demo;
   const camera = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [ready, setReady] = useState(false),
@@ -34,6 +36,20 @@ export function Recording() {
   const failure = useRef("");
   const capturing = useRef(false);
   const savedCount = useRef(0);
+  const trace = useRef<string[]>([]);
+  const stopAttempts = useRef(0);
+  const logStep = useCallback((step: string) => {
+    trace.current = [...trace.current.slice(-39), `${new Date().toISOString()} ${step}`];
+  }, []);
+  const diagnostics = () => [
+    `Click-to-Safe ${Constants.expoConfig?.version || "unknown"} / recording diagnostics v1`,
+    `${Device.modelName || "unknown device"} / ${Platform.OS} ${Device.osVersion || "unknown OS"}`,
+    `Camera permission: ${permission?.status || "unknown"}; camera ready: ${ready}`,
+    `Mode: ${demo ? "demo" : "camera"}; quality: 720p; audio: muted`,
+    `Capture callback pending: ${capturing.current}; stop requests: ${stopAttempts.current}`,
+    `Elapsed: ${elapsed}s; saved clips: ${savedCount.current}; upload: not started`,
+    ...trace.current,
+  ].join("\n");
   const wanted = useRef(true),
     started = useRef(false),
     mounted = useRef(true),
@@ -45,10 +61,14 @@ export function Recording() {
   const permissionAtMount = useRef(permission?.granted);
   const stop = useCallback(() => {
     wanted.current = false;
+    stopAttempts.current += 1;
     camera.current?.stopRecording();
   }, []);
   useEffect(() => {
     mounted.current = true;
+    logStep("Recording screen opened");
+    if (Device.isDevice && road.current.prefs.demo)
+      void road.current.setPrefs({ demo: false }).catch(showError);
     if (!demo && !Device.isDevice) {
       setError(
         "The simulator has no camera. Use Demo dataset in Developer to preview the recording flow.",
@@ -58,15 +78,21 @@ export function Recording() {
       void permissionRequest
         .current()
         .then((p) => {
+          logStep(`Camera permission: ${p.status}`);
           if (!p.granted) {
             wanted.current = false;
             setBlocked(true);
             setError("Click-to-Safe needs the camera to record. Allow it in Settings.");
           }
         })
-        .catch(showError);
+        .catch((e: unknown) => {
+          wanted.current = false;
+          failure.current = e instanceof Error ? e.message : "Camera permission could not be checked.";
+          setError(failure.current);
+        });
     }
     const sub = AppState.addEventListener("change", (s) => {
+      logStep(`App state: ${s}`);
       if (s !== "active" && wanted.current && startTime.current > 0) {
         stop();
         setError(
@@ -80,7 +106,7 @@ export function Recording() {
       sub.remove();
       void deactivateKeepAwake("road-recording");
     };
-  }, [demo, stop]);
+  }, [demo, stop, logStep]);
   useEffect(() => {
     if (started.current || !wanted.current || (!demo && !ready)) return;
     started.current = true;
@@ -99,6 +125,7 @@ export function Recording() {
         const fail = (e: unknown) => {
           stop();
           failure.current = e instanceof Error ? e.message : "Recording stopped. Saved clips are kept.";
+          logStep("Capture or persistence failed");
           if (mounted.current)
             setError(
               e instanceof Error
@@ -111,17 +138,24 @@ export function Recording() {
           record: async () => {
             if (!camera.current) throw Error("Camera unavailable.");
             capturing.current = true;
+            logStep("Requested native video capture");
             try {
-              return await camera.current.recordAsync({
+              const result = await camera.current.recordAsync({
                 maxDuration: 60,
                 maxFileSize: 80 * 1024 * 1024,
                 ...(Platform.OS === "ios" ? { codec: "avc1" as const } : {}),
               });
+              logStep(result?.uri ? "Native camera returned a video file" : "Native camera returned no file");
+              return result;
+            } catch (e) {
+              logStep("Native camera rejected capture");
+              throw e;
             } finally {
               capturing.current = false;
             }
           },
           save: async (uri, createdAt) => {
+            logStep("Saving original video to app storage");
             saveStageRef.current = "Saving the video on this device";
             if (mounted.current && !capturing.current)
               setSaveStage("Saving the video on this device…");
@@ -134,6 +168,7 @@ export function Recording() {
             );
             ids.current.push(id);
             savedCount.current = ids.current.length;
+            logStep(`Original video saved; ${savedCount.current} clip(s)`);
             if (mounted.current && finalizing.current) road.current.recordingSaved(id);
             // Cleanup and a space check must not block the final saved clip.
             void FS.deleteAsync(uri, { idempotent: true }).catch(() => {});
@@ -149,6 +184,7 @@ export function Recording() {
       } catch (e) {
         stop();
         failure.current = e instanceof Error ? e.message : "Unable to start recording.";
+        logStep("Recording could not start");
         if (mounted.current)
           setError(
             e instanceof Error ? e.message : "Unable to start recording.",
@@ -157,7 +193,17 @@ export function Recording() {
         if (!demo) void deactivateKeepAwake("road-recording");
       }
     })();
-  }, [ready, demo, stop]);
+  }, [ready, demo, stop, logStep]);
+  useEffect(() => {
+    if (demo || !permission?.granted || ready || error) return;
+    const timer = setTimeout(() => {
+      failure.current = "The camera did not become ready. Close other camera apps and try recording again.";
+      logStep("Camera readiness timed out");
+      stop();
+      setError(failure.current);
+    }, 15_000);
+    return () => clearTimeout(timer);
+  }, [demo, permission?.granted, ready, error, logStep, stop]);
   useEffect(() => {
     const timer = setInterval(() => {
       if (startTime.current && wanted.current)
@@ -176,6 +222,7 @@ export function Recording() {
     endingRef.current = true;
     setEnding(true);
     finalizing.current = true;
+    logStep("End recording pressed");
     try {
       if (!demo) rr.prepareRecording(ids.current);
       saveStageRef.current = capturing.current ? "Closing the camera file" : "Saving the video on this device";
@@ -198,6 +245,7 @@ export function Recording() {
         if (!current.current.settings.token) {
           rr.failRecording(
             "Recording saved. This build isn’t connected to the analysis server yet, so the clips wait here.",
+            diagnostics(),
           );
           go("analysis", true);
         } else {
@@ -207,16 +255,19 @@ export function Recording() {
       } else if (!demo) {
         rr.failRecording(
           error || "The camera stopped before a recording could be saved.",
+          diagnostics(),
         );
         go("analysis", true);
       } else go("home");
     } catch (e) {
+      logStep("Recording finalization failed");
       finalizing.current = false;
       if (mounted.current) setCameraReleased(true);
       void deactivateKeepAwake("road-recording");
       if (!demo)
         rr.failRecording(
           e instanceof Error ? e.message : "Could not save the recording.",
+          diagnostics(),
         );
       if (!demo) go("analysis", true);
       else showError(e);
@@ -234,8 +285,13 @@ export function Recording() {
           mute
           videoQuality="720p"
           videoBitrate={2000000}
-          onCameraReady={() => setReady(true)}
+          onCameraReady={() => {
+            logStep("Camera ready event received");
+            setReady(true);
+          }}
           onMountError={(e) => {
+            logStep("Native camera session error");
+            failure.current = e.message;
             stop();
             setError(e.message);
           }}

@@ -38,6 +38,7 @@ export type Job = {
   caseIds: string[];
   region: Region;
   error?: string;
+  recordingDiagnostics?: string;
   notice: boolean;
 };
 const defaults: Preferences = {
@@ -70,7 +71,7 @@ type Context = {
   historyError: string;
   prepareRecording: (sourceIds?: string[]) => void;
   recordingSaved: (sourceId: string) => void;
-  failRecording: (message: string) => void;
+  failRecording: (message: string, diagnostics?: string) => void;
   job: Job | null;
   begin: (ids: string[], demo?: boolean) => Promise<void>;
   cancel: () => void;
@@ -161,10 +162,10 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
       sourceIds: [...new Set([...current.sourceIds, sourceId])],
     });
   };
-  const failRecording = (message: string) => {
+  const failRecording = (message: string, diagnostics?: string) => {
     const current = jr.current;
     if (!current || current.stage !== -1) return;
-    updateJob({ ...current, status: "error", error: message });
+    updateJob({ ...current, status: "error", error: message, recordingDiagnostics: diagnostics });
   };
   useEffect(() => {
     alive.current = true;

@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
+import * as Clipboard from "expo-clipboard";
 import * as FS from "expo-file-system/legacy";
 import { useRoad } from "./context";
 import { demoFrameFor } from "./media";
@@ -29,6 +30,7 @@ import {
   Segments,
   T,
   go,
+  notify,
   showError,
   styles as s,
   TextLink,
@@ -525,6 +527,7 @@ export function StandardAnalysis() {
     );
   const preparing = j.stage < 0,
     saving = preparing && running;
+  const recordingFailed = preparing && !running && !done;
   const result =
     rr.allCases.find((c) => j.caseIds.includes(c.id)) ||
     (demo ? (submissionFixtures.allCases[0] as RoadCase) : undefined);
@@ -556,6 +559,13 @@ export function StandardAnalysis() {
           ? `${j.sourceIds.length} saved segment${j.sourceIds.length === 1 ? "" : "s"}. Finishing the last file before upload.`
           : "Closing the camera file and saving it locally before upload.",
       ]
+    : recordingFailed
+      ? [
+          j.sourceIds.length ? "Recording needs attention" : "Recording not saved",
+          j.sourceIds.length
+            ? `${j.sourceIds.length} clip(s) saved on this device. Upload has not started.`
+            : "No video has been saved from this recording. Upload and AI analysis have not started.",
+        ]
     : !running && !done
       ? ["Analysis interrupted", j.error || "Your recording is still saved."]
       : stage >= 4
@@ -666,7 +676,7 @@ export function StandardAnalysis() {
   };
   return (
     <Page
-      title={saving ? "Saving your drive" : "Gemini at work"}
+      title={recordingFailed ? "Recording error" : saving ? "Saving your drive" : "Gemini at work"}
       nav={false}
       gap={0}
       footer={
@@ -698,7 +708,11 @@ export function StandardAnalysis() {
                 color: C.muted,
               }}
             >
-              Long clips take a while. Keep Click-to-Safe open and I’ll flag it when it’s done.
+              {recordingFailed
+                ? "Copy the error details if this happens again. You can also choose an existing video to analyse."
+                : !running
+                  ? "Analysis has stopped. Review the error above before trying again."
+                  : "Long clips take a while. Keep Click-to-Safe open and I’ll flag it when it’s done."}
             </T>
             <Quiet title="Back to home" onPress={() => go("home")} />
           </View>
@@ -738,7 +752,7 @@ export function StandardAnalysis() {
         {demo && stage >= 1 && <SampleOverlay caption={line || undefined} />}
         {running && stage === 1 && <ScanSweep />}
       </View>
-      <StageDots stage={stage} preparing={preparing} />
+      {!recordingFailed && <StageDots stage={stage} preparing={preparing} />}
       <Announce message={caption[0]} />
       {/* The caption changes in place: a short fade and rise, never a blank. */}
       <FadeArrival identity={`${j.id}-${caption[0]}`} distance={8} duration={320}>
@@ -775,14 +789,29 @@ export function StandardAnalysis() {
           </View>
         </Arrival>
       )}
-      <CostTotal
+      {!preparing && <CostTotal
         value={demo ? cost : null}
         note={demo ? "24 s clip" : "Not reported by the server"}
         settled={done}
-      />
+      />}
       {!running && !done && (
         <View style={{ marginTop: 16, gap: 12 }}>
           <Notice error>{j.error || "Analysis interrupted."}</Notice>
+          {recordingFailed && (
+            <>
+              <Disclosure title="Error details">
+                <T selectable style={{ fontSize: 12, lineHeight: 18 }}>
+                  {j.recordingDiagnostics || `${j.id}\n${j.error || "Recording failed"}`}
+                </T>
+              </Disclosure>
+              <Quiet
+                title="Copy error details"
+                onPress={() => void Clipboard.setStringAsync(
+                  `${j.id}\n${j.error || "Recording failed"}\n${j.recordingDiagnostics || ""}`,
+                ).then(() => notify("Error details copied.")).catch(showError)}
+              />
+            </>
+          )}
           <Action
             title={j.sourceIds.length ? "Retry analysis" : "Record again"}
             secondary
@@ -794,6 +823,9 @@ export function StandardAnalysis() {
                   .catch(showError);
             }}
           />
+          {recordingFailed && (
+            <Quiet title="Choose a video instead" onPress={() => go("clip")} />
+          )}
         </View>
       )}
       {running && !saving && !demo && (

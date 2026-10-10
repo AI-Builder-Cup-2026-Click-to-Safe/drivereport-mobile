@@ -9,7 +9,6 @@ import {
 import { Arrival } from "./standard-ui";
 import * as DocumentPicker from "expo-document-picker";
 import Constants from "expo-constants";
-import * as Device from "expo-device";
 import * as FS from "expo-file-system/legacy";
 import { useStore } from "../lib/store";
 import { useRoad } from "./context";
@@ -26,7 +25,6 @@ import {
   T,
   Toggle,
   go,
-  notify,
   showError,
   focusControl,
   styles as s,
@@ -305,9 +303,6 @@ export function Settings() {
     includePersonal: p.includePersonal,
   });
   const [saving, setSaving] = useState(false);
-  const [versionTaps, setVersionTaps] = useState(0);
-  const developerVisible =
-    __DEV__ || !Device.isDevice || p.developer || versionTaps >= 5;
   const saveAndClose = (
     patch: Parameters<typeof rr.setPrefs>[0],
     ref: React.RefObject<View | null>,
@@ -536,27 +531,12 @@ export function Settings() {
         </View>
       )}
       <View style={{ marginTop: 18, alignItems: "center", gap: 2 }}>
-        {developerVisible && (
-          <Quiet title="Developer" icon="Settings" onPress={() => go("developer")} />
-        )}
-        {/* Five taps unlock Developer on release builds, the way iOS hides build tools. */}
-        <Pressable
-          accessibilityRole="text"
-          accessibilityLabel={`Version ${appVersion}`}
-          onPress={() => {
-            const taps = versionTaps + 1;
-            setVersionTaps(taps);
-            if (taps === 5 && !p.developer) {
-              void rr.setPrefs({ developer: true }).catch(showError);
-              notify("Developer settings unlocked.");
-            }
-          }}
-          style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 12 }}
-        >
+        <Quiet title="Developer" icon="Settings" onPress={() => go("developer")} />
+        <View style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 12 }}>
           <T style={{ fontSize: 13, lineHeight: 16, color: C.muted }}>
             Version {appVersion}
           </T>
-        </Pressable>
+        </View>
       </View>
     </Page>
   );
