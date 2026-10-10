@@ -191,22 +191,13 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
     )[mime];
     const file = `${root}${id}.${extension}`;
     await FS.copyAsync({ from: uri, to: file });
-    let thumbnail: string | undefined;
-    try {
-      const t = await Thumbnails.getThumbnailAsync(file, {
-        time: thumbnailAtMs,
-      });
-      thumbnail = `${root}${id}.jpg`;
-      await FS.copyAsync({ from: t.uri, to: thumbnail });
-    } catch {
-      /* Some codecs do not support thumbnails. The original clip remains available. */
-    }
+    // Commit the original before any optional native thumbnail work. An iOS
+    // thumbnail callback must never hold up saving a drive or starting upload.
     await persist([
       {
         id,
         name,
         file,
-        thumbnail,
         mime,
         size: info.size,
         createdAt: new Date().toISOString(),
@@ -218,6 +209,15 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
       },
       ...recordsRef.current,
     ]);
+    void (async () => {
+      const t = await Thumbnails.getThumbnailAsync(file, { time: thumbnailAtMs });
+      if (!recordsRef.current.some((record) => record.id === id)) return;
+      const thumbnail = `${root}${id}.jpg`;
+      await FS.copyAsync({ from: t.uri, to: thumbnail });
+      await update(id, { thumbnail });
+    })().catch(() => {
+      // The persisted original remains usable without a thumbnail.
+    });
     return id;
   };
   const importSample = async ({ fresh = false } = {}) => {

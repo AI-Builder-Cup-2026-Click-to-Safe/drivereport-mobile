@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Linking, Platform, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, AppState, Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Device from "expo-device";
@@ -7,6 +7,7 @@ import * as FS from "expo-file-system/legacy";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useStore } from "../lib/store";
 import { recordSegments, MIN_FREE_BYTES } from "../lib/dashcam";
+import { finishRecording } from "../lib/recording-finalization";
 import { useRoad } from "./context";
 import { duration } from "./model";
 import { T, go, showError } from "./ui";
@@ -25,6 +26,14 @@ export function Recording() {
     [ending, setEnding] = useState(false),
     [error, setError] = useState(""),
     [blocked, setBlocked] = useState(false);
+  const [saveStage, setSaveStage] = useState("Closing the camera file…");
+  const [saveSeconds, setSaveSeconds] = useState(0);
+  const [cameraReleased, setCameraReleased] = useState(false);
+  const finalizing = useRef(false);
+  const saveStageRef = useRef("Closing the camera file");
+  const failure = useRef("");
+  const capturing = useRef(false);
+  const savedCount = useRef(0);
   const wanted = useRef(true),
     started = useRef(false),
     mounted = useRef(true),
@@ -89,6 +98,7 @@ export function Recording() {
         const session = `road-${Date.now()}`;
         const fail = (e: unknown) => {
           stop();
+          failure.current = e instanceof Error ? e.message : "Recording stopped. Saved clips are kept.";
           if (mounted.current)
             setError(
               e instanceof Error
@@ -100,13 +110,21 @@ export function Recording() {
           shouldContinue: () => wanted.current,
           record: async () => {
             if (!camera.current) throw Error("Camera unavailable.");
-            return camera.current.recordAsync({
-              maxDuration: 60,
-              maxFileSize: 80 * 1024 * 1024,
-              ...(Platform.OS === "ios" ? { codec: "avc1" as const } : {}),
-            });
+            capturing.current = true;
+            try {
+              return await camera.current.recordAsync({
+                maxDuration: 60,
+                maxFileSize: 80 * 1024 * 1024,
+                ...(Platform.OS === "ios" ? { codec: "avc1" as const } : {}),
+              });
+            } finally {
+              capturing.current = false;
+            }
           },
           save: async (uri, createdAt) => {
+            saveStageRef.current = "Saving the video on this device";
+            if (mounted.current && !capturing.current)
+              setSaveStage("Saving the video on this device…");
             const ext = Platform.OS === "ios" ? "mov" : "mp4";
             const id = await current.current.importVideo(
               uri,
@@ -115,20 +133,22 @@ export function Recording() {
               { dashcamSession: session, createdAt, protected: true },
             );
             ids.current.push(id);
-            road.current.recordingSaved(id);
-            await FS.deleteAsync(uri, { idempotent: true });
-            if ((await FS.getFreeDiskStorageAsync()) < MIN_FREE_BYTES)
-              fail(
-                Error(
-                  "Storage is nearly full. Recording stopped; all saved clips are kept.",
-                ),
-              );
+            savedCount.current = ids.current.length;
+            if (mounted.current && finalizing.current) road.current.recordingSaved(id);
+            // Cleanup and a space check must not block the final saved clip.
+            void FS.deleteAsync(uri, { idempotent: true }).catch(() => {});
+            if (wanted.current)
+              void FS.getFreeDiskStorageAsync().then((free) => {
+                if (wanted.current && free < MIN_FREE_BYTES)
+                  fail(new Error("Storage is nearly full. Recording stopped; all saved clips are kept."));
+              }).catch(fail);
           },
           onError: fail,
         });
         await task.current;
       } catch (e) {
         stop();
+        failure.current = e instanceof Error ? e.message : "Unable to start recording.";
         if (mounted.current)
           setError(
             e instanceof Error ? e.message : "Unable to start recording.",
@@ -145,57 +165,67 @@ export function Recording() {
     }, 500);
     return () => clearInterval(timer);
   }, []);
+  useEffect(() => {
+    if (!ending) return;
+    const since = Date.now();
+    const timer = setInterval(() => setSaveSeconds(Math.floor((Date.now() - since) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [ending]);
   const end = async () => {
     if (endingRef.current) return;
     endingRef.current = true;
     setEnding(true);
-    stop();
-    if (!demo) {
-      rr.prepareRecording(ids.current);
-      go("analysis");
-    }
+    finalizing.current = true;
     try {
-      await task.current;
-      await deactivateKeepAwake("road-recording");
+      if (!demo) rr.prepareRecording(ids.current);
+      saveStageRef.current = capturing.current ? "Closing the camera file" : "Saving the video on this device";
+      setSaveStage(`${saveStageRef.current}…`);
+      // Do not push another native screen until the camera's final callback and
+      // original-file persistence finish; detaching its view can interrupt them.
+      await finishRecording({
+        stop,
+        pending: task.current,
+        timeoutMessage: () => `${capturing.current ? "Closing the camera file" : saveStageRef.current} took too long. ${savedCount.current} clip(s) saved. Check Saved recordings before recording again.`,
+      });
+      finalizing.current = false;
+      setCameraReleased(true);
+      void deactivateKeepAwake("road-recording");
+      if (failure.current) throw new Error(failure.current);
       if (demo) {
-        go("analysis");
+        go("analysis", true);
         void rr.begin([], true).catch(showError);
       } else if (ids.current.length) {
-        if (!store.settings.token) {
+        if (!current.current.settings.token) {
           rr.failRecording(
             "Recording saved. This build isn’t connected to the analysis server yet, so the clips wait here.",
           );
-          go("developer");
-          showError(
-            Error(
-              "Recording saved. Add the analysis server’s access token here, then analyse the saved clips.",
-            ),
-          );
+          go("analysis", true);
         } else {
-          go("analysis");
+          go("analysis", true);
           void rr.begin(ids.current).catch(showError);
         }
-      } else if (!demo)
+      } else if (!demo) {
         rr.failRecording(
           error || "The camera stopped before a recording could be saved.",
         );
-      else go("home");
+        go("analysis", true);
+      } else go("home");
     } catch (e) {
+      finalizing.current = false;
+      if (mounted.current) setCameraReleased(true);
+      void deactivateKeepAwake("road-recording");
       if (!demo)
         rr.failRecording(
           e instanceof Error ? e.message : "Could not save the recording.",
         );
-      showError(e);
-      if (mounted.current) {
-        setEnding(false);
-        endingRef.current = false;
-      }
+      if (!demo) go("analysis", true);
+      else showError(e);
     }
   };
   return (
     <View style={{ flex: 1, backgroundColor: "#000" }}>
 
-      {!demo && Device.isDevice && permission?.granted && (
+      {!cameraReleased && !demo && Device.isDevice && permission?.granted && (
         <CameraView
           ref={camera}
           style={StyleSheet.absoluteFill}
@@ -259,9 +289,18 @@ export function Recording() {
               fontWeight: "800",
             }}
           >
-            {"Don’t worry.\nI’ve got your back."}
+            {ending ? "Saving your drive" : "Don’t worry.\nI’ve got your back."}
           </T>
-          <T style={{ color: "#9A9EA5", textAlign: "center" }}>Eyes on the road. Gemini reads the clip after you stop.</T>
+          {ending ? (
+            <View style={{ alignItems: "center", gap: 16 }}>
+              <ActivityIndicator color="#eeeae4" />
+              <T accessibilityLiveRegion="polite" style={{ color: "#eeeae4", textAlign: "center" }}>{saveStage}</T>
+              <T style={{ color: "#9A9EA5", textAlign: "center" }}>{`${saveSeconds}s · ${savedCount.current} saved clips`}</T>
+              <T style={{ color: "#9A9EA5", textAlign: "center" }}>Keep the app open. Upload starts after saving finishes.</T>
+            </View>
+          ) : (
+            <T style={{ color: "#9A9EA5", textAlign: "center" }}>Eyes on the road. Gemini reads the clip after you stop.</T>
+          )}
           {error && (
             <T style={{ color: "#f2b3a0", fontSize: 14, lineHeight: 19, textAlign: "center" }}>
               {error}

@@ -72,7 +72,7 @@ export const showError = (e: unknown) =>
   Alert.alert("Click-to-Safe", e instanceof Error ? e.message : String(e));
 let currentDestination = "home";
 let navigationDirection = 1;
-export const go = (name: string) => {
+export const go = (name: string, replace = false) => {
   const order = ["home", "review", "impact", "developer"];
   navigationDirection =
     name === "home" ||
@@ -84,7 +84,8 @@ export const go = (name: string) => {
   currentDestination = name;
   setStatusBarStyle(name === "recording" ? "light" : "dark", false);
   const path = (name === "home" ? "/" : `/${name}`) as never;
-  if (["home", "review", "impact"].includes(name)) router.navigate(path);
+  if (replace) router.replace(path);
+  else if (["home", "review", "impact"].includes(name)) router.navigate(path);
   else router.push(path);
 };
 export function T({ balance, ...p }: TextProps & { balance?: boolean }) {
