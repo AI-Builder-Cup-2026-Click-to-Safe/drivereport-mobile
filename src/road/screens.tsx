@@ -391,7 +391,7 @@ export function Settings() {
   );
   const save = (patch: Parameters<typeof rr.setPrefs>[0]) =>
     void rr.setPrefs(patch).catch(showError);
-  // Reference Settings: Reporting and Preferences groups of 60pt rows with hairlines.
+  // Settings: Reporting, Preferences and Footage groups of 60pt rows, without dividers.
   return (
     <Page title="Settings" nav={false} gap={0}>
       <SettingsGroup title="Reporting" index={0}>
@@ -411,7 +411,7 @@ export function Settings() {
         />
         {open === "recipient" && (
           <FadeArrival distance={8}>
-            <View style={{ gap: 8, paddingTop: 4, paddingBottom: 14, borderBottomWidth: 1, borderColor: C.line }}>
+            <View style={{ gap: 8, paddingTop: 4, paddingBottom: 14 }}>
               {p.region === "MY" ? (
                 <>
                   <Notice>
@@ -474,7 +474,7 @@ export function Settings() {
         />
         {open === "personal" && (
           <FadeArrival distance={8}>
-            <View style={{ gap: 12, paddingTop: 4, paddingBottom: 14, borderBottomWidth: 1, borderColor: C.line }}>
+            <View style={{ gap: 12, paddingTop: 4, paddingBottom: 14 }}>
               {(
                 [
                   ["name", "Full name", "Your full name"],
@@ -714,8 +714,6 @@ function SettingsRow({
         flexDirection: "row",
         alignItems: "center",
         gap: 12,
-        borderBottomWidth: open ? 0 : 1,
-        borderColor: C.line,
       }}
     >
       <Icon name={icon} size={20} />
