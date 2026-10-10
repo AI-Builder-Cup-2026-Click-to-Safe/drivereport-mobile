@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
+import { useLocalSearchParams } from "expo-router";
 import * as FS from "expo-file-system/legacy";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useStore } from "../lib/store";
@@ -11,8 +12,10 @@ import { recordSegments, MIN_FREE_BYTES } from "../lib/dashcam";
 import { finishRecording } from "../lib/recording-finalization";
 import { useRoad } from "./context";
 import { duration } from "./model";
-import { T, go, showError } from "./ui";
+import { T, go, notify, showError } from "./ui";
 export function Recording() {
+  const params = useLocalSearchParams<{ cameraTest?: string }>();
+  const cameraTest = useRef(params.cameraTest === "1").current;
   const rr = useRoad(),
     store = useStore(),
     current = useRef(store),
@@ -20,7 +23,7 @@ export function Recording() {
   current.current = store;
   road.current = rr;
   // Synthetic cases must never replace camera capture on a physical phone.
-  const demo = !Device.isDevice && rr.prefs.demo;
+  const demo = !cameraTest && !Device.isDevice && rr.prefs.demo;
   const camera = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [ready, setReady] = useState(false),
@@ -42,7 +45,7 @@ export function Recording() {
     trace.current = [...trace.current.slice(-39), `${new Date().toISOString()} ${step}`];
   }, []);
   const diagnostics = () => [
-    `Click-to-Safe ${Constants.expoConfig?.version || "unknown"} / recording diagnostics v1`,
+    `Click-to-Safe ${Constants.expoConfig?.version || "unknown"} / recording diagnostics v2`,
     `${Device.modelName || "unknown device"} / ${Platform.OS} ${Device.osVersion || "unknown OS"}`,
     `Camera permission: ${permission?.status || "unknown"}; camera ready: ${ready}`,
     `Mode: ${demo ? "demo" : "camera"}; quality: 720p; audio: muted`,
@@ -58,6 +61,7 @@ export function Recording() {
     startTime = useRef(0),
     endingRef = useRef(false);
   const permissionRequest = useRef(requestPermission);
+  const endAction = useRef<() => void>(() => {});
   const permissionAtMount = useRef(permission?.granted);
   const stop = useCallback(() => {
     wanted.current = false;
@@ -217,6 +221,9 @@ export function Recording() {
     const timer = setInterval(() => setSaveSeconds(Math.floor((Date.now() - since) / 1000)), 1000);
     return () => clearInterval(timer);
   }, [ending]);
+  useEffect(() => {
+    if (cameraTest && !ending && (elapsed >= 5 || error)) endAction.current();
+  }, [cameraTest, elapsed, ending, error]);
   const end = async () => {
     if (endingRef.current) return;
     endingRef.current = true;
@@ -224,7 +231,7 @@ export function Recording() {
     finalizing.current = true;
     logStep("End recording pressed");
     try {
-      if (!demo) rr.prepareRecording(ids.current);
+      if (!demo && !cameraTest) rr.prepareRecording(ids.current);
       saveStageRef.current = capturing.current ? "Closing the camera file" : "Saving the video on this device";
       setSaveStage(`${saveStageRef.current}…`);
       // Do not push another native screen until the camera's final callback and
@@ -238,6 +245,15 @@ export function Recording() {
       setCameraReleased(true);
       void deactivateKeepAwake("road-recording");
       if (failure.current) throw new Error(failure.current);
+      if (cameraTest) {
+        if (!ids.current.length) throw new Error(error || "No camera file was saved.");
+        await FS.writeAsStringAsync(`${FS.documentDirectory}camera-check.json`, JSON.stringify({
+          status: "saved", sourceIds: ids.current, diagnostics: diagnostics(),
+        }));
+        go("developer", true);
+        notify("Camera check passed. The 5-second video is saved on this device. Nothing was uploaded.");
+        return;
+      }
       if (demo) {
         go("analysis", true);
         void rr.begin([], true).catch(showError);
@@ -264,6 +280,13 @@ export function Recording() {
       finalizing.current = false;
       if (mounted.current) setCameraReleased(true);
       void deactivateKeepAwake("road-recording");
+      if (cameraTest) {
+        await FS.writeAsStringAsync(`${FS.documentDirectory}camera-check.json`, JSON.stringify({
+          status: "error", error: e instanceof Error ? e.message : "Camera check failed", diagnostics: diagnostics(),
+        })).catch(() => {});
+        // Reuse the normal, copyable recording error screen for local checks.
+        rr.prepareRecording(ids.current);
+      }
       if (!demo)
         rr.failRecording(
           e instanceof Error ? e.message : "Could not save the recording.",
@@ -273,6 +296,7 @@ export function Recording() {
       else showError(e);
     }
   };
+  endAction.current = () => void end();
   return (
     <View style={{ flex: 1, backgroundColor: "#000" }}>
 
@@ -345,17 +369,17 @@ export function Recording() {
               fontWeight: "800",
             }}
           >
-            {ending ? "Saving your drive" : "Don’t worry.\nI’ve got your back."}
+            {ending ? "Saving your drive" : cameraTest ? "Checking your camera" : "Don’t worry.\nI’ve got your back."}
           </T>
           {ending ? (
             <View style={{ alignItems: "center", gap: 16 }}>
               <ActivityIndicator color="#eeeae4" />
               <T accessibilityLiveRegion="polite" style={{ color: "#eeeae4", textAlign: "center" }}>{saveStage}</T>
               <T style={{ color: "#9A9EA5", textAlign: "center" }}>{`${saveSeconds}s · ${savedCount.current} saved clips`}</T>
-              <T style={{ color: "#9A9EA5", textAlign: "center" }}>Keep the app open. Upload starts after saving finishes.</T>
+              <T style={{ color: "#9A9EA5", textAlign: "center" }}>{cameraTest ? "Keep the app open. This camera check only saves on your device." : "Keep the app open. Upload starts after saving finishes."}</T>
             </View>
           ) : (
-            <T style={{ color: "#9A9EA5", textAlign: "center" }}>Eyes on the road. Gemini reads the clip after you stop.</T>
+            <T style={{ color: "#9A9EA5", textAlign: "center" }}>{cameraTest ? "Records for 5 seconds, then saves on this device. No upload or AI analysis." : "Eyes on the road. Gemini reads the clip after you stop."}</T>
           )}
           {error && (
             <T style={{ color: "#f2b3a0", fontSize: 14, lineHeight: 19, textAlign: "center" }}>

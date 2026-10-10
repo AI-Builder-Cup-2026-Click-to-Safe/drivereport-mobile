@@ -112,6 +112,8 @@ export function Developer() {
   };
   return (
     <Page title="Developer options" nav={false}>
+      <Intro title="Camera check" body="Record and save a 5-second clip on this device. Nothing is uploaded." />
+      <Action title="Run 5-second camera check" secondary onPress={() => go("recording?cameraTest=1")} />
       <Intro
         title="Test WhatsApp"
         body="Enter your own number. I’ll open a harmless dummy draft so you can verify the handoff without creating a case."

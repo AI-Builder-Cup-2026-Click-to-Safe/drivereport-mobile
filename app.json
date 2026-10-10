@@ -60,6 +60,7 @@
       "./plugins/withNoPushEntitlement",
       "./plugins/withPodDeploymentTarget",
       "./plugins/withSceneLifecycle",
+      "./plugins/withCameraReadiness",
       "@react-native-community/datetimepicker",
       [
         "expo-splash-screen",
