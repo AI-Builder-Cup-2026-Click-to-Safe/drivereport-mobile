@@ -58,6 +58,7 @@
       "./plugins/withWhatsApp",
       "expo-font",
       "./plugins/withNoPushEntitlement",
+      "./plugins/withPodDeploymentTarget",
       "@react-native-community/datetimepicker",
       [
         "expo-splash-screen",
