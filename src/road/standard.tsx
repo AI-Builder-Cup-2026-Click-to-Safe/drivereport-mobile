@@ -240,7 +240,7 @@ export function Clip() {
         );
       if (rr.prefs.region !== "MY")
         throw Error(
-          "Live analysis supports Malaysia only. Set the region to Malaysia in Developer settings.",
+          "Live analysis supports Malaysia only. Set the region to Malaysia in Settings.",
         );
       let id = file?.id;
       if (!id) {

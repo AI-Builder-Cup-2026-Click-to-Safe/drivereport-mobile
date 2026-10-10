@@ -448,7 +448,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     if (!ready || error) throw Error(error || "Still restoring your data.");
     if (!demo && pr.current.region !== "MY")
       throw Error(
-        "Live analysis supports Malaysia only. Set the region to Malaysia in Developer settings.",
+        "Live analysis supports Malaysia only. Set the region to Malaysia in Settings.",
       );
     if (!demo && !old.current.settings.token)
       throw Error("This build isn’t connected to the analysis server yet. Add its access token in Developer settings.");

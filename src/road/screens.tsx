@@ -20,7 +20,6 @@ import {
   Action,
   C,
   Field,
-  Segments,
   Icon,
   Intro,
   Notice,
@@ -323,19 +322,6 @@ export function Developer() {
           }
         />
       </View>
-      {/* Region moved here when Settings took the submission's two groups; live analysis needs MY. */}
-      <View style={{ gap: 8 }}>
-        <T style={{ fontWeight: "700" }}>Region</T>
-        <Segments
-          items={(["MY", "SG", "JP"] as const).map((r) => regionNames[r])}
-          value={(["MY", "SG", "JP"] as const).indexOf(rr.prefs.region)}
-          onChange={(i) =>
-            void rr
-              .setPrefs({ region: (["MY", "SG", "JP"] as const)[i] })
-              .catch(showError)
-          }
-        />
-      </View>
       <T style={s.muted}>
         {rr.prefs.demo
           ? "Demo cases and motion previews are separate from your real footage."
@@ -542,6 +528,30 @@ export function Settings() {
       </SettingsGroup>
       <SettingsGroup title="Preferences" index={1}>
         <SettingsRow
+          icon="Globe"
+          title="Region"
+          note={
+            p.region === "MY"
+              ? "Malaysian law · reports go to JPJ"
+              : "Live analysis supports Malaysia only"
+          }
+          onPress={() => {
+            if (Platform.OS === "ios")
+              ActionSheetIOS.showActionSheetWithOptions(
+                {
+                  options: [...REGIONS.map((r) => regionNames[r]), "Cancel"],
+                  cancelButtonIndex: REGIONS.length,
+                },
+                (i) => i < REGIONS.length && save({ region: REGIONS[i] }),
+              );
+            else
+              save({
+                region: REGIONS[(REGIONS.indexOf(p.region) + 1) % REGIONS.length],
+              });
+          }}
+          trailing={<SelectPill label={regionNames[p.region]} />}
+        />
+        <SettingsRow
           icon="Languages"
           title="English format"
           note={p.language === "en-GB" ? "Dates read as 3 Oct" : "Dates read as Oct 3"}
@@ -555,25 +565,7 @@ export function Settings() {
             else save({ language: p.language === "en-GB" ? "en-US" : "en-GB" });
           }}
           trailing={
-            <View
-              style={{
-                minHeight: 44,
-                paddingLeft: 14,
-                paddingRight: 11,
-                borderRadius: 999,
-                backgroundColor: C.surface,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <T style={{ fontSize: 14, lineHeight: 18, fontWeight: "600" }}>
-                {p.language === "en-GB" ? "English (UK)" : "English (US)"}
-              </T>
-              <View style={{ transform: [{ rotate: "90deg" }] }}>
-                <Icon name="ChevronRight" size={14} strokeWidth={2.4} />
-              </View>
-            </View>
+            <SelectPill label={p.language === "en-GB" ? "English (UK)" : "English (US)"} />
           }
         />
         <SettingsRow
@@ -621,6 +613,29 @@ export function Settings() {
   );
 }
 const setNote = { fontSize: 13, lineHeight: 19, color: C.muted };
+const REGIONS = ["MY", "SG", "JP"] as const;
+/** The current choice of a Settings row that opens an action sheet. */
+function SelectPill({ label }: { label: string }) {
+  return (
+    <View
+      style={{
+        minHeight: 44,
+        paddingLeft: 14,
+        paddingRight: 11,
+        borderRadius: 999,
+        backgroundColor: C.surface,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+      }}
+    >
+      <T style={{ fontSize: 14, lineHeight: 18, fontWeight: "600" }}>{label}</T>
+      <View style={{ transform: [{ rotate: "90deg" }] }}>
+        <Icon name="ChevronRight" size={14} strokeWidth={2.4} />
+      </View>
+    </View>
+  );
+}
 const appVersion = `${Constants.expoConfig?.version ?? "1.0.0"} (${Constants.expoConfig?.ios?.buildNumber ?? "1"})`;
 function SettingsGroup({
   title,
