@@ -1,0 +1,5 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": { "modules": ["VideoPreparationModule"] },
+  "android": { "modules": ["expo.modules.videopreparation.VideoPreparationModule"] }
+}

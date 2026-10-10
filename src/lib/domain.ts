@@ -39,7 +39,7 @@ export type ImpactSummary = {
   isDemo: boolean;
   demoToday: string;
 };
-export type Stage = "queued" | "uploading" | "reviewing" | "ready" | "error";
+export type Stage = "queued" | "preparing" | "uploading" | "reviewing" | "ready" | "error";
 export type Incident = {
   id: string;
   name: string;
@@ -51,6 +51,9 @@ export type Incident = {
   stage: Stage;
   remoteUri?: string;
   remoteApiUrl?: string;
+  remoteAudioRemoved?: boolean;
+  remoteMime?: string;
+  durationSeconds?: number;
   selectedVehicleId?: string;
   result?: Review;
   error?: string;
@@ -189,9 +192,11 @@ export const statusLabel = (i: Incident) =>
             ? "Needs attention"
             : i.stage === "reviewing"
               ? "AI reviewing"
-              : i.stage === "uploading"
-                ? "Uploading"
-                : "Ready to upload";
+              : i.stage === "preparing"
+                ? "Removing audio"
+                : i.stage === "uploading"
+                  ? "Uploading"
+                  : "Ready to upload";
 export function buildDraft(i: Incident, profile: Settings): string {
   if (!i.result?.reportable.length)
     throw new Error("There are no reportable findings.");

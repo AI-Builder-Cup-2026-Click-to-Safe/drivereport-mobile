@@ -1,3 +1,5 @@
+import { MAX_VIDEO_BYTES } from "../lib/video-policy";
+import { lawPlaceholder } from "./analysis-progress";
 import React, { useEffect, useState } from "react";
 import {
   ActionSheetIOS,
@@ -229,11 +231,11 @@ export function Clip() {
         f.type !== "video" ||
         !stat.exists ||
         !stat.size ||
-        stat.size > 300000000 ||
+        stat.size > MAX_VIDEO_BYTES ||
         !/\.(mp4|mov|webm)$/i.test(name)
       )
         throw Error(
-          "Choose a playable MP4, MOV or WebM between 1 byte and 300 MB.",
+          "Choose a playable MP4, MOV or WebM up to 30 minutes and 500 MiB.",
         );
       setChosen(await store.importVideo(f.uri, name, f.mimeType));
     } catch (e) {
@@ -322,7 +324,7 @@ export function Clip() {
             </T>
             <T style={clipMeta}>
               {[
-                file ? "" : duration(SAMPLE_VIDEO.durationSeconds),
+                file ? (file.durationSeconds ? duration(file.durationSeconds) : "") : duration(SAMPLE_VIDEO.durationSeconds),
                 size ? `${(size / 1e6).toFixed(1)} MB` : "",
               ]
                 .filter(Boolean)
@@ -367,7 +369,7 @@ export function Clip() {
             ["Sun", "Daylight footage", "Gemini has to read the plate."],
             [
               "Clock",
-              "Short clips, up to 300 MB",
+              "Up to 30 minutes · 500 MiB · audio removed before upload",
               "Gemini bills us by the second. We are really poor.",
             ],
           ] as const
@@ -532,6 +534,7 @@ export function StandardAnalysis() {
     rr.allCases.find((c) => j.caseIds.includes(c.id)) ||
     (demo ? (submissionFixtures.allCases[0] as RoadCase) : undefined);
   const file = store.records.find((r) => j.sourceIds.includes(r.id));
+  const preparingUpload = file?.stage === "preparing" && running;
   const f =
     demo && running && stage < 4
       ? Math.max(0, Math.min(1, (now - stageStart) / DEMO_STAGE_MS[stage]))
@@ -556,7 +559,7 @@ export function StandardAnalysis() {
     ? [
         "Securing the last recording",
         j.sourceIds.length
-          ? `${j.sourceIds.length} saved segment${j.sourceIds.length === 1 ? "" : "s"}. Finishing the last file before upload.`
+          ? `${j.sourceIds.length} saved video${j.sourceIds.length === 1 ? "" : "s"}. Finishing the last file before upload.`
           : "Closing the camera file and saving it locally before upload.",
       ]
     : recordingFailed
@@ -566,6 +569,8 @@ export function StandardAnalysis() {
             ? `${j.sourceIds.length} clip(s) saved on this device. Upload has not started.`
             : "No video has been saved from this recording. Upload and AI analysis have not started.",
         ]
+    : preparingUpload
+      ? ["Preparing your video", "Checking the video and removing audio on this device before upload. Keep Click-to-Safe open."]
     : !running && !done
       ? ["Analysis interrupted", j.error || "Your recording is still saved."]
       : stage >= 4
@@ -604,7 +609,10 @@ export function StandardAnalysis() {
     if (stage >= 2) {
       const list = stage >= 3 ? sources : sources.slice(0, k);
       if (!list.length)
-        findings.push({ key: "law-0", label: "Law", value: "Searching JPJ law", wait: true });
+        findings.push({
+          key: "law-0", label: "Law",
+          ...lawPlaceholder(stage, done, offences.some((offence) => offence.included)),
+        });
       list.forEach((law, i) =>
         findings.push({
           key: `law-${i}`,
@@ -743,7 +751,7 @@ export function StandardAnalysis() {
         )}
         {demo && <FrameBadge>Sample run</FrameBadge>}
         {saving && <FrameBadge>Saving on this device</FrameBadge>}
-        {stage === 0 && running && (
+        {stage === 0 && running && !saving && !preparingUpload && (
           <UploadBar
             progress={demo ? null : (j.progress ?? 0) / 100}
             ms={DEMO_STAGE_MS[0]}
@@ -752,7 +760,7 @@ export function StandardAnalysis() {
         {demo && stage >= 1 && <SampleOverlay caption={line || undefined} />}
         {running && stage === 1 && <ScanSweep />}
       </View>
-      {!recordingFailed && <StageDots stage={stage} preparing={preparing} />}
+      {!recordingFailed && <StageDots stage={stage} preparing={preparing || preparingUpload} />}
       <Announce message={caption[0]} />
       {/* The caption changes in place: a short fade and rise, never a blank. */}
       <FadeArrival identity={`${j.id}-${caption[0]}`} distance={8} duration={320}>
@@ -789,7 +797,7 @@ export function StandardAnalysis() {
           </View>
         </Arrival>
       )}
-      {!preparing && <CostTotal
+      {!preparing && !preparingUpload && <CostTotal
         value={demo ? cost : null}
         note={demo ? "24 s clip" : "Not reported by the server"}
         settled={done}
@@ -927,7 +935,7 @@ function StageDots({ stage, preparing }: { stage: number; preparing: boolean }) 
           <View
             key={name}
             accessible
-            accessibilityLabel={`${name}: ${preparing ? "waiting for the saved recording" : doneDot ? "done" : now ? "working" : "next"}`}
+            accessibilityLabel={`${name}: ${preparing ? "waiting for video preparation" : doneDot ? "done" : now ? "working" : "next"}`}
             style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
           >
             <StageDot

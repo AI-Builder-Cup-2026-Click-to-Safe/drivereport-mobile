@@ -350,7 +350,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         j
           ? {
               ...j,
-              stage: i?.stage === "uploading" ? 0 : 1,
+              stage: ["queued", "preparing", "uploading"].includes(i?.stage || "queued") ? 0 : 1,
               progress:
                 i?.stage === "uploading"
                   ? Math.round(legacy.progress * 100)

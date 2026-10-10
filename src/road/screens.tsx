@@ -1,3 +1,4 @@
+import { MAX_VIDEO_BYTES } from "../lib/video-policy";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActionSheetIOS,
@@ -66,11 +67,11 @@ export function Developer() {
       if (
         !stat.exists ||
         !stat.size ||
-        stat.size > 300000000 ||
+        stat.size > MAX_VIDEO_BYTES ||
         !/\.(mp4|mov|webm)$/i.test(f.name)
       )
         throw Error(
-          "Choose a playable MP4, MOV or WebM between 1 byte and 300 MB.",
+          "Choose a playable MP4, MOV or WebM up to 30 minutes and 500 MiB.",
         );
       setChosen(await store.importVideo(f.uri, f.name, f.mimeType));
       setMessage("");
@@ -188,7 +189,7 @@ export function Developer() {
         disabled={busy}
         onPress={() => void choose()}
       />
-      <T style={s.muted}>MP4, MOV or WebM · 300 MB max</T>
+      <T style={s.muted}>MP4, MOV or WebM · 30 min · 500 MiB max · uploaded without audio</T>
       {file && (
         <View style={s.card}>
           <T>{file.name}</T>

@@ -1,3 +1,5 @@
+import { reviewWindowMinutes } from "./video-policy";
+import { inspectVideo, prepareSilentVideo } from "./video-preparation";
 import * as FileSystem from "expo-file-system/legacy";
 import {
   Incident,
@@ -160,68 +162,86 @@ export async function analyseVideo(
   if (!settings.token.trim())
     throw new Error("This build isn’t connected to the analysis server yet. Add its access token in Developer settings.");
   let uri =
-    i.remoteApiUrl === validateApiUrl(settings.apiUrl)
+    i.remoteAudioRemoved === true && i.remoteApiUrl === validateApiUrl(settings.apiUrl)
       ? i.remoteUri
       : undefined;
+  let mime = i.remoteMime || i.mime;
+  let durationSeconds = i.durationSeconds;
   if (!uri) {
-    await update({ stage: "uploading", error: undefined }, 0);
-    const session = await request(settings, "/v1/uploads", signal, {
-      mime_type: i.mime,
-      size_bytes: i.size,
-    });
-    if (
-      typeof session.upload_url !== "string" ||
-      !session.upload_url.startsWith("https://storage.googleapis.com/") ||
-      typeof session.video_uri !== "string" ||
-      !session.video_uri.startsWith("gs://")
-    )
-      throw new Error("The server returned an invalid upload destination.");
-    const task = FileSystem.createUploadTask(
-      session.upload_url,
-      i.file,
-      {
-        httpMethod: "PUT",
-        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-        sessionType: FileSystem.FileSystemSessionType.FOREGROUND,
-        headers: { "Content-Type": i.mime },
-      },
-      ({ totalBytesSent, totalBytesExpectedToSend }) => {
-        void update(
-          {},
-          totalBytesExpectedToSend
-            ? totalBytesSent / totalBytesExpectedToSend
-            : 0,
-        );
-      },
-    );
-    const abort = () => {
-      void task.cancelAsync();
-    };
-    signal.addEventListener("abort", abort);
+    await update({ stage: "preparing", error: undefined }, 0);
+    const prepared = await prepareSilentVideo(i.file, i.mime, signal);
     try {
+      mime = prepared.mime;
+      durationSeconds = prepared.duration;
       if (signal.aborted) throw new Error("Analysis cancelled.");
-      const response = await task.uploadAsync();
-      if (!response || response.status < 200 || response.status >= 300)
-        throw new Error(
-          signal.aborted
-            ? "Analysis cancelled."
-            : `Video upload failed (${response?.status ?? "network error"}). Retry when connected.`,
-        );
-    } finally {
-      signal.removeEventListener("abort", abort);
-    }
-    uri = session.video_uri;
-    await update({
-      remoteUri: uri,
-      remoteApiUrl: validateApiUrl(settings.apiUrl),
-    });
+      await update({ durationSeconds: prepared.duration });
+      await update({ stage: "uploading", error: undefined }, 0);
+      const session = await request(settings, "/v1/uploads", signal, {
+        mime_type: mime,
+        size_bytes: prepared.size,
+      });
+      if (
+        typeof session.upload_url !== "string" ||
+        !session.upload_url.startsWith("https://storage.googleapis.com/") ||
+        typeof session.video_uri !== "string" ||
+        !session.video_uri.startsWith("gs://")
+      )
+        throw new Error("The server returned an invalid upload destination.");
+      const task = FileSystem.createUploadTask(
+        session.upload_url,
+        prepared.file,
+        {
+          httpMethod: "PUT",
+          uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+          sessionType: FileSystem.FileSystemSessionType.FOREGROUND,
+          headers: { "Content-Type": mime },
+        },
+        ({ totalBytesSent, totalBytesExpectedToSend }) => {
+          void update(
+            {},
+            totalBytesExpectedToSend
+              ? totalBytesSent / totalBytesExpectedToSend
+              : 0,
+          );
+        },
+      );
+      const abort = () => {
+        void task.cancelAsync();
+      };
+      signal.addEventListener("abort", abort);
+      try {
+        if (signal.aborted) throw new Error("Analysis cancelled.");
+        const response = await task.uploadAsync();
+        if (!response || response.status < 200 || response.status >= 300)
+          throw new Error(
+            signal.aborted
+              ? "Analysis cancelled."
+              : `Video upload failed (${response?.status ?? "network error"}). Retry when connected.`,
+          );
+      } finally {
+        signal.removeEventListener("abort", abort);
+      }
+      uri = session.video_uri;
+      await update({
+        remoteUri: uri,
+        remoteApiUrl: validateApiUrl(settings.apiUrl),
+        remoteAudioRemoved: true,
+        remoteMime: mime,
+      });
+    } finally { await prepared.cleanup(); }
   }
   if (signal.aborted) throw new Error("Analysis cancelled.");
+  if (!durationSeconds) {
+    const metadata = await inspectVideo(i.file);
+    durationSeconds = metadata.duration;
+    await update({ durationSeconds });
+  }
   await update({ stage: "reviewing" }, 1);
   const raw = await request(settings, "/v1/review", signal, {
     video_uri: uri,
-    mime_type: i.mime,
+    mime_type: mime,
     region,
+    window_minutes: reviewWindowMinutes(durationSeconds ?? i.durationSeconds ?? 0),
   });
   return parseReview(raw);
 }

@@ -60,11 +60,15 @@ JPJ's [official social-channel announcement](https://t.me/s/JPJ_Malaysia?before=
 
 ## Recording and storage
 
-There is no 60-second **session** limit. Silent 720p capture writes successive one-minute files until End recording. These files are internal segments, and starting the next file can introduce brief gaps; gapless recording is not claimed.
+A drive is one silent 720p video, up to **30 minutes**. Capture never restarts at a one-minute boundary. End recording, the 30-minute limit, or the 490 MiB capture ceiling finishes that one file, then starts upload and review. The 2 Mbps video bitrate targets roughly 450 MB for 30 minutes; device encoders and available storage can cause an earlier stop.
 
-The app keeps the screen awake. Leaving the foreground, locking the phone, a camera error or low storage stops recording. Saved segments remain available in Developer. Footage is preserved; this flow does not automatically delete older recordings. Capture stops below 400 MiB of free storage. Long driving sessions therefore require available device space.
+The app keeps the screen awake and needs at least 1,100 MiB free before capture, allowing room for the camera file and durable local copy. Leaving the foreground or locking the phone stops capture. Saved videos remain available in Developer; older recordings are not deleted automatically.
 
-End recording immediately opens the progress screen. It first shows the local finalization step while the last camera file is closed, copied and indexed, including the number of segments already secured. The same screen then advances to upload progress and server review. Saved segments are analysed sequentially when credentials are configured. Without credentials they remain available for later analysis. This is post-drive review, not real-time violation detection. Retrying a partially completed job reuses completed cases and preserves user edits. An interrupted job can be retried after reopening the app.
+End recording keeps the camera mounted while showing local saving progress. After the native callback, the original is copied and indexed before optional thumbnails. Native capture stops at 29:59 to leave one second of container timing headroom under the server’s exact 30-minute limit. The analysis screen then shows video preparation, upload progress, and server review. A drive produces one upload, not 30 uploads. For longer videos the review request chooses a larger analysis window, keeping the server request inside its time budget without splitting the stored video. Without credentials it stays saved locally. This is post-drive review, not real-time violation detection.
+
+Gallery/file imports accept videos up to **30 minutes and 500 MiB**. Before any new upload, the app inspects the file. If it has audio, the local `VideoPreparation` Expo module copies only encoded video tracks to a temporary MOV (iOS) or MP4 (Android), preserving quality and orientation. It verifies the output contains no audio and retains the video's duration before requesting an upload URL. A failed conversion never falls back to uploading audio. Originals stay intact locally, and temporary silent copies are deleted after upload or failure. Legacy uploads without an audio-free marker are not reused for a new analysis.
+
+The native module requires a new app binary (it cannot be installed through a JS-only update or Expo Go). `npm test` covers duration/size boundaries, single-file capture and upload behavior. `tests/SilentVideoExporterCheck.swift` runs the same AVFoundation exporter against a supplied audio/video fixture and checks duration, track removal, cancellation, and preservation of the original.
 
 ## Backend connection
 
@@ -82,7 +86,7 @@ The mobile client follows the current backend contract:
 6. `GET /v1/reviews/{review_id}` downloads a new shared case and refreshes expiring signed evidence links before handoff.
 7. `PATCH /v1/reviews/{review_id}/reporting` synchronizes `opened` and `sent`; `GET /v1/impact?period=all|week|today` supplies live aggregate counters.
 
-The backend limits clips to ten minutes. It now persists a normalized case, decision trail, tracked/annotated evidence and a cited excerpt when rendering succeeds. Signed links expire, so the app refreshes them before WhatsApp handoff. The backend still has no progress-event stream, face blurring, direct authority submission, verified fine outcomes or licence records. Those capabilities are not fabricated in live mode. Keep the app open while reviewing; stopping local waiting cannot cancel an already-started server job.
+The backend accepts one video up to 30 minutes and 500 MiB. It now persists a normalized case, decision trail, tracked/annotated evidence and a cited excerpt when rendering succeeds. Signed links expire, so the app refreshes them before WhatsApp handoff. The backend still has no progress-event stream, face blurring, direct authority submission, verified fine outcomes or licence records. Those capabilities are not fabricated in live mode. Keep the app open while reviewing; stopping local waiting cannot cancel an already-started server job.
 
 Optional provisioning for contributors with existing GCP Secret Manager access:
 

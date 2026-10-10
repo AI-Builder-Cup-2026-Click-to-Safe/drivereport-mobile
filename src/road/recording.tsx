@@ -8,14 +8,17 @@ import { useLocalSearchParams } from "expo-router";
 import * as FS from "expo-file-system/legacy";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useStore } from "../lib/store";
-import { recordSegments, MIN_FREE_BYTES } from "../lib/dashcam";
+import { recordDrive, MIN_FREE_BYTES } from "../lib/dashcam";
+import { inspectVideo, prepareSilentVideo } from "../lib/video-preparation";
+import { MAX_VIDEO_SECONDS, MAX_CAPTURE_BYTES } from "../lib/video-policy";
 import { finishRecording } from "../lib/recording-finalization";
 import { useRoad } from "./context";
 import { duration } from "./model";
 import { T, go, notify, showError } from "./ui";
 export function Recording() {
-  const params = useLocalSearchParams<{ cameraTest?: string }>();
+  const params = useLocalSearchParams<{ cameraTest?: string; cameraTestSeconds?: string }>();
   const cameraTest = useRef(params.cameraTest === "1").current;
+  const cameraTestSeconds = useRef(params.cameraTestSeconds === "65" ? 65 : 5).current;
   const rr = useRoad(),
     store = useStore(),
     current = useRef(store),
@@ -117,7 +120,7 @@ export function Recording() {
     void (async () => {
       try {
         if (!demo && (await FS.getFreeDiskStorageAsync()) < MIN_FREE_BYTES)
-          throw Error("At least 400 MB of free space is needed.");
+          throw Error("At least 1.1 GiB of free space is needed to record and save a drive.");
         await activateKeepAwakeAsync("road-recording");
         if (!wanted.current) return;
         startTime.current = Date.now();
@@ -137,16 +140,15 @@ export function Recording() {
                 : "Recording stopped. Saved clips are kept.",
             );
         };
-        task.current = recordSegments({
-          shouldContinue: () => wanted.current,
+        task.current = recordDrive({
           record: async () => {
             if (!camera.current) throw Error("Camera unavailable.");
             capturing.current = true;
             logStep("Requested native video capture");
             try {
               const result = await camera.current.recordAsync({
-                maxDuration: 60,
-                maxFileSize: 80 * 1024 * 1024,
+                maxDuration: MAX_VIDEO_SECONDS - 1,
+                maxFileSize: MAX_CAPTURE_BYTES,
                 ...(Platform.OS === "ios" ? { codec: "avc1" as const } : {}),
               });
               logStep(result?.uri ? "Native camera returned a video file" : "Native camera returned no file");
@@ -174,17 +176,15 @@ export function Recording() {
             savedCount.current = ids.current.length;
             logStep(`Original video saved; ${savedCount.current} clip(s)`);
             if (mounted.current && finalizing.current) road.current.recordingSaved(id);
-            // Cleanup and a space check must not block the final saved clip.
             void FS.deleteAsync(uri, { idempotent: true }).catch(() => {});
-            if (wanted.current)
-              void FS.getFreeDiskStorageAsync().then((free) => {
-                if (wanted.current && free < MIN_FREE_BYTES)
-                  fail(new Error("Storage is nearly full. Recording stopped; all saved clips are kept."));
-              }).catch(fail);
           },
           onError: fail,
         });
         await task.current;
+        // Native duration/size limits finish the same single-file drive. The
+        // promise is settled before end() waits for it, preventing a deadlock.
+        if (mounted.current && !endingRef.current && !failure.current)
+          endAction.current();
       } catch (e) {
         stop();
         failure.current = e instanceof Error ? e.message : "Unable to start recording.";
@@ -222,8 +222,8 @@ export function Recording() {
     return () => clearInterval(timer);
   }, [ending]);
   useEffect(() => {
-    if (cameraTest && !ending && (elapsed >= 5 || error)) endAction.current();
-  }, [cameraTest, elapsed, ending, error]);
+    if (!ending && ((cameraTest && (elapsed >= cameraTestSeconds || error)) || elapsed >= MAX_VIDEO_SECONDS)) endAction.current();
+  }, [cameraTest, cameraTestSeconds, elapsed, ending, error]);
   const end = async () => {
     if (endingRef.current) return;
     endingRef.current = true;
@@ -239,6 +239,7 @@ export function Recording() {
       await finishRecording({
         stop,
         pending: task.current,
+        timeoutMs: 120_000,
         timeoutMessage: () => `${capturing.current ? "Closing the camera file" : saveStageRef.current} took too long. ${savedCount.current} clip(s) saved. Check Saved recordings before recording again.`,
       });
       finalizing.current = false;
@@ -247,11 +248,16 @@ export function Recording() {
       if (failure.current) throw new Error(failure.current);
       if (cameraTest) {
         if (!ids.current.length) throw new Error(error || "No camera file was saved.");
+        const recorded = current.current.getRecords().find((record) => record.id === ids.current[0]);
+        if (!recorded) throw new Error("Saved camera video not found.");
+        const video = await inspectVideo(recorded.file);
+        const prepared = await prepareSilentVideo(recorded.file, recorded.mime, new AbortController().signal);
+        await prepared.cleanup();
         await FS.writeAsStringAsync(`${FS.documentDirectory}camera-check.json`, JSON.stringify({
-          status: "saved", sourceIds: ids.current, diagnostics: diagnostics(),
+          status: "saved", sourceIds: ids.current, video, diagnostics: diagnostics(),
         }));
         go("developer", true);
-        notify("Camera check passed. The 5-second video is saved on this device. Nothing was uploaded.");
+        notify(`Camera check passed. The ${cameraTestSeconds}-second video is saved and ready to upload without audio. Nothing was uploaded.`);
         return;
       }
       if (demo) {
@@ -379,7 +385,7 @@ export function Recording() {
               <T style={{ color: "#9A9EA5", textAlign: "center" }}>{cameraTest ? "Keep the app open. This camera check only saves on your device." : "Keep the app open. Upload starts after saving finishes."}</T>
             </View>
           ) : (
-            <T style={{ color: "#9A9EA5", textAlign: "center" }}>{cameraTest ? "Records for 5 seconds, then saves on this device. No upload or AI analysis." : "Eyes on the road. Gemini reads the clip after you stop."}</T>
+            <T style={{ color: "#9A9EA5", textAlign: "center" }}>{cameraTest ? `Records for ${cameraTestSeconds} seconds, then saves on this device. No upload or AI analysis.` : "Up to 30 minutes · one video · no audio. Gemini reads it after you stop."}</T>
           )}
           {error && (
             <T style={{ color: "#f2b3a0", fontSize: 14, lineHeight: 19, textAlign: "center" }}>

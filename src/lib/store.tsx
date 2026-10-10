@@ -27,6 +27,8 @@ import {
   type Review,
   type ImpactSummary,
 } from "./domain";
+import { inspectVideo } from "./video-preparation";
+import { MAX_VIDEO_BYTES, validateVideo } from "./video-policy";
 import { SAMPLE_VIDEO, sampleVideoUri } from "./sample";
 
 const RECORDS = "drivereport.records.v1";
@@ -111,7 +113,7 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
             ...i,
             file: localUri(i.file),
             thumbnail: i.thumbnail ? localUri(i.thumbnail) : undefined,
-            ...(["uploading", "reviewing"].includes(i.stage)
+            ...(["preparing", "uploading", "reviewing"].includes(i.stage)
               ? {
                   stage: "error" as const,
                   error:
@@ -178,8 +180,12 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
     const info = await FS.getInfoAsync(uri);
     if (!info.exists || info.isDirectory || !info.size)
       throw new Error("This video cannot be read. Choose it again.");
-    if (info.size > 500 * 1024 * 1024)
-      throw new Error("Choose a video smaller than 500 MB.");
+    if (info.size > MAX_VIDEO_BYTES)
+      throw new Error("Choose a video no larger than 500 MiB.");
+    // Camera recordings already have native duration/size limits. Persist them
+    // first; native metadata checks for upload must not delay camera teardown.
+    const metadata = capture ? undefined : await inspectVideo(uri);
+    if (metadata) validateVideo(metadata, info.size);
     const id = `DR-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
     const extension = (
       {
@@ -200,6 +206,7 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
         file,
         mime,
         size: info.size,
+        durationSeconds: metadata?.duration,
         createdAt: new Date().toISOString(),
         stage: "queued",
         plate: "",
