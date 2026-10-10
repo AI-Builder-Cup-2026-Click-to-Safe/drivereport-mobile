@@ -12,7 +12,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
-import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
 import * as FS from "expo-file-system/legacy";
 import { useRoad } from "./context";
 import { demoFrameFor } from "./media";
@@ -208,23 +208,32 @@ export function Clip() {
   const choose = async () => {
     setBusy(true);
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ["video/mp4", "video/quicktime", "video/webm"],
-        copyToCacheDirectory: true,
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted)
+        throw Error("Allow photo library access to choose a video.");
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["videos"],
+        allowsEditing: false,
+        quality: 1,
+        selectionLimit: 1,
       });
       if (result.canceled) return;
       const f = result.assets[0],
+        name =
+          f.fileName ||
+          `video-${Date.now()}.${f.mimeType === "video/quicktime" ? "mov" : "mp4"}`,
         stat = await FS.getInfoAsync(f.uri);
       if (
+        f.type !== "video" ||
         !stat.exists ||
         !stat.size ||
         stat.size > 300000000 ||
-        !/\.(mp4|mov|webm)$/i.test(f.name)
+        !/\.(mp4|mov|webm)$/i.test(name)
       )
         throw Error(
           "Choose a playable MP4, MOV or WebM between 1 byte and 300 MB.",
         );
-      setChosen(await store.importVideo(f.uri, f.name, f.mimeType));
+      setChosen(await store.importVideo(f.uri, name, f.mimeType));
     } catch (e) {
       showError(e);
     } finally {
