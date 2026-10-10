@@ -1,13 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, Easing, View } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Path, Rect } from "react-native-svg";
 import { useRoad } from "./context";
 import {
   deathStats,
   deathSentence,
   casePoints,
-  licenceRecord,
 } from "./submission-model";
 import type { RoadCase } from "./model";
 import { shortDate } from "./format";
@@ -26,32 +25,32 @@ export function Stamp({
     if (reduced || !foreground) return;
     const a = Animated.timing(v, {
       toValue: 1,
-      duration: 460,
+      duration: reported ? 480 : 460,
       delay,
       easing: Easing.bezier(0.16, 1, 0.3, 1),
       useNativeDriver: true,
     });
     a.start();
     return () => a.stop();
-  }, [v, reduced, foreground, delay]);
+  }, [v, reduced, foreground, delay, reported]);
+  // Reference keyframes: slam in from 2.4–2.6× and a steep angle, overshoot at 70%, settle.
   return (
     <Animated.View
       style={{
-        opacity: v,
+        opacity: v.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0, 1, 1] }),
         transform: [
           {
             scale: v.interpolate({
-              inputRange: [0, 0.8, 1],
-              outputRange: [reported ? 2.6 : 2.4, 0.94, 1],
+              inputRange: [0, 0.7, 1],
+              outputRange: [reported ? 2.6 : 2.4, 0.92, 1],
             }),
           },
           {
             rotate: v.interpolate({
-              inputRange: [0, 1],
-              outputRange: [
-                reported ? "-26deg" : "-14deg",
-                reported ? "-9deg" : "0deg",
-              ],
+              inputRange: [0, 0.7, 1],
+              outputRange: reported
+                ? ["-26deg", "-7deg", "-9deg"]
+                : ["-14deg", "-3deg", "0deg"],
             }),
           },
         ],
@@ -136,7 +135,14 @@ export function RoadStat() {
     inputRange: [0, 1],
     outputRange: [0, -20],
   });
-  const statText = { fontSize: 14, lineHeight: 20, color: C.muted };
+  // Reference .home-stat: 700 14px muted, the number in Ink 800.
+  const statText = {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "700" as const,
+    color: C.muted,
+  };
+  const digitText = { color: C.ink, fontWeight: "800" as const };
   return (
     <View
       accessible
@@ -171,7 +177,7 @@ export function RoadStat() {
                   <T
                     style={[
                       statText,
-                      { fontWeight: "800", fontVariant: ["tabular-nums"] },
+                      { ...digitText, fontVariant: ["tabular-nums"] },
                     ]}
                   >
                     {after}
@@ -191,7 +197,7 @@ export function RoadStat() {
                       <T
                         style={[
                           statText,
-                          { fontWeight: "800", fontVariant: ["tabular-nums"] },
+                          { ...digitText, fontVariant: ["tabular-nums"] },
                         ]}
                       >
                         {before}
@@ -206,7 +212,7 @@ export function RoadStat() {
                       <T
                         style={[
                           statText,
-                          { fontWeight: "800", fontVariant: ["tabular-nums"] },
+                          { ...digitText, fontVariant: ["tabular-nums"] },
                         ]}
                       >
                         {after}
@@ -251,32 +257,60 @@ export function RoadStat() {
     </View>
   );
 }
+/**
+ * The 20-segment licence bar (reference .meter-bar): points on record in solid Paper/Ink, then
+ * points from Sent reports striped in Penalty. The solid part grows first and the stripes follow,
+ * so the bar fills in two moves rather than one.
+ */
+// The reference's repeating-linear-gradient(-45deg, light 0 5px, red 5px 10px), drawn as paths:
+// react-native-svg breaks a rotated Pattern into stray triangles on iOS.
+const STRIPES_WIDTH = 480;
+const STRIPES = Array.from({ length: 36 }, (_, i) => {
+  const x = -18 + i * 10 * Math.SQRT2,
+    w = 5 * Math.SQRT2;
+  return `M${x.toFixed(2)} 18H${(x + w).toFixed(2)}L${(x + w + 18).toFixed(2)} 0H${(x + 18).toFixed(2)}Z`;
+}).join("");
 export function MeterBar({
   record,
   pending,
   light = false,
   delay = 0,
+  pendingDelay,
 }: {
   record: number;
   pending: number;
   light?: boolean;
   delay?: number;
+  pendingDelay?: number;
 }) {
   const { reduced, foreground } = useRoad();
-  const v = useRef(new Animated.Value(1)).current;
+  const solid = useRef(new Animated.Value(1)).current;
+  const stripes = useRef(new Animated.Value(1)).current;
+  const pts = Math.min(20, record),
+    pend = Math.min(20 - pts, pending);
   useEffect(() => {
-    v.setValue(reduced || !foreground ? 1 : 0);
-    if (reduced || !foreground) return;
-    const a = Animated.timing(v, {
-      toValue: 1,
-      duration: 900,
-      delay,
-      easing: Easing.bezier(0.16, 1, 0.3, 1),
-      useNativeDriver: true,
-    });
+    if (reduced || !foreground) {
+      solid.setValue(1);
+      stripes.setValue(1);
+      return;
+    }
+    solid.setValue(0);
+    stripes.setValue(0);
+    const ease = Easing.bezier(0.16, 1, 0.3, 1);
+    const a = Animated.parallel([
+      Animated.timing(solid, { toValue: 1, duration: light ? 600 : 700, delay, easing: ease, useNativeDriver: true }),
+      Animated.timing(stripes, {
+        toValue: 1,
+        duration: light ? 640 : 600,
+        delay: pendingDelay ?? delay + 500,
+        easing: ease,
+        useNativeDriver: true,
+      }),
+    ]);
     a.start();
     return () => a.stop();
-  }, [v, reduced, foreground, record, pending, delay]);
+  }, [solid, stripes, reduced, foreground, pts, pend, delay, pendingDelay, light]);
+  const gap = light ? C.surface : C.ink;
   return (
     <View
       accessible
@@ -285,48 +319,58 @@ export function MeterBar({
         height: 18,
         borderRadius: 9,
         overflow: "hidden",
+        backgroundColor: light ? C.lilac : "rgba(255,255,255,0.14)",
       }}
     >
-      <Animated.View
-        style={{
-          flexDirection: "row",
-          gap: 2,
-          height: 18,
-          transformOrigin: "left center",
-          transform: [{ scaleX: v }],
-        }}
-      >
-        {Array.from({ length: 20 }, (_, i) => (
-          <View
-            key={i}
-            style={{
-              flex: 1,
-              overflow: "hidden",
-              backgroundColor:
-                i < record
-                  ? light
-                    ? C.ink
-                    : "#F5F5F0"
-                  : i < record + pending
-                    ? "#C81E1E"
-                    : // Empty segments stay visible, so the bar always reads as 20.
-                      light
-                      ? "#D4D7DD"
-                      : "rgba(255,255,255,0.14)",
-            }}
-          >
-            {i >= record && i < record + pending && (
-              <Svg width="100%" height="100%">
-                <Path
-                  d="M-6 20L14 0M2 24L22 4"
-                  stroke="#FF9B8F"
-                  strokeWidth={4}
-                />
-              </Svg>
-            )}
-          </View>
-        ))}
-      </Animated.View>
+      {pts > 0 && (
+        <Animated.View
+          style={{
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            left: 0,
+            width: `${(pts / 20) * 100}%`,
+            backgroundColor: light ? C.ink : "#F5F5F0",
+            transformOrigin: "left center",
+            transform: [{ scaleX: solid }],
+          }}
+        />
+      )}
+      {pend > 0 && (
+        <Animated.View
+          style={{
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            left: `${(pts / 20) * 100}%`,
+            width: `${(pend / 20) * 100}%`,
+            overflow: "hidden",
+            transformOrigin: "left center",
+            opacity: stripes.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] }),
+            transform: [{ scaleX: stripes }],
+          }}
+        >
+          <Svg width={STRIPES_WIDTH} height={18}>
+            <Rect width={STRIPES_WIDTH} height={18} fill="#C81E1E" />
+            <Path d={STRIPES} fill="#FF9B8F" />
+          </Svg>
+        </Animated.View>
+      )}
+      {/* 2pt gaps every 5% carry the scale, so no "20 = suspended" label is needed. */}
+      {Array.from({ length: 19 }, (_, i) => (
+        <View
+          key={i}
+          style={{
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            left: `${(i + 1) * 5}%`,
+            width: 2,
+            marginLeft: -2,
+            backgroundColor: gap,
+          }}
+        />
+      ))}
     </View>
   );
 }
@@ -412,128 +456,188 @@ const receiptHead = {
   color: C.muted,
   fontVariant: ["tabular-nums" as const],
 };
-export function Receipt({ c }: { c: RoadCase }) {
+const roadOf = (c: RoadCase) => String(c.incident.location || "").split(",")[0].trim();
+const offenderName: Record<string, string> = {
+  red_light: "red‑light runner",
+  double_line: "double‑line overtaker",
+  wrong_way: "wrong‑way driver",
+  dangerous: "reckless driver",
+};
+/** Reference receiptOutcome(): what this report could do, then one line of humour about the road. */
+export function receiptOutcome(c: RoadCase, before: number) {
+  const add = casePoints(c),
+    total = before + add,
+    road = roadOf(c),
+    code = c.offences.find((o) => o.included)?.code || "";
+  return {
+    add,
+    before,
+    total,
+    first:
+      add && total >= 20
+        ? `If JPJ agrees, ${c.vehicle.plate} loses their licence.`
+        : add
+          ? `If JPJ agrees, ${c.vehicle.plate} is ${20 - total} points from losing their licence.`
+          : "JPJ decides what happens next.",
+    second: road
+      ? `That’s one less ${offenderName[code] || "dangerous driver"} on ${road}.`
+      : "",
+  };
+}
+/**
+ * The road receipt. It prints first (900ms clip reveal); only once it is fully out do the licence
+ * points fill (solid, then stripes, the total counting up) and the Reported stamp slam in.
+ */
+export const RECEIPT_PRINT_MS = 900;
+export const RECEIPT_STAMP_AT = 2150;
+export function Receipt({ c, before }: { c: RoadCase; before: number }) {
   const { reduced, foreground, prefs } = useRoad();
   const language = prefs.language;
   const [height, setHeight] = useState(0);
   const v = useRef(new Animated.Value(1)).current;
-  const record = licenceRecord(c);
-  const points = casePoints(c);
+  const out = receiptOutcome(c, before);
+  const record = Math.min(20, before);
+  const [shown, setShown] = useState(Math.min(20, out.total));
   useEffect(() => {
     v.setValue(reduced || !foreground ? 1 : 0);
     if (reduced || !foreground) return;
     const a = Animated.timing(v, {
       toValue: 1,
-      duration: 900,
-      easing: Easing.bezier(0.16, 1, 0.3, 1),
+      duration: RECEIPT_PRINT_MS,
+      easing: Easing.bezier(0.3, 0.7, 0.2, 1),
       useNativeDriver: true,
     });
     a.start();
     return () => a.stop();
   }, [v, reduced, foreground]);
+  // The total counts from the points before this report up to the new total as the stripes fill.
+  useEffect(() => {
+    const to = Math.min(20, out.total);
+    if (reduced || !foreground) {
+      setShown(to);
+      return;
+    }
+    setShown(record);
+    let frame = 0;
+    const start = Date.now() + RECEIPT_PRINT_MS + 550;
+    const tick = () => {
+      const k = Math.max(0, Math.min(1, (Date.now() - start) / 640));
+      setShown(Math.round(record + (to - record) * (1 - Math.pow(1 - k, 3))));
+      if (k < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [reduced, foreground, record, out.total]);
+  const dashed = {
+    borderStyle: "dashed" as const,
+    borderColor: "#C9CDD4",
+  };
   return (
-    <View style={{ overflow: "hidden" }}>
+    <Animated.View
+      style={{
+        overflow: "hidden",
+        transform: [
+          { translateY: v.interpolate({ inputRange: [0, 1], outputRange: [-14, 0] }) },
+        ],
+      }}
+    >
       <View
         onLayout={(e) => setHeight(e.nativeEvent.layout.height)}
-        style={{ backgroundColor: C.surface, padding: 16, gap: 18 }}
+        style={{ backgroundColor: C.surface, padding: 16, paddingBottom: 20 }}
       >
-        <View style={s.row}>
-          <T style={receiptHead}>ROAD RECEIPT</T>
-          <T style={[receiptHead, { letterSpacing: 0 }]}>
-            {c.id.replace("SUB-", "")}
-          </T>
-        </View>
         <View
           style={[
             s.row,
-            {
-              borderTopWidth: 1,
-              borderStyle: "dashed",
-              borderColor: "#C9CDD4",
-              paddingTop: 16,
-            },
+            { alignItems: "baseline", paddingBottom: 12, borderBottomWidth: 1.5, ...dashed },
           ]}
         >
+          <T style={receiptHead}>ROAD RECEIPT</T>
+          <T numberOfLines={1} style={[receiptHead, { letterSpacing: 0, flexShrink: 1 }]}>
+            {c.id.replace("SUB-", "")}
+          </T>
+        </View>
+        <View style={[s.row, { marginTop: 14, marginBottom: 4 }]}>
           <Plate value={c.vehicle.plate} />
-          <Stamp reported delay={1050}>
+          <Stamp reported delay={RECEIPT_STAMP_AT}>
             <T
               style={{
-                color: "#15803D",
-                fontWeight: "800",
-                letterSpacing: 2,
-                borderWidth: 2,
+                marginRight: 4,
+                paddingHorizontal: 10,
+                paddingTop: 7,
+                paddingBottom: 6,
+                borderWidth: 2.5,
                 borderColor: "#15803D",
-                borderRadius: 5,
-                padding: 6,
-                fontSize: 13,
+                borderRadius: 8,
+                overflow: "hidden",
+                backgroundColor: "rgba(232,246,236,0.8)",
+                color: "#15803D",
+                fontSize: 15,
+                lineHeight: 17,
+                fontWeight: "800",
+                letterSpacing: 2.1,
               }}
             >
               REPORTED
             </T>
           </Stamp>
         </View>
-        {c.offences
-          .filter((o) => o.included)
-          .map((o) => (
-            <View key={o.id} style={{ gap: 5 }}>
-              <View style={s.row}>
-                <T style={{ fontWeight: "700", flex: 1, fontSize: 16 }}>
-                  {o.label}
-                </T>
-                <PointsChip points={o.demeritPoints ?? 0} delay={500} />
+        <View style={{ paddingTop: 6, paddingBottom: 14, borderBottomWidth: 1.5, ...dashed }}>
+          {c.offences
+            .filter((o) => o.included)
+            .map((o) => (
+              <View key={o.id} style={{ marginTop: 8 }}>
+                <View style={s.row}>
+                  <T style={{ fontWeight: "700", flex: 1, fontSize: 16, lineHeight: 21 }}>
+                    {o.label}
+                  </T>
+                  <PointsChip points={o.demeritPoints ?? 0} delay={500} />
+                </View>
+                {o.lawSources.map((l, i) => (
+                  <T
+                    key={i}
+                    style={{ marginTop: 2, fontSize: 14, lineHeight: 19, fontWeight: "600", color: C.muted }}
+                  >
+                    {l.act || l.title}
+                    {l.section ? ", " + l.section : ""}
+                  </T>
+                ))}
               </View>
-              {o.lawSources.map((l, i) => (
-                <T
-                  key={i}
-                  style={{ fontSize: 14, fontWeight: "600", color: C.muted }}
-                >
-                  {l.act || l.title}
-                  {l.section ? ", " + l.section : ""}
-                </T>
-              ))}
-            </View>
-          ))}
-        <T style={{ fontSize: 13, lineHeight: 18, color: C.muted }}>
-          {[
-            c.vehicle.type,
-            c.incident.location,
-            shortDate(c.incident.date, language),
-            c.incident.time,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </T>
-        {!!points && (
-          <View
-            style={{
-              borderTopWidth: 1,
-              borderColor: "#C9CDD4",
-              borderStyle: "dashed",
-              paddingTop: 12,
-              gap: 8,
-            }}
-          >
-            <View style={s.row}>
-              <T style={s.muted}>
-                Licence points{c.provenance.isDemo ? " · demo" : ""}
+            ))}
+          <T style={{ marginTop: 8, fontSize: 13, lineHeight: 17, color: C.muted }}>
+            {[
+              c.vehicle.type,
+              roadOf(c) || c.incident.location,
+              shortDate(c.incident.date, language),
+              c.incident.time,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </T>
+        </View>
+        {!!out.add && (
+          <View style={{ paddingTop: 14, gap: 10 }}>
+            <View style={[s.row, { alignItems: "baseline" }]}>
+              <T style={{ fontSize: 13, lineHeight: 16, fontWeight: "700", color: C.muted }}>
+                Licence points
               </T>
-              <T style={{ fontWeight: "800" }}>
-                {(record?.points ?? 0) + points} / 20
+              <T style={{ fontSize: 20, lineHeight: 22, fontWeight: "800", fontVariant: ["tabular-nums"] }}>
+                {shown} / 20
               </T>
             </View>
             <MeterBar
-              record={record?.points ?? 0}
-              pending={points}
+              record={record}
+              pending={Math.min(20, out.total) - record}
               light
-              delay={700}
+              delay={RECEIPT_PRINT_MS + 50}
+              pendingDelay={RECEIPT_PRINT_MS + 550}
             />
           </View>
         )}
       </View>
       <Svg
         width="100%"
-        height={8}
-        viewBox="0 0 360 8"
+        height={7}
+        viewBox="0 0 360 7"
         preserveAspectRatio="none"
       >
         <Path
@@ -541,7 +645,7 @@ export function Receipt({ c }: { c: RoadCase }) {
             "M0 0H360" +
             Array.from(
               { length: 45 },
-              (_, i) => `L${360 - i * 8 - 4} 8L${352 - i * 8} 0`,
+              (_, i) => `L${360 - i * 8 - 4} 7L${352 - i * 8} 0`,
             ).join("") +
             "Z"
           }
@@ -566,7 +670,7 @@ export function Receipt({ c }: { c: RoadCase }) {
           }}
         />
       )}
-    </View>
+    </Animated.View>
   );
 }
 export function SampleOverlay({

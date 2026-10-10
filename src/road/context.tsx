@@ -27,6 +27,7 @@ import {
 } from "./model";
 import fixtures from "./submission-fixtures.json";
 import { isSubmissionDemo } from "./submission-model";
+import { DEMO_STAGE_MS } from "./analysis-timing";
 export type Job = {
   id: string;
   mode: "demo" | "live";
@@ -467,12 +468,9 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     updateJob(j);
     try {
       if (demo) {
-        for (const [stage, ms, progress] of [
-          [0, 1700, 15],
-          [1, 2600, 40],
-          [2, 2200, 65],
-          [3, 2300, 86],
-        ] as const) {
+        for (const [stage, ms, progress] of DEMO_STAGE_MS.map(
+          (ms, stage) => [stage, ms, [15, 40, 65, 86][stage]] as const,
+        )) {
           if (run.current !== generation) return;
           updateJob({ ...j, stage, progress });
           await new Promise((resolve) => setTimeout(resolve, ms));

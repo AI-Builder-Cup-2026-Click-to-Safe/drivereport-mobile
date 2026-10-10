@@ -1,7 +1,19 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Image, Linking, Modal, Platform, Pressable, View } from "react-native";
+import {
+  Animated,
+  Easing,
+  Image,
+  Linking,
+  Modal,
+  Platform,
+  Pressable,
+  TextInput,
+  View,
+  type TextInputProps,
+} from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useVideoPlayer, VideoView } from "expo-video";
+import Svg, { Path } from "react-native-svg";
 import * as Sharing from "expo-sharing";
 import * as Clipboard from "expo-clipboard";
 import { useRoad } from "./context";
@@ -10,19 +22,26 @@ import {
   duration,
   labels,
   missing,
+  normalizePlate,
   reportText,
   validation,
   whatsapp,
   type RoadCase,
 } from "./model";
-import { PointsChip, Receipt, Stamp, SampleOverlay } from "./submission-motion";
+import {
+  PointsChip,
+  RECEIPT_STAMP_AT,
+  Receipt,
+  receiptOutcome,
+  Stamp,
+  SampleOverlay,
+} from "./submission-motion";
 import { pendingCases, licenceRecord, casePoints } from "./submission-model";
-import { Arrival, Disclosure, FrameBadge, Plate, Spark } from "./standard-ui";
-import { shortDate, typedPlate } from "./format";
+import { Arrival, CaseId, Disclosure, Plate, Spark } from "./standard-ui";
+import { shortDate, typedPlate, zoneLabel } from "./format";
 import {
   Action,
   C,
-  Field,
   Icon,
   Intro,
   Notice,
@@ -155,7 +174,6 @@ function Evidence({
         />
         <SampleOverlay caption={caption} unread={!c.analysis?.vehicle.plate} />
       </View>
-      <FrameBadge>Synthetic demo frame</FrameBadge>
       <View
         style={{
           paddingLeft: 6,
@@ -227,10 +245,10 @@ function Evidence({
             style={{
               position: "absolute",
               left: `${(time / c.evidence.durationSeconds) * 100}%`,
-              width: 14,
-              height: 14,
-              marginLeft: -7,
-              borderRadius: 7,
+              width: 16,
+              height: 16,
+              marginLeft: -8,
+              borderRadius: 8,
               backgroundColor: "white",
             }}
           />
@@ -263,11 +281,13 @@ function DateField({
   c,
   kind,
   disabled,
+  wide = false,
   onChange,
 }: {
   c: RoadCase;
   kind: "date" | "time";
   disabled: boolean;
+  wide?: boolean;
   onChange: (v: string) => void;
 }) {
   const rr = useRoad();
@@ -286,40 +306,36 @@ function DateField({
     );
   };
   return (
-    <View style={{ flex: 1, gap: 5 }}>
-      <T style={{ fontSize: 12, color: C.muted }}>
-        {kind === "date" ? "Date" : `Time · ${c.incident.timeZone}`}
-        {c.edited?.includes(kind) ? " · you" : ""}
+    <FactBox
+      label={
+        kind === "date"
+          ? "Date"
+          : `Time · ${zoneLabel(c.incident.timeZone, date())}`
+      }
+      source={factSource(c, kind, value)}
+      missing={!value}
+      wide={wide}
+      onPress={
+        disabled
+          ? undefined
+          : () => {
+              setDraft(date());
+              setOpen(true);
+            }
+      }
+      accessibilityLabel={`Edit ${kind}`}
+    >
+      <T style={[factValue, { color: valueColor(c, kind, value) }]}>
+        {value
+          ? kind === "date"
+            ? new Intl.DateTimeFormat(rr.prefs.language, {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              }).format(date())
+            : value
+          : `Add ${kind}`}
       </T>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Edit ${kind}`}
-        disabled={disabled}
-        onPress={() => {
-          setDraft(date());
-          setOpen(true);
-        }}
-        style={{
-          minHeight: 49,
-          borderWidth: 1,
-          borderColor: value ? C.line : "#925d45",
-          backgroundColor: value ? C.surface : C.warningBg,
-          padding: 12,
-          borderRadius: 10,
-        }}
-      >
-        <T style={{ fontSize: 15 }}>
-          {value
-            ? kind === "date"
-              ? new Intl.DateTimeFormat(rr.prefs.language, {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                }).format(date())
-              : value
-            : `Add ${kind}`}
-        </T>
-      </Pressable>
       <Modal
         visible={open}
         transparent
@@ -371,9 +387,145 @@ function DateField({
           </View>
         </View>
       </Modal>
-    </View>
+    </FactBox>
   );
 }
+
+/* Reference .fact: the label inside a white box, a blue spark for what Gemini read, "· you" for edits. */
+const factValue = {
+  fontSize: 17,
+  lineHeight: 23,
+  fontWeight: "600" as const,
+};
+function factSource(c: RoadCase, key: string, value: string | null | undefined) {
+  if (!value?.trim()) return undefined;
+  if (c.edited?.includes(key)) return "you" as const;
+  return c.analysis || c.provenance.isDemo ? ("ai" as const) : undefined;
+}
+function valueColor(c: RoadCase, key: string, value: string | null | undefined) {
+  return factSource(c, key, value) === "ai" ? C.accent : C.ink;
+}
+function FactBox({
+  label,
+  source,
+  missing = false,
+  focused = false,
+  wide = false,
+  inAsk = false,
+  onPress,
+  accessibilityLabel,
+  children,
+}: React.PropsWithChildren<{
+  label: string;
+  source?: "ai" | "you";
+  missing?: boolean;
+  focused?: boolean;
+  wide?: boolean;
+  inAsk?: boolean;
+  onPress?: () => void;
+  accessibilityLabel?: string;
+}>) {
+  const Box = onPress ? Pressable : View;
+  return (
+    <Box
+      {...(onPress ? { onPress, accessibilityRole: "button" as const, accessibilityLabel } : {})}
+      style={{
+        flexGrow: 1,
+        flexBasis: wide ? "100%" : "40%",
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderWidth: 1.5,
+        borderRadius: 12,
+        borderStyle: missing && !focused && !inAsk ? "dashed" : "solid",
+        borderColor: focused
+          ? C.accent
+          : missing
+            ? inAsk
+              ? "#F3B46B"
+              : C.warning
+            : C.line,
+        backgroundColor: C.bg,
+      }}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+        <T
+          style={{
+            fontSize: 12,
+            lineHeight: 14,
+            fontWeight: "700",
+            color: missing ? C.warning : C.muted,
+          }}
+        >
+          {label}
+        </T>
+        {source === "ai" && <Spark size={11} tint={C.accent} />}
+        {source === "you" && (
+          <T style={{ fontSize: 12, lineHeight: 14, fontWeight: "700" }}>
+            · you
+          </T>
+        )}
+      </View>
+      <View style={{ marginTop: 5 }}>{children}</View>
+    </Box>
+  );
+}
+function FactInput({
+  label,
+  value,
+  source,
+  missing,
+  wide,
+  inAsk,
+  multiline = false,
+  onChangeText,
+  ...rest
+}: Omit<TextInputProps, "value" | "onChangeText"> & {
+  label: string;
+  value: string;
+  source?: "ai" | "you";
+  missing: boolean;
+  wide?: boolean;
+  inAsk?: boolean;
+  onChangeText: (v: string) => void;
+}) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <FactBox
+      label={label}
+      source={source}
+      missing={missing}
+      focused={focused}
+      wide={wide}
+      inAsk={inAsk}
+    >
+      <TextInput
+        accessibilityLabel={label}
+        value={value}
+        onChangeText={onChangeText}
+        multiline={multiline}
+        placeholderTextColor="#7B5B3F"
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{
+          fontFamily: "Manrope",
+          padding: 0,
+          minHeight: multiline ? 72 : 24,
+          color: source === "ai" ? C.accent : C.ink,
+          ...(multiline
+            ? {
+                fontSize: 15,
+                lineHeight: 22,
+                fontWeight: "500" as const,
+                textAlignVertical: "top" as const,
+              }
+            : { fontSize: 17, fontWeight: "600" as const }),
+        }}
+        {...rest}
+      />
+    </FactBox>
+  );
+}
+
 export function Review() {
   const rr = useRoad();
   const queue = pendingCases(rr.cases);
@@ -382,7 +534,7 @@ export function Review() {
   return c ? (
     <CaseReview key={c.id} c={c} index={index} />
   ) : (
-    <Page title="Case">
+    <Page title="Cases" headerLeft={<View />}>
       <Intro
         title="I can’t snitch on thin air."
         body={
@@ -399,7 +551,11 @@ export function Review() {
         />
       )}
       {!!rr.historyError && <Notice error>{rr.historyError}</Notice>}
-      <Action title="Analyse a clip" onPress={() => go("clip")} />
+      <Action
+        title="Analyse a clip"
+        leading={(pressed) => <Spark size={20} pressed={pressed} />}
+        onPress={() => go("clip")}
+      />
     </Page>
   );
 }
@@ -421,19 +577,15 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
     error = validation(c);
   const update = (patch: Partial<RoadCase>) =>
     void rr.changeCase(c.id, patch).catch(showError);
-  const origin = (key: string) =>
-    c.edited?.includes(key)
-      ? " · you"
-      : c.analysis || c.provenance.isDemo
-        ? " · Gemini"
-        : "";
-  const fact = (key: string) => {
+  const fact = (key: string, inAsk = false) => {
+    const wide = inAsk || ["location", "description", "model"].includes(key);
     if (key === "date" || key === "time")
       return (
         <DateField
           key={key}
           c={c}
           kind={key}
+          wide={inAsk}
           disabled={locked}
           onChange={(v) => update({ incident: { ...c.incident, [key]: v } })}
         />
@@ -457,19 +609,14 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
       } as Record<string, string>
     )[key];
     return (
-      <Field
+      <FactInput
         key={key}
-        label={label + (value ? origin(key) : "")}
-        textColor={
-          value &&
-          !c.edited?.includes(key) &&
-          (c.analysis || c.provenance.isDemo)
-            ? C.accent
-            : C.ink
-        }
+        label={label}
         value={value || ""}
+        source={factSource(c, key, value)}
         missing={key !== "model" && !value?.trim()}
-        hint={false}
+        wide={wide}
+        inAsk={inAsk}
         editable={!locked}
         multiline={key === "description"}
         // Plates are typed as printed: capitals, no autocorrect.
@@ -481,13 +628,13 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
             }
           : {})}
         placeholder={
-          key === "plate"
-            ? "e.g. ABC 1234"
-            : key === "location"
-              ? "Road or nearby landmark"
-              : key === "vehicle"
-                ? "e.g. Blue hatchback"
-                : "What the vehicle did"
+          {
+            plate: "e.g. ABC 1234",
+            vehicle: "e.g. White sedan",
+            location: "Road or nearby landmark",
+            description: "What the vehicle did",
+            model: "If you know it",
+          }[key]
         }
         onChangeText={(v) =>
           update(
@@ -528,7 +675,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
   );
   return (
     <Page
-      gap={16}
+      gap={0}
       title={
         index >= 0 && queue.length > 1
           ? `Case ${index + 1} of ${queue.length}`
@@ -545,7 +692,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
               onPress={() => rr.select(queue[index - 1].id)}
             />
           ) : (
-            <View style={{ width: 44 }} />
+            <View />
           )
         ) : undefined
       }
@@ -558,27 +705,30 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
             disabled={index === queue.length - 1}
             onPress={() => rr.select(queue[index + 1].id)}
           />
-        ) : (
-          <CaseId c={c} />
-        )
+        ) : undefined
       }
       footer={
         c.offences.length ? (
           locked ? (
             <>
-              <Action
-                title="View Impact"
-                secondary
-                onPress={() => go("impact")}
-              />
-              <Quiet
-                title="Mark as not sent"
-                onPress={() =>
-                  update({
-                    reporting: { status: "opened", confirmedByUser: false },
-                  })
-                }
-              />
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Action
+                    title="View Impact"
+                    icon="History"
+                    secondary
+                    onPress={() => go("impact")}
+                  />
+                </View>
+                <Quiet
+                  title="Mark as not sent"
+                  onPress={() =>
+                    update({
+                      reporting: { status: "opened", confirmedByUser: false },
+                    })
+                  }
+                />
+              </View>
               <T style={[s.muted, { textAlign: "center" }]}>
                 Sent by you · JPJ decides · response not tracked
               </T>
@@ -592,13 +742,24 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                 onPress={() => void send()}
               />
               {!!error && (
-                <T style={[s.muted, { textAlign: "center" }]}>{error}</T>
+                <T
+                  style={{
+                    textAlign: "center",
+                    fontSize: 14,
+                    lineHeight: 19,
+                    color: C.muted,
+                    textDecorationLine: missing(c).length ? "underline" : "none",
+                  }}
+                >
+                  {error}
+                </T>
               )}
             </>
           )
         ) : (
           <Action
             title="Back to Impact"
+            icon="History"
             secondary
             onPress={() => go("impact")}
           />
@@ -608,7 +769,9 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
       {["opened", "sent"].includes(c.reporting.status) && (
         <T
           style={{
+            marginBottom: 12,
             fontSize: 13,
+            lineHeight: 16,
             fontWeight: "700",
             color: locked ? "#15803D" : C.ink,
           }}
@@ -617,10 +780,12 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
         </T>
       )}
       {!c.offences.length && (
-        <Intro
-          title="No assholes? Plot twist."
-          body="Gemini found no suspected offence in this clip. Humanity survives."
-        />
+        <View style={{ marginBottom: 18 }}>
+          <Intro
+            title="No assholes? Plot twist."
+            body="Gemini found no suspected offence in this clip. Humanity survives."
+          />
+        </View>
       )}
       <View style={{ gap: 8 }}>
         <Evidence c={c} seek={seek} revision={revision} onTime={setPlayhead} />
@@ -630,6 +795,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
       </View>
       <View
         style={{
+          marginVertical: 18,
           flexDirection: "row",
           alignItems: "center",
           gap: 16,
@@ -646,18 +812,18 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                 : undefined
           }
         />
-        <View style={{ flex: 1, minWidth: 130, gap: 2 }}>
+        <View style={{ flex: 1, minWidth: 130, gap: 4 }}>
           <T
             style={{
               fontWeight: "700",
-              lineHeight: 20,
+              lineHeight: 19,
               color: c.edited?.includes("vehicle") ? C.ink : C.accent,
             }}
           >
             {c.vehicle.type || "Unknown vehicle"}
             {c.edited?.includes("vehicle") ? " · you" : ""}
           </T>
-          <T style={{ fontSize: 14, lineHeight: 18, color: C.muted }}>
+          <T style={{ fontSize: 14, lineHeight: 17, color: C.muted }}>
             {shortDate(c.incident.date, rr.prefs.language)} ·{" "}
             {c.incident.time || "Time unknown"}
           </T>
@@ -666,29 +832,38 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
       {!!c.offences.length && (
         <>
           {!!askKeys.length && !locked && (
+            // One tinted panel with one bordered input; once filled it calms to a hairline.
             <View
               style={{
+                marginBottom: 22,
                 padding: 16,
-                gap: 14,
                 borderRadius: 16,
-                borderWidth: 1,
-                borderColor: "#F3B46B",
-                backgroundColor: C.warningBg,
+                borderWidth: 1.5,
+                borderColor: missing(c).length ? C.warningBg : C.line,
+                backgroundColor: missing(c).length ? C.warningBg : "transparent",
               }}
             >
-              <T style={{ fontWeight: "800", fontSize: 21, lineHeight: 27 }}>
+              <T
+                style={{
+                  marginBottom: 10,
+                  fontWeight: "800",
+                  fontSize: 21,
+                  lineHeight: 24,
+                  letterSpacing: -0.3,
+                }}
+              >
                 {askKeys.length === 1 && askKeys[0] === "plate"
                   ? "What’s the plate?"
                   : askKeys.length === 1 && askKeys[0] === "location"
                     ? "Where was this?"
                     : "Gemini needs you"}
               </T>
-              {askKeys.map(fact)}
+              <View style={{ gap: 8 }}>{askKeys.map((k) => fact(k, true))}</View>
             </View>
           )}
           <View style={{ gap: 0 }}>
-            <View style={[s.row, { paddingBottom: 8 }]}>
-              <T style={[s.section, { fontSize: 15 }]}>Suspected offences</T>
+            <View style={[s.row, { paddingBottom: 6 }]}>
+              <T style={s.section}>Suspected offences</T>
               <T style={{ fontSize: 12, fontWeight: "700", color: C.muted }}>
                 In report
               </T>
@@ -789,6 +964,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                         alignItems: "center",
                         justifyContent: "center",
                         backgroundColor: o.included ? C.accent : C.bg,
+                        opacity: locked ? 0.5 : 1,
                       }}
                     >
                       {o.included && (
@@ -838,39 +1014,56 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                   <Arrival identity={c.vehicle.plate || ""} distance={6}>
                     <T
                       style={{
+                        marginTop: 6,
                         fontSize: 13,
+                        lineHeight: 17,
                         color: "#C81E1E",
                         fontWeight: "700",
                       }}
                     >
-                      {c.vehicle.plate} already has {record.points}. This could
-                      make it {record.points + points}: licence suspended.
+                      {record.points + points >= 20
+                        ? `${c.vehicle.plate} already has ${record.points}. This could make it ${record.points + points}: licence suspended.`
+                        : `${c.vehicle.plate} already has ${record.points}. 20 suspends a licence.`}
                     </T>
                   </Arrival>
                 )}
               </View>
             ))}
           </View>
-          {descriptionNote && (
-            <T style={s.muted}>
-              I kept your description. Update it if the offences changed.
-            </T>
-          )}
-          <Disclosure
-            title="Edit details"
-            note={locked ? "Read only" : "Tap to edit"}
-          >
-            {["plate", "vehicle", "date", "time", "location", "description"]
-              .filter((k) => locked || !askKeys.includes(k))
-              .map(fact)}
-            {fact("model")}
-          </Disclosure>
+          <View style={{ marginTop: 18 }}>
+            <Disclosure
+              title={locked ? "Details" : "Edit details"}
+              note={locked ? "Read only" : undefined}
+            >
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  marginBottom: 12,
+                }}
+              >
+                {["plate", "vehicle", "date", "time", "location", "description"]
+                  .filter((k) => locked || !askKeys.includes(k))
+                  .map((k) => fact(k))}
+                {fact("model")}
+              </View>
+              {descriptionNote && (
+                <T style={[s.muted, { marginBottom: 12 }]}>
+                  I kept your description. Update it under Edit details if the
+                  offences changed.
+                </T>
+              )}
+            </Disclosure>
+          </View>
         </>
       )}
+      <View style={{ marginTop: 10 }} />
       <TextLink
         title="How Gemini decided"
         align="flex-start"
-        leading={<Spark size={14} />}
+        weight="600"
+        leading={<Spark size={12} />}
         onPress={() => {
           rr.select(c.id);
           go("work");
@@ -888,167 +1081,359 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
     </Page>
   );
 }
-function CaseId({ c }: { c: RoadCase }) {
-  return (
-    <T
-      style={{
-        fontSize: 13,
-        fontWeight: "600",
-        color: C.muted,
-        fontVariant: ["tabular-nums"],
-      }}
-    >
-      {c.id.replace("SUB-", "")}
-    </T>
-  );
-}
 export function Handoff() {
   const rr = useRoad();
   const c = rr.cases.find((i) => i.id === rr.selected);
-  const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  // "Yes, I sent it": the chip turns into Sent first; only then does the page become the receipt.
+  const [celebrating, setCelebrating] = useState(false);
   if (!c)
     return (
-      <Page title="WhatsApp">
+      <Page title="WhatsApp" nav={false}>
         <Action title="Back to Review" onPress={() => go("review")} />
       </Page>
     );
-  if (c.reporting.status === "sent")
-    return (
-      <Page
-        title="WhatsApp"
-        nav={false}
-        headerRight={<CaseId c={c} />}
-        footer={
-          <Action
-            title="See your impact"
-            icon="History"
-            onPress={() => {
-              rr.startUndo(c.id);
-              go("impact");
-            }}
-          />
-        }
-      >
-        <Intro
-          title="Reported. Your part’s done."
-          body="Here’s your receipt."
-        />
-        <Receipt c={c} />
-        <Arrival delay={1400}>
-          {/* The outcome line sits under the receipt at question size, not a second page title. */}
-          <View style={{ gap: 6 }}>
-            <T
-              accessibilityRole="header"
-              style={{
-                fontSize: 21,
-                lineHeight: 25,
-                fontWeight: "800",
-                letterSpacing: -0.3,
-              }}
-            >
-              {licenceRecord(c) && casePoints(c) + licenceRecord(c)!.points >= 20
-                ? `If JPJ agrees, ${c.vehicle.plate} loses their licence.`
-                : "Your report is ready for the authority’s review."}
-            </T>
-            <T style={{ fontSize: 16, lineHeight: 23, color: C.muted }}>
-              {c.provenance.isDemo
-                ? "Sample receipt · no authority outcome has been recorded."
-                : "You confirmed sending. The authority decides the outcome."}
-            </T>
-          </View>
-        </Arrival>
-      </Page>
-    );
+  const sent = c.reporting.status === "sent";
+  // Points already on the licence plus other Sent reports for this plate: where the bar starts.
+  const before =
+    (licenceRecord(c)?.points ?? 0) +
+    rr.cases
+      .filter(
+        (x) =>
+          x.id !== c.id &&
+          x.reporting.status === "sent" &&
+          normalizePlate(x.vehicle.plate) === normalizePlate(c.vehicle.plate),
+      )
+      .reduce((n, x) => n + casePoints(x), 0);
+  const confirm = async () => {
+    setBusy(true);
+    setCelebrating(true);
+    try {
+      if (!rr.reduced) await new Promise((r) => setTimeout(r, 420 + 260));
+      await rr.confirmSent(c.id, true);
+    } catch (e) {
+      setCelebrating(false);
+      showError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <Page
       title="WhatsApp"
       nav={false}
+      gap={0}
       headerRight={<CaseId c={c} />}
       footer={
-        <>
-          <Action
-            title="Yes, I sent it"
-            icon="Check"
-            disabled={busy}
-            onPress={() => {
-              setBusy(true);
-              void rr
-                .confirmSent(c.id, true)
-                .catch(showError)
-                .finally(() => setBusy(false));
-            }}
-          />
-          <Action
-            title="Not yet"
-            icon="Clock"
-            secondary
-            onPress={() => go("review")}
-          />
-          <TextLink
-            title="Open WhatsApp again"
-            leading={<Icon name="MessageCircle" size={16} color={C.accent} />}
-            onPress={() =>
-              void rr
-                .refreshEvidence(c.id)
-                .then((fresh) => openWhatsAppDraft(fresh, rr.prefs))
-                .catch(showError)
-            }
-          />
-        </>
+        sent ? (
+          <Rise delay={rr.reduced ? 0 : RECEIPT_STAMP_AT + 650}>
+            <Action
+              title="See your impact"
+              icon="History"
+              onPress={() => {
+                undoOnLeave.started = c.id;
+                rr.startUndo(c.id);
+                go("impact");
+              }}
+            />
+          </Rise>
+        ) : (
+          <FadeOut out={celebrating}>
+            <View style={{ gap: 10 }}>
+              <Action
+                title="Yes, I sent it"
+                icon="Check"
+                disabled={busy}
+                onPress={() => void confirm()}
+              />
+              <Action
+                title="Not yet"
+                icon="Clock"
+                secondary
+                onPress={() => go("review")}
+              />
+            </View>
+            {!validation(c) && (
+              <View style={{ marginTop: 6 }}>
+                <TextLink
+                  title="Open WhatsApp again"
+                  weight="600"
+                  leading={<Icon name="MessageCircle" size={16} color={C.accent} />}
+                  onPress={() =>
+                    void rr
+                      .refreshEvidence(c.id)
+                      .then((fresh) => openWhatsAppDraft(fresh, rr.prefs))
+                      .catch(showError)
+                  }
+                />
+              </View>
+            )}
+          </FadeOut>
+        )
       }
     >
-      <Intro
-        title="Did you send it?"
-        body={
-          c.evidence.excerptVideoUrl?.startsWith("https://")
-            ? "The cited evidence link is in the draft. Tap Send in WhatsApp, then tell me here."
-            : "Attach the clip, tap Send in WhatsApp, then tell me here."
-        }
-      />
-      <View
-        style={[
-          s.row,
-          { padding: 16, backgroundColor: C.surface, borderRadius: 16 },
-        ]}
+      {sent ? (
+        <SentReceipt c={c} before={before} startUndo={rr.startUndo} />
+      ) : (
+        <>
+          <Intro
+            title="Did you send it?"
+            body={
+              c.evidence.excerptVideoUrl?.startsWith("https://")
+                ? "Tap Send in WhatsApp, then tell me here."
+                : "Attach the clip, tap Send in WhatsApp, then tell me here."
+            }
+          />
+          <StateCard c={c} sent={celebrating} />
+          {!c.provenance.isDemo &&
+            c.evidence.originalVideoUrl?.startsWith("file:") && (
+              <Action
+                title="Share original clip"
+                secondary
+                icon="Upload"
+                disabled={busy}
+                onPress={() => void shareOriginal(c).catch(showError)}
+              />
+            )}
+        </>
+      )}
+    </Page>
+  );
+}
+
+// Leaving the receipt by Back (not only See your impact) still opens the 8-second Undo, as in the reference.
+const undoOnLeave = { started: "" };
+function SentReceipt({
+  c,
+  before,
+  startUndo,
+}: {
+  c: RoadCase;
+  before: number;
+  startUndo: (id: string) => void;
+}) {
+  const { reduced, foreground } = useRoad();
+  const out = receiptOutcome(c, before);
+  const leave = useRef(startUndo);
+  leave.current = startUndo;
+  useEffect(() => {
+    undoOnLeave.started = "";
+    return () => {
+      if (undoOnLeave.started !== c.id) leave.current(c.id);
+      undoOnLeave.started = "";
+    };
+  }, [c.id]);
+  // The whole page jumps a little as the Reported stamp lands.
+  const jolt = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (reduced || !foreground) return;
+    const a = Animated.sequence([
+      Animated.delay(RECEIPT_STAMP_AT + 330),
+      Animated.timing(jolt, { toValue: 1, duration: 80, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.timing(jolt, { toValue: 0, duration: 200, easing: Easing.bezier(0.16, 1, 0.3, 1), useNativeDriver: true }),
+    ]);
+    a.start();
+    return () => a.stop();
+  }, [jolt, reduced, foreground]);
+  return (
+    <Animated.View
+      style={{
+        transform: [
+          { translateY: jolt.interpolate({ inputRange: [0, 1], outputRange: [0, 4] }) },
+          { scale: jolt.interpolate({ inputRange: [0, 1], outputRange: [1, 0.995] }) },
+        ],
+      }}
+    >
+      <Intro title="Reported. Your part’s done." body="Here’s your receipt." />
+      <View style={{ marginTop: 18 }}>
+        <Receipt c={c} before={before} />
+      </View>
+      <View style={{ marginTop: 18 }}>
+        <Arrival delay={reduced ? 0 : RECEIPT_STAMP_AT + 450} distance={10}>
+          <T
+            accessibilityRole="header"
+            balance
+            style={{ fontSize: 21, lineHeight: 25, fontWeight: "800", letterSpacing: -0.3 }}
+          >
+            {out.first}
+          </T>
+        </Arrival>
+        {!!out.second && (
+          <Arrival delay={reduced ? 0 : RECEIPT_STAMP_AT + 610} distance={10}>
+            <T style={{ marginTop: 6, fontSize: 16, lineHeight: 22, color: C.muted }}>
+              {out.second}
+            </T>
+          </Arrival>
+        )}
+      </View>
+    </Animated.View>
+  );
+}
+
+/** Reference .state-card: the plate and the draft's state; it turns green as the chip becomes Sent. */
+function StateCard({ c, sent }: { c: RoadCase; sent: boolean }) {
+  const { reduced, foreground } = useRoad();
+  const enter = useRef(new Animated.Value(reduced ? 1 : 0)).current;
+  const tone = useRef(new Animated.Value(0)).current;
+  const pop = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (reduced || !foreground) {
+      enter.setValue(1);
+      return;
+    }
+    const a = Animated.timing(enter, {
+      toValue: 1,
+      duration: 460,
+      delay: 160,
+      easing: Easing.bezier(0.16, 1, 0.3, 1),
+      useNativeDriver: true,
+    });
+    a.start();
+    return () => a.stop();
+  }, [enter, reduced, foreground]);
+  useEffect(() => {
+    if (!sent) return;
+    if (reduced || !foreground) {
+      tone.setValue(1);
+      return;
+    }
+    Animated.timing(tone, { toValue: 1, duration: 450, useNativeDriver: false }).start();
+    pop.setValue(0.85);
+    Animated.sequence([
+      Animated.timing(pop, { toValue: 1.12, duration: 230, easing: Easing.bezier(0.16, 1, 0.3, 1), useNativeDriver: true }),
+      Animated.timing(pop, { toValue: 1, duration: 190, useNativeDriver: true }),
+    ]).start();
+  }, [sent, reduced, foreground, tone, pop]);
+  return (
+    <Animated.View
+      style={{
+        marginTop: 22,
+        marginBottom: 24,
+        opacity: enter,
+        transform: [
+          { translateY: enter.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) },
+          { scale: enter.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) },
+        ],
+      }}
+    >
+      <Animated.View
+        style={{
+          padding: 16,
+          borderRadius: 16,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          backgroundColor: tone.interpolate({ inputRange: [0, 1], outputRange: [C.surface, "#E8F6EC"] }),
+        }}
       >
         <Plate value={c.vehicle.plate} />
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 7,
-            paddingHorizontal: 12,
-            paddingVertical: 8,
-            borderRadius: 999,
-            backgroundColor: C.lilac,
-          }}
-        >
-          <Icon name="MessageCircle" size={16} />
-          <T style={{ fontSize: 14, lineHeight: 18, fontWeight: "700" }}>
-            Draft opened
-          </T>
-        </View>
-      </View>
-      {message ? <Notice>{message}</Notice> : null}
-      {!c.provenance.isDemo &&
-        c.evidence.originalVideoUrl?.startsWith("file:") && (
-          <Action
-            title="Share original clip"
-            secondary
-            icon="Upload"
-            disabled={busy}
-            onPress={() => void shareOriginal(c).catch(showError)}
-          />
-        )}
-      <Quiet
-        title="Copy report text"
-        onPress={() =>
-          void Clipboard.setStringAsync(reportText(c, rr.prefs))
-            .then(() => setMessage("Report text copied."))
-            .catch(showError)
-        }
+        <Animated.View style={{ transform: [{ scale: pop }] }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 7,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderRadius: 999,
+              backgroundColor: sent ? "#E8F6EC" : C.lilac,
+            }}
+          >
+            {sent ? (
+              <DrawCheck color="#15803D" />
+            ) : (
+              <Icon name="MessageCircle" size={16} />
+            )}
+            <T
+              style={{
+                fontSize: sent ? 17 : 14,
+                lineHeight: sent ? 20 : 18,
+                fontWeight: "700",
+                color: sent ? "#15803D" : C.ink,
+              }}
+            >
+              {sent ? "Sent" : "Draft opened"}
+            </T>
+          </View>
+        </Animated.View>
+      </Animated.View>
+    </Animated.View>
+  );
+}
+
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+/** The Sent check draws itself (reference: stroke-dashoffset 1 → 0 over 420ms). */
+function DrawCheck({ color }: { color: string }) {
+  const { reduced } = useRoad();
+  const length = 22.7;
+  const v = useRef(new Animated.Value(reduced ? 0 : length)).current;
+  useEffect(() => {
+    if (reduced) return;
+    const a = Animated.timing(v, {
+      toValue: 0,
+      duration: 420,
+      delay: 120,
+      easing: Easing.bezier(0.16, 1, 0.3, 1),
+      useNativeDriver: false,
+    });
+    a.start();
+    return () => a.stop();
+  }, [v, reduced]);
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+      <AnimatedPath
+        d="M20 6 9 17l-5-5"
+        stroke={color}
+        strokeWidth={2.4}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeDasharray={[length, length]}
+        strokeDashoffset={v}
       />
-    </Page>
+    </Svg>
+  );
+}
+
+/** A footer that leaves: fades out and stops taking taps. */
+function FadeOut({ out, children }: React.PropsWithChildren<{ out: boolean }>) {
+  const v = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.timing(v, { toValue: out ? 0 : 1, duration: 200, useNativeDriver: true }).start();
+  }, [out, v]);
+  return (
+    <Animated.View pointerEvents={out ? "none" : "auto"} style={{ opacity: v }}>
+      {children}
+    </Animated.View>
+  );
+}
+/** A footer action that rises into place on the travel curve. */
+function Rise({ delay, children }: React.PropsWithChildren<{ delay: number }>) {
+  const { reduced, foreground } = useRoad();
+  const v = useRef(new Animated.Value(reduced ? 1 : 0)).current;
+  useEffect(() => {
+    if (reduced || !foreground) {
+      v.setValue(1);
+      return;
+    }
+    const a = Animated.timing(v, {
+      toValue: 1,
+      duration: 420,
+      delay,
+      easing: Easing.bezier(0.32, 0.72, 0, 1),
+      useNativeDriver: true,
+    });
+    a.start();
+    return () => a.stop();
+  }, [v, delay, reduced, foreground]);
+  return (
+    <Animated.View
+      style={{
+        opacity: v.interpolate({ inputRange: [0, 0.2, 1], outputRange: [0, 1, 1] }),
+        transform: [{ translateY: v.interpolate({ inputRange: [0, 1], outputRange: [90, 0] }) }],
+      }}
+    >
+      {children}
+    </Animated.View>
   );
 }

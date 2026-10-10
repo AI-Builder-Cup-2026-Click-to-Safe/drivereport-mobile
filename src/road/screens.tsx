@@ -1,5 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Linking, Pressable, View } from "react-native";
+import {
+  ActionSheetIOS,
+  Linking,
+  Platform,
+  Pressable,
+  View,
+} from "react-native";
+import { Arrival } from "./standard-ui";
 import * as DocumentPicker from "expo-document-picker";
 import * as FS from "expo-file-system/legacy";
 import { useStore } from "../lib/store";
@@ -16,7 +23,6 @@ import {
   Notice,
   Page,
   Quiet,
-  Segments,
   T,
   Toggle,
   go,
@@ -26,10 +32,8 @@ import {
 } from "./ui";
 import {
   defaultWhatsAppTestMessage,
-  MALAYSIA_JPJ_WHATSAPP,
   regionNames,
   whatsappTest,
-  type Region,
 } from "./model";
 import { replayHomeEntrance } from "./home";
 export { Review, Handoff } from "./review";
@@ -381,203 +385,271 @@ export function Settings() {
   );
   const save = (patch: Parameters<typeof rr.setPrefs>[0]) =>
     void rr.setPrefs(patch).catch(showError);
+  // Reference Settings: Reporting and Preferences groups of 60pt rows with hairlines.
   return (
-    <Page title="Settings" nav={false}>
-      <T style={s.section}>Reporting</T>
-      <Pressable
-        accessibilityRole="button"
-        ref={recipientRef}
-        accessibilityState={{ expanded: open === "recipient" }}
-        accessibilityLabel={
-          p.region === "MY" ? "Official JPJ WhatsApp" : "Authority WhatsApp"
-        }
-        onPress={() => setOpen(open === "recipient" ? "" : "recipient")}
-        style={s.row}
-      >
-        <Icon name="MessageCircle" />
-        <View style={{ flex: 1 }}>
-          <T style={{ fontWeight: "700" }}>
-            {p.region === "MY" ? "Official JPJ WhatsApp" : "Authority WhatsApp"}
-          </T>
-          <T style={s.muted}>
-            {p.region === "MY"
+    <Page title="Settings" nav={false} gap={0}>
+      <SettingsGroup title="Reporting" index={0}>
+        <SettingsRow
+          controlRef={recipientRef}
+          icon="MessageCircle"
+          title={p.region === "MY" ? "Official JPJ WhatsApp" : "Authority WhatsApp"}
+          note={
+            p.region === "MY"
               ? "+60 13-449 8997"
               : p.recipients[p.region]
-              ? `+${p.recipients[p.region]}`
-              : "Add a number for this region"}
-          </T>
-        </View>
-        <Turn open={open === "recipient"}>
-          <Icon name="ChevronRight" />
-        </Turn>
-      </Pressable>
-      {open === "recipient" && (
-        <FadeArrival distance={8}>
-          <View style={{ gap: 12 }}>
-            {p.region === "MY" ? (
-              <>
-                <Notice>
-                  Live Malaysia reports open a draft to JPJ’s traffic-offence
-                  WhatsApp hotline, +60 13-449 8997. Nothing is sent until you
-                  tap Send in WhatsApp.
-                </Notice>
-                <T style={s.muted}>
-                  The draft includes the Case facts and evidence links. JPJ may
-                  require your full name, identity number, postal address and
-                  phone number to investigate the complaint.
-                </T>
-                <T style={[s.muted, { fontSize: 11 }]}>
-                  wa.me/{MALAYSIA_JPJ_WHATSAPP}
-                </T>
-              </>
-            ) : (
-              <>
-                <Field
-                  label="Recipient number"
-                  value={recipient}
-                  onChangeText={setRecipient}
-                  keyboardType="phone-pad"
-                />
-                <Action
-                  title="Save recipient"
-                  disabled={saving}
-                  secondary
-                  onPress={() => {
-                    const n = recipient.replace(/[\s()+-]/g, "");
-                    if (!/^[1-9]\d{7,14}$/.test(n)) {
-                      setMessage(
-                        "Enter an international number including country code.",
-                      );
-                      return;
-                    }
-                    saveAndClose(
-                      { recipients: { ...p.recipients, [p.region]: n } },
-                      recipientRef,
-                      "Recipient saved for " + regionNames[p.region] + ".",
-                    );
-                  }}
-                />
-                <T style={s.muted}>
-                  I’ll use this for {regionNames[p.region]} drafts.
-                </T>
-              </>
-            )}
-          </View>
-        </FadeArrival>
-      )}
-      <Pressable
-        accessibilityRole="button"
-        ref={personalRef}
-        accessibilityState={{ expanded: open === "personal" }}
-        accessibilityLabel="Your details"
-        onPress={() => setOpen(open === "personal" ? "" : "personal")}
-        style={s.row}
-      >
-        <Icon name="UserRound" />
-        <View style={{ flex: 1 }}>
-          <T style={{ fontWeight: "700" }}>Your details</T>
-          <T style={s.muted}>Optional · fill them in WhatsApp</T>
-        </View>
-        <Turn open={open === "personal"}>
-          <Icon name="ChevronRight" />
-        </Turn>
-      </Pressable>
-      {open === "personal" && (
-        <FadeArrival distance={8}>
-          <View style={{ gap: 15 }}>
-            {(
-              [
-                ["name", "Full name"],
-                ["identity", "Identity number"],
-                ["address", "Postal address"],
-                ["phone", "Phone"],
-                ["email", "Email"],
-              ] as const
-            ).map(([key, label]) => (
-              <Field
-                key={key}
-                label={label}
-                value={personal[key]}
-                onChangeText={(v) =>
-                  setPersonal((current) => ({ ...current, [key]: v }))
-                }
-              />
-            ))}
-            <View style={s.row}>
-              <T style={{ flex: 1 }}>Add your details to report drafts</T>
-              <Toggle
-                accessibilityLabel="Add your details to report drafts"
-                value={personal.includePersonal}
-                onValueChange={(v) =>
-                  setPersonal((current) => ({ ...current, includePersonal: v }))
-                }
-              />
-            </View>
-            <Action
-              title="Save details"
-              secondary
-              disabled={saving}
-              onPress={() =>
-                saveAndClose(
-                  personal,
-                  personalRef,
-                  "Your details are saved securely on this device.",
-                )
-              }
-            />
-            <T style={s.muted}>Saved securely on this device.</T>
-          </View>
-        </FadeArrival>
-      )}
-      <T style={s.section}>Preferences</T>
-      <T style={{ fontWeight: "600" }}>Region</T>
-      <Segments
-        items={["Malaysia", "Singapore", "Japan"]}
-        value={(["MY", "SG", "JP"] as Region[]).indexOf(p.region)}
-        onChange={(i) => save({ region: (["MY", "SG", "JP"] as Region[])[i] })}
-      />
-      <T style={{ fontWeight: "600" }}>Language</T>
-      <Segments
-        items={["English (UK)", "English (US)"]}
-        value={p.language === "en-GB" ? 0 : 1}
-        onChange={(i) => save({ language: i ? "en-US" : "en-GB" })}
-      />
-      <View style={s.row}>
-        <Icon name="Eye" />
-        <T style={{ flex: 1, fontWeight: "600" }}>Reduce motion</T>
-        <Toggle
-          accessibilityLabel="Reduce motion"
-          value={p.reduced}
-          onValueChange={(v) => save({ reduced: v })}
+                ? `+${p.recipients[p.region]}`
+                : "Add a number for this region"
+          }
+          open={open === "recipient"}
+          onPress={() => setOpen(open === "recipient" ? "" : "recipient")}
         />
-      </View>
-      <T style={s.section}>Footage</T>
-      <View style={s.row}>
-        <Icon name="Video" />
-        <View style={{ flex: 1 }}>
-          <T style={{ fontWeight: "600" }}>Keep original recordings</T>
-          <T style={s.muted}>Original clips stay on this device.</T>
+        {open === "recipient" && (
+          <FadeArrival distance={8}>
+            <View style={{ gap: 8, paddingTop: 4, paddingBottom: 14, borderBottomWidth: 1, borderColor: C.line }}>
+              {p.region === "MY" ? (
+                <>
+                  <Notice>
+                    Live Malaysia reports open a draft to JPJ’s traffic-offence
+                    WhatsApp hotline, +60 13-449 8997. Nothing is sent until you
+                    tap Send in WhatsApp.
+                  </Notice>
+                  <T style={setNote}>
+                    The draft includes the Case facts and evidence links. JPJ may
+                    require your full name, identity number, postal address and
+                    phone number to investigate the complaint.
+                  </T>
+                </>
+              ) : (
+                <>
+                  <Field
+                    label="Recipient number"
+                    value={recipient}
+                    onChangeText={setRecipient}
+                    keyboardType="phone-pad"
+                    placeholder="Country code + number"
+                  />
+                  <Action
+                    title="Save recipient"
+                    icon="Check"
+                    disabled={saving}
+                    secondary
+                    onPress={() => {
+                      const n = recipient.replace(/[\s()+-]/g, "");
+                      if (!/^[1-9]\d{7,14}$/.test(n)) {
+                        setMessage(
+                          "Enter an international number including country code.",
+                        );
+                        return;
+                      }
+                      saveAndClose(
+                        { recipients: { ...p.recipients, [p.region]: n } },
+                        recipientRef,
+                        "Recipient saved for " + regionNames[p.region] + ".",
+                      );
+                    }}
+                  />
+                  <T style={setNote}>
+                    Real reports open WhatsApp at this number. Sample clips never do.
+                  </T>
+                </>
+              )}
+            </View>
+          </FadeArrival>
+        )}
+        <SettingsRow
+          controlRef={personalRef}
+          icon="UserRound"
+          title="Your details"
+          note={
+            p.includePersonal && p.name ? p.name : "Optional · fill them in WhatsApp"
+          }
+          open={open === "personal"}
+          onPress={() => setOpen(open === "personal" ? "" : "personal")}
+        />
+        {open === "personal" && (
+          <FadeArrival distance={8}>
+            <View style={{ gap: 12, paddingTop: 4, paddingBottom: 14, borderBottomWidth: 1, borderColor: C.line }}>
+              {(
+                [
+                  ["name", "Full name", "Your full name"],
+                  ["identity", "Identity number", "ID or passport number"],
+                  ["address", "Postal address", "Your postal address"],
+                  ["phone", "Phone", "Your phone number"],
+                  ["email", "Email", "Your email address"],
+                ] as const
+              ).map(([key, label, placeholder]) => (
+                <Field
+                  key={key}
+                  label={label}
+                  placeholder={placeholder}
+                  value={personal[key]}
+                  onChangeText={(v) =>
+                    setPersonal((current) => ({ ...current, [key]: v }))
+                  }
+                />
+              ))}
+              <View style={[s.row, { minHeight: 44 }]}>
+                <T style={{ flex: 1, fontSize: 15, lineHeight: 20 }}>
+                  Add my details to drafts
+                </T>
+                <Toggle
+                  accessibilityLabel="Add my details to drafts"
+                  value={personal.includePersonal}
+                  onValueChange={(v) =>
+                    setPersonal((current) => ({ ...current, includePersonal: v }))
+                  }
+                />
+              </View>
+              <Action
+                title="Save details"
+                icon="Check"
+                secondary
+                disabled={saving}
+                onPress={() =>
+                  saveAndClose(
+                    personal,
+                    personalRef,
+                    "Your details are saved securely on this device.",
+                  )
+                }
+              />
+              <T style={setNote}>
+                Saved securely on this device. Leave it empty and fill it in WhatsApp.
+              </T>
+            </View>
+          </FadeArrival>
+        )}
+      </SettingsGroup>
+      <SettingsGroup title="Preferences" index={1}>
+        <SettingsRow
+          icon="Languages"
+          title="English format"
+          note="Dates and spelling"
+          onPress={() => {
+            const options = ["English (UK)", "English (US)"];
+            if (Platform.OS === "ios")
+              ActionSheetIOS.showActionSheetWithOptions(
+                { options: [...options, "Cancel"], cancelButtonIndex: 2 },
+                (i) => i < 2 && save({ language: i ? "en-US" : "en-GB" }),
+              );
+            else save({ language: p.language === "en-GB" ? "en-US" : "en-GB" });
+          }}
+          trailing={
+            <View
+              style={{
+                minHeight: 44,
+                paddingLeft: 14,
+                paddingRight: 11,
+                borderRadius: 999,
+                backgroundColor: C.surface,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <T style={{ fontSize: 14, lineHeight: 18, fontWeight: "600" }}>
+                {p.language === "en-GB" ? "English (UK)" : "English (US)"}
+              </T>
+              <View style={{ transform: [{ rotate: "90deg" }] }}>
+                <Icon name="ChevronRight" size={14} strokeWidth={2.4} />
+              </View>
+            </View>
+          }
+        />
+        <SettingsRow
+          icon="Eye"
+          title="Reduce motion"
+          note="Skip the theatrics"
+          trailing={
+            <Toggle
+              accessibilityLabel="Reduce motion"
+              value={p.reduced}
+              onValueChange={(v) => save({ reduced: v })}
+            />
+          }
+        />
+      </SettingsGroup>
+      {message && (
+        <View style={{ marginTop: 16 }}>
+          <Notice>{message}</Notice>
         </View>
-        <Icon name="Check" />
+      )}
+      <View style={{ marginTop: 18, alignItems: "center" }}>
+        <Quiet title="Developer" icon="Settings" onPress={() => go("developer")} />
       </View>
-      <View style={s.row}>
-        <Icon name="UserRound" />
-        <View style={{ flex: 1 }}>
-          <T style={{ fontWeight: "600" }}>Blur unrelated faces</T>
-          <T style={s.muted}>
-            Unavailable until annotated evidence is connected.
-          </T>
-        </View>
-      </View>
-      {message && <Notice>{message}</Notice>}
-      <Quiet
-        title="Developer"
-        icon="Settings"
-        onPress={() => go("developer")}
-      />
-      <T style={[s.muted, { textAlign: "center" }]}>
-        I do the boring shit. You tap Send.
-      </T>
     </Page>
+  );
+}
+const setNote = { fontSize: 13, lineHeight: 19, color: C.muted };
+function SettingsGroup({
+  title,
+  index,
+  children,
+}: React.PropsWithChildren<{ title: string; index: number }>) {
+  return (
+    <Arrival delay={60 + index * 60} distance={10}>
+      <View style={{ marginTop: 20 }}>
+        <T
+          accessibilityRole="header"
+          style={{ marginBottom: 2, fontSize: 15, lineHeight: 18, fontWeight: "800" }}
+        >
+          {title}
+        </T>
+        {children}
+      </View>
+    </Arrival>
+  );
+}
+function SettingsRow({
+  icon,
+  title,
+  note,
+  open,
+  trailing,
+  onPress,
+  controlRef,
+}: {
+  icon: React.ComponentProps<typeof Icon>["name"];
+  title: string;
+  note: string;
+  open?: boolean;
+  trailing?: React.ReactNode;
+  onPress?: () => void;
+  controlRef?: React.Ref<View>;
+}) {
+  const Row = onPress ? Pressable : View;
+  return (
+    <Row
+      ref={controlRef}
+      {...(onPress
+        ? {
+            onPress,
+            accessibilityRole: "button" as const,
+            accessibilityLabel: title,
+            accessibilityState: open === undefined ? undefined : { expanded: open },
+          }
+        : {})}
+      style={{
+        minHeight: 60,
+        paddingVertical: 8,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        borderBottomWidth: open ? 0 : 1,
+        borderColor: C.line,
+      }}
+    >
+      <Icon name={icon} size={20} />
+      <View style={{ flex: 1 }}>
+        <T style={{ fontSize: 16, lineHeight: 19, fontWeight: "700" }}>{title}</T>
+        <T style={{ marginTop: 3, fontSize: 13, lineHeight: 17, color: C.muted }}>{note}</T>
+      </View>
+      {trailing ??
+        (open !== undefined && (
+          <Turn open={open}>
+            <Icon name="ChevronRight" size={20} />
+          </Turn>
+        ))}
+    </Row>
   );
 }

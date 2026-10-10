@@ -14,6 +14,8 @@ export function SubmissionIcon({
 }) {
   const { reduced, foreground } = useRoad();
   const [mix, setMix] = useState(poses[name] ?? (active ? 1 : 0));
+  // The icon dips 12% in scale through the middle of its morph, as in the reference.
+  const [dip, setDip] = useState(0);
   const prior = useRef(mix);
   const f = geometry[name];
   useEffect(() => {
@@ -33,6 +35,7 @@ export function SubmissionIcon({
       prior.current = n;
       poses[name] = n;
       setMix(n);
+      setDip(t < 1 ? 0.12 * Math.sin(Math.PI * t) : 0);
       if (t < 1) raf = requestAnimationFrame(tick);
     }
     tick();
@@ -55,6 +58,7 @@ export function SubmissionIcon({
     <Svg
       width={26}
       height={26}
+      style={dip ? { transform: [{ scale: 1 - dip }] } : undefined}
       viewBox="0 0 24 24"
       stroke={color}
       strokeWidth={1.7}

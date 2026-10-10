@@ -1,11 +1,17 @@
 import React, { useEffect, useState } from "react";
 import {
+  ActionSheetIOS,
+  Animated,
+  Easing,
   Image,
   Linking,
+  Platform,
   Pressable,
+  ScrollView,
   View,
   useWindowDimensions,
 } from "react-native";
+import Svg, { Path } from "react-native-svg";
 import * as DocumentPicker from "expo-document-picker";
 import * as FS from "expo-file-system/legacy";
 import { useRoad } from "./context";
@@ -27,6 +33,7 @@ import {
 } from "./ui";
 import {
   Arrival,
+  CaseId,
   Count,
   Disclosure,
   FrameBadge,
@@ -34,6 +41,7 @@ import {
   Spark,
 } from "./standard-ui";
 import { shortDate } from "./format";
+import { DEMO_STAGE_MS } from "./analysis-timing";
 import { SAMPLE_VIDEO, useSamplePreview } from "../lib/sample";
 import { FadeArrival, ImpactBar } from "./motion";
 import {
@@ -62,78 +70,123 @@ import {
 } from "./model";
 
 export const demoFrame = require("../../assets/road/images/frame-wxy2048.jpg");
-const clipMeta = { fontSize: 15, lineHeight: 20, color: C.muted };
+const clipMeta = {
+  fontSize: 14,
+  lineHeight: 18,
+  color: C.muted,
+  fontVariant: ["tabular-nums" as const],
+};
 
 export function StandardHome() {
   const rr = useRoad();
   const { width } = useWindowDimensions();
+  const headline = {
+    fontSize: width < 350 ? 34 : 42,
+    lineHeight: width < 350 ? 36 : 44,
+    fontWeight: "800" as const,
+    letterSpacing: -1.47,
+  };
+  // Reference Home: spark, stat (16), headline (8), lede (14), button (30), quiet action (6).
   return (
     <Page title="Home" home centered animateContent={false}>
-      <View style={{ gap: 18, paddingBottom: 32 }}>
+      <View style={{ paddingBottom: 48 }}>
         <Arrival delay={80}>
-          <Spark size={44} />
+          <SparkEntrance size={44} />
         </Arrival>
-        <RoadStat />
         <Arrival delay={170}>
-          <T
-            accessibilityRole="header"
-            style={{
-              fontSize: width < 350 ? 34 : 42,
-              lineHeight: width < 350 ? 36 : 44,
-              fontWeight: "800",
-              letterSpacing: -1.6,
-            }}
-          >
-            Spotted an asshole?{"\n"}
-            <T
-              style={{
-                fontSize: width < 350 ? 34 : 42,
-                lineHeight: width < 350 ? 36 : 44,
-                fontWeight: "800",
-                letterSpacing: -1.6,
-                color: C.accent,
-              }}
-            >
-              Let’s take their licence.
-            </T>
-          </T>
+          <View style={{ marginTop: 16 }}>
+            <RoadStat />
+          </View>
         </Arrival>
         <Arrival delay={260}>
-          <T style={{ fontSize: 18, lineHeight: 26, color: C.muted }}>
+          <T accessibilityRole="header" style={[headline, { marginTop: 8 }]}>
+            Spotted an asshole?
+          </T>
+          {/* The reference balances this line as “Let’s take / their licence.” */}
+          <T style={[headline, { marginTop: 4, color: C.accent }]}>
+            {"Let’s take\ntheir licence."}
+          </T>
+        </Arrival>
+        <Arrival delay={350}>
+          <T
+            style={{
+              marginTop: 14,
+              maxWidth: 300,
+              fontSize: 18,
+              lineHeight: 26,
+              color: C.muted,
+            }}
+          >
             Gemini finds the offence, the law and the demerit points. You tap
             Send. JPJ does the rest.
           </T>
         </Arrival>
-        <Arrival delay={350}>
-          <View style={{ marginTop: 12 }}>
+        <Arrival delay={440}>
+          <View style={{ marginTop: 30 }}>
             <Action
               title="Analyse a clip"
-              leading={<Spark size={18} />}
+              leading={(pressed) => <Spark size={20} pressed={pressed} />}
               onPress={() => go("clip")}
             />
           </View>
         </Arrival>
-        <Arrival delay={440}>
-          <Quiet
-            title="Record a drive instead"
-            onPress={() => go("recording")}
-          />
-        </Arrival>
         <Arrival delay={530}>
-          <Quiet title="Test WhatsApp" onPress={() => go("developer")} />
+          <View style={{ marginTop: 6, alignItems: "center" }}>
+            <Quiet
+              title="Record a drive instead"
+              onPress={() => go("recording")}
+            />
+          </View>
         </Arrival>
         {rr.job?.status === "running" && (
-          <Quiet
-            title={
-              rr.job.stage < 0
-                ? "Saving your recording · see progress"
-                : "Gemini is still working · see progress"
-            }
-            onPress={() => go("analysis")}
-          />
+          <View style={{ marginTop: 6, alignItems: "center" }}>
+            <Quiet
+              title={
+                rr.job.stage < 0
+                  ? "Saving your recording · see progress"
+                  : "Gemini is still working · see progress"
+              }
+              onPress={() => go("analysis")}
+            />
+          </View>
         )}
       </View>
     </Page>
+  );
+}
+
+/** Home's spark turns in from -90° as the screen arrives. */
+function SparkEntrance({ size }: { size: number }) {
+  const { reduced, foreground } = useRoad();
+  const v = React.useRef(new Animated.Value(reduced ? 1 : 0)).current;
+  useEffect(() => {
+    if (reduced || !foreground) {
+      v.setValue(1);
+      return;
+    }
+    const a = Animated.timing(v, {
+      toValue: 1,
+      duration: 820,
+      delay: 120,
+      easing: Easing.bezier(0.16, 1, 0.3, 1),
+      useNativeDriver: true,
+    });
+    a.start();
+    return () => a.stop();
+  }, [v, reduced, foreground]);
+  return (
+    <Animated.View
+      style={{
+        alignSelf: "flex-start",
+        opacity: v,
+        transform: [
+          { rotate: v.interpolate({ inputRange: [0, 1], outputRange: ["-90deg", "0deg"] }) },
+          { scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.6, 1] }) },
+        ],
+      }}
+    >
+      <Spark size={size} />
+    </Animated.View>
   );
 }
 
@@ -214,7 +267,7 @@ export function Clip() {
       footer={
         <Action
           title="Analyse with Gemini"
-          leading={<Spark size={18} />}
+          leading={(pressed) => <Spark size={20} pressed={pressed} />}
           disabled={busy || rr.job?.status === "running"}
           onPress={() => void start()}
         />
@@ -232,18 +285,11 @@ export function Clip() {
           }}
         >
           {thumbnail ? (
-            <Image
-              source={{ uri: thumbnail }}
-              style={{ width: "100%", height: "100%" }}
-            />
+            <ClipImage uri={thumbnail} />
           ) : (
             <Icon name="Video" color="white" size={44} />
           )}
-          {!file && (
-            <FrameBadge>
-              {`Sample clip · ${duration(SAMPLE_VIDEO.durationSeconds)}`}
-            </FrameBadge>
-          )}
+          {!file && <DurationPill seconds={SAMPLE_VIDEO.durationSeconds} />}
         </View>
         {/* One row: the file on the left, Change video on the right (it wraps under on narrow screens). */}
         <View
@@ -254,10 +300,10 @@ export function Clip() {
             gap: 12,
           }}
         >
-          <View style={{ flex: 1, minWidth: 180, gap: 2 }}>
+          <View style={{ flex: 1, minWidth: 180, gap: 3 }}>
             <T
               numberOfLines={1}
-              style={{ fontSize: 18, lineHeight: 24, fontWeight: "800" }}
+              style={{ fontSize: 17, lineHeight: 21, fontWeight: "700" }}
             >
               {file ? file.name : SAMPLE_VIDEO.name}
             </T>
@@ -301,10 +347,8 @@ export function Clip() {
       {file && (
         <Quiet title="Use the sample clip" onPress={() => setChosen("")} />
       )}
-      <View>
-        <T style={[s.section, { fontSize: 15, marginBottom: 6 }]}>
-          For the best result
-        </T>
+      <View style={{ marginTop: 4 }}>
+        <T style={[s.section, { marginBottom: 8 }]}>For the best result</T>
         {(
           [
             ["Sun", "Daylight footage", "Gemini has to read the plate."],
@@ -321,7 +365,7 @@ export function Clip() {
               flexDirection: "row",
               alignItems: "center",
               gap: 12,
-              paddingVertical: 10,
+              paddingVertical: 12,
               borderTopWidth: 1,
               borderBottomWidth: icon === "Clock" ? 1 : 0,
               borderColor: C.line,
@@ -329,9 +373,9 @@ export function Clip() {
           >
             <View
               style={{
-                width: 38,
-                height: 38,
-                borderRadius: 19,
+                width: 36,
+                height: 36,
+                borderRadius: 18,
                 backgroundColor: C.surface,
                 alignItems: "center",
                 justifyContent: "center",
@@ -340,8 +384,17 @@ export function Clip() {
               <Icon name={icon} size={20} />
             </View>
             <View style={{ flex: 1 }}>
-              <T style={{ fontWeight: "700", lineHeight: 21 }}>{title}</T>
-              <T style={{ fontSize: 13, lineHeight: 18, color: C.muted }}>
+              <T style={{ fontWeight: "700", fontSize: 15, lineHeight: 19 }}>
+                {title}
+              </T>
+              <T
+                style={{
+                  marginTop: 2,
+                  fontSize: 13,
+                  lineHeight: 18,
+                  color: C.muted,
+                }}
+              >
                 {note}
               </T>
             </View>
@@ -372,10 +425,86 @@ export function Clip() {
   );
 }
 
+/** Reference .dur: the clip length on the frame's bottom-right corner. */
+function DurationPill({ seconds }: { seconds: number }) {
+  return (
+    <View
+      pointerEvents="none"
+      style={{
+        position: "absolute",
+        right: 10,
+        bottom: 10,
+        paddingHorizontal: 7,
+        paddingVertical: 4,
+        borderRadius: 999,
+        backgroundColor: "rgba(17,19,24,0.75)",
+      }}
+    >
+      <T
+        style={{
+          fontSize: 12,
+          lineHeight: 14,
+          fontWeight: "700",
+          color: "white",
+          fontVariant: ["tabular-nums"],
+        }}
+      >
+        {duration(seconds)}
+      </T>
+    </View>
+  );
+}
+
+/** The clip frame settles from a slight zoom as Your clip arrives. */
+function ClipImage({ uri }: { uri: string }) {
+  const { reduced, foreground } = useRoad();
+  const v = React.useRef(new Animated.Value(reduced ? 1 : 0)).current;
+  useEffect(() => {
+    if (reduced || !foreground) {
+      v.setValue(1);
+      return;
+    }
+    const a = Animated.timing(v, {
+      toValue: 1,
+      duration: 700,
+      delay: 120,
+      easing: Easing.bezier(0.16, 1, 0.3, 1),
+      useNativeDriver: true,
+    });
+    a.start();
+    return () => a.stop();
+  }, [v, reduced, foreground]);
+  return (
+    <Animated.Image
+      source={{ uri }}
+      style={{
+        width: "100%",
+        height: "100%",
+        transform: [
+          { scale: v.interpolate({ inputRange: [0, 1], outputRange: [1.08, 1] }) },
+        ],
+      }}
+    />
+  );
+}
+
 export function StandardAnalysis() {
   const rr = useRoad(),
     store = useStore(),
     j = rr.job;
+  const done = j?.status === "complete",
+    running = j?.status === "running";
+  const stage = !j ? 0 : done ? 4 : Math.max(0, j.stage);
+  const demo = j?.mode === "demo";
+  // How far the current demo stage has got, so rows and the cost fill in through the stage.
+  const [now, setNow] = useState(() => Date.now());
+  const [stageStart, setStageStart] = useState(() => Date.now());
+  useEffect(() => setStageStart(Date.now()), [j?.id, stage]);
+  useEffect(() => {
+    if (!running || !demo) return;
+    const timer = setInterval(() => setNow(Date.now()), 200);
+    return () => clearInterval(timer);
+  }, [running, demo]);
   if (!j)
     return (
       <Page title="Gemini at work" nav={false}>
@@ -383,89 +512,140 @@ export function StandardAnalysis() {
         <Action title="Analyse a clip" onPress={() => go("clip")} />
       </Page>
     );
-  const done = j.status === "complete",
-    running = j.status === "running",
-    preparing = j.stage < 0,
+  const preparing = j.stage < 0,
     saving = preparing && running;
   const result =
     rr.allCases.find((c) => j.caseIds.includes(c.id)) ||
-    (j.mode === "demo"
-      ? (submissionFixtures.allCases[0] as RoadCase)
-      : undefined);
+    (demo ? (submissionFixtures.allCases[0] as RoadCase) : undefined);
   const file = store.records.find((r) => j.sourceIds.includes(r.id));
-  const stage = done ? 4 : Math.max(0, j.stage);
-  const awarded = result ? casePoints(result) : 0;
-  const prior = result ? licenceRecord(result) : null;
-  const captions = [
-    ["Uploading your clip", "Moving their audacity to the cloud."],
-    [
-      "Gemini is watching",
-      "Checking what happened and the relevant law. Your review will appear when it’s ready.",
-    ],
-    [
-      "Searching JPJ law",
-      "RAG over the actual rulebook. Vibes have been evicted.",
-    ],
-    ["Gemini is judging", "Matching what happened to the law."],
-    [
-      result && missing(result).length
-        ? "One thing I couldn’t see"
-        : awarded
-          ? `+${awarded} demerit points.`
-          : "Case ready",
-      result && missing(result).length
-        ? "Check the case and fill in the missing details."
-        : prior && result
-          ? `${result.vehicle.plate} already has ${prior.points}. This could make it ${prior.points + awarded}: licence suspended.`
-          : "Nothing sent. I’m a snitch with boundaries.",
-    ],
-  ];
-  // Each stage leaves one result row: Watched, Law, the offence with its points, then Record.
+  const f =
+    demo && running && stage < 4
+      ? Math.max(0, Math.min(1, (now - stageStart) / DEMO_STAGE_MS[stage]))
+      : 1;
+  const narration = result?.analysis?.timeline || [];
+  const offences = result?.offences || [];
+  const sources = result ? lawSourcesOf(result) : [];
+  // Reference stepOf(): how much of the current stage's output has arrived.
+  const k =
+    !demo || done || stage < 1
+      ? 99
+      : stage === 1
+        ? Math.min(narration.length, Math.floor(f * narration.length * 1.1) + 1)
+        : stage === 2
+          ? Math.min(sources.length, Math.floor(f * (sources.length + 0.6)))
+          : Math.min(offences.length + 1, Math.floor(f * (offences.length + 1.4)));
+  const adds = result ? casePoints(result) : 0;
+  const record = result ? licenceRecord(result) : null;
+  const plate = result?.vehicle.plate || "";
+  const plateRead = !!result?.analysis?.vehicle.plate;
+  const caption: [string, string] = saving
+    ? [
+        "Securing the last recording",
+        j.sourceIds.length
+          ? `${j.sourceIds.length} saved segment${j.sourceIds.length === 1 ? "" : "s"}. Finishing the last file before upload.`
+          : "Closing the camera file and saving it locally before upload.",
+      ]
+    : !running && !done
+      ? ["Analysis interrupted", j.error || "Your recording is still saved."]
+      : stage >= 4
+        ? verdict(result, adds, record?.points ?? 0)
+        : stage === 3 && k > offences.length
+          ? [
+              plural(offences.filter((o) => o.included).length, "suspected offence"),
+              "Writing it up the way JPJ wants it.",
+            ]
+          : (
+              [
+                ["Uploading your clip", "Moving their audacity to the cloud."],
+                ["Gemini is watching", "Frame by frame. Skill issue, or actual offence?"],
+                ["Searching JPJ law", "RAG over the actual rulebook. Vibes have been evicted."],
+                ["Gemini is judging", "Making “what the fuck” sound professional."],
+              ] as [string, string][]
+            )[stage];
+  // Each stage leaves one result row (reference rows()): Watched, Law, the offence with its points, Record.
   const findings: Finding[] = [];
-  if (result && (done || j.mode === "demo")) {
-    if (done || stage >= 1)
+  if (result && (done || demo)) {
+    if (stage >= 1) {
+      const watched = stage >= 2;
+      const frames = 24;
       findings.push({
         key: "watched",
         label: "Watched",
-        value: j.mode === "demo" ? "24 frames · plate read" : "Recording reviewed",
+        value: !demo
+          ? "Recording reviewed"
+          : watched
+            ? `${frames} frames · plate ${plateRead ? "read" : "unreadable"}`
+            : `${Math.round((frames * Math.min(narration.length, k)) / Math.max(1, narration.length))} of ${frames} frames`,
+        wait: !watched,
+        need: watched && demo && !plateRead,
       });
-    if (done || stage >= 2)
-      result.offences
-        .flatMap((o) => o.lawSources)
-        .slice(0, 1)
-        .forEach((law, i) =>
-          findings.push({
-            key: `law-${i}`,
-            label: "Law",
-            value: [law.act || law.title, law.section]
-              .filter(Boolean)
-              .join(", "),
-          }),
-        );
-    if (done || stage >= 3)
-      result.offences.forEach((o, i) =>
+    }
+    if (stage >= 2) {
+      const list = stage >= 3 ? sources : sources.slice(0, k);
+      if (!list.length)
+        findings.push({ key: "law-0", label: "Law", value: "Searching JPJ law", wait: true });
+      list.forEach((law, i) =>
+        findings.push({
+          key: `law-${i}`,
+          label: "Law",
+          value: lawRef(law),
+          // The Act and section, then what the offence is in plain words.
+          sub: law.act && law.section ? law.title : undefined,
+        }),
+      );
+    }
+    if (stage >= 3)
+      offences.slice(0, stage >= 4 ? 99 : k).forEach((o, i) =>
         findings.push({
           key: o.id,
           label: duration(o.atSeconds),
           value: o.label,
-          delay: i * 240,
-          trailing: (
-            <PointsChip points={o.demeritPoints ?? 0} delay={260 + i * 240} />
-          ),
+          trailing: o.demeritPoints ? (
+            <PointsChip points={o.demeritPoints} delay={260 + i * 240} />
+          ) : undefined,
         }),
       );
-    if (done)
-      findings.push({
-        key: "record",
-        label: "Record",
-        value: prior
-          ? `${result.vehicle.plate} · ${prior.points} pts on record`
-          : "Licence lookup unavailable",
-      });
+    if (adds && (stage >= 4 || (stage === 3 && k > offences.length)))
+      findings.push(
+        !plate
+          ? {
+              key: "record",
+              label: "Record",
+              value: "No plate, no lookup",
+              sub: "Add the plate and I’ll check their record.",
+              need: true,
+            }
+          : {
+              key: "record",
+              label: "Record",
+              value: record ? `${plate} · ${record.points} pts` : `${plate} · no points`,
+              sub: record
+                ? `${plural(record.summonses, "summons").replace("summonss", "summonses")} on record`
+                : "No summons on record",
+            },
+      );
   }
+  // The footage subtitle follows the stage: the description line by line, then the offence moment.
+  const line =
+    !demo || stage < 1
+      ? ""
+      : stage === 1
+        ? narration[Math.max(0, Math.min(k, narration.length) - 1)]?.event || ""
+        : quoteAt(narration, offences[0]?.atSeconds ?? 12);
+  const costUsd = 0.0012;
+  const elapsed =
+    stage === 0
+      ? 0
+      : DEMO_STAGE_MS.slice(1, stage).reduce((n, ms) => n + ms, 0) +
+        f * DEMO_STAGE_MS[Math.min(stage, 3)];
+  const cost =
+    done || stage >= 4
+      ? costUsd
+      : (costUsd * elapsed) / (DEMO_STAGE_MS[1] + DEMO_STAGE_MS[2] + DEMO_STAGE_MS[3]);
+  const missingKeys = result ? missing(result) : [];
   const review = () => {
     void rr
-      .setPrefs({ demo: j.mode === "demo" })
+      .setPrefs({ demo })
       .then(() => {
         if (j.caseIds[0]) rr.select(j.caseIds[0]);
         rr.dismissNotice();
@@ -477,28 +657,46 @@ export function StandardAnalysis() {
     <Page
       title={saving ? "Saving your drive" : "Gemini at work"}
       nav={false}
-      gap={10}
+      gap={0}
       footer={
         done ? (
-          <Action
-            title={
-              result && missing(result).length
-                ? "Add missing details"
-                : "Review the report"
-            }
-            onPress={review}
-          />
+          <FadeArrival distance={8} duration={300}>
+            <Action
+              title={
+                missingKeys.includes("plate")
+                  ? "Add the plate"
+                  : missingKeys.includes("location")
+                    ? "Add the location"
+                    : missingKeys.length
+                      ? "Add the missing detail"
+                      : "Review the report"
+              }
+              icon="FileCheck2"
+              onPress={review}
+            />
+          </FadeArrival>
         ) : (
-          <Quiet
-            title="Back to home · I’ll keep working"
-            onPress={() => go("home")}
-          />
+          <View style={{ minHeight: 76, alignItems: "center", justifyContent: "center" }}>
+            <T
+              style={{
+                maxWidth: 300,
+                textAlign: "center",
+                fontSize: 13,
+                lineHeight: 18,
+                fontWeight: "600",
+                color: C.muted,
+              }}
+            >
+              Long clips can take up to an hour. I’ll notify you when it’s done.
+            </T>
+            <Quiet title="Back to home" onPress={() => go("home")} />
+          </View>
         )
       }
     >
       <View
         style={{
-          aspectRatio: 2.05,
+          aspectRatio: 16 / 9,
           backgroundColor: C.dark,
           borderRadius: 16,
           overflow: "hidden",
@@ -506,9 +704,9 @@ export function StandardAnalysis() {
           justifyContent: "center",
         }}
       >
-        {!saving && (j.mode === "demo" || file?.thumbnail) ? (
+        {!saving && (demo || file?.thumbnail) ? (
           <Image
-            source={j.mode === "demo" ? demoFrame : { uri: file!.thumbnail }}
+            source={demo ? demoFrame : { uri: file!.thumbnail }}
             style={{
               width: "100%",
               height: "100%",
@@ -518,128 +716,34 @@ export function StandardAnalysis() {
         ) : (
           <Icon name="Video" size={48} color="white" />
         )}
-        <FrameBadge>
-          {j.mode === "demo"
-            ? "Synthetic demo"
-            : saving
-              ? "Saving on this device"
-              : file?.dashcamSession
-                ? "Your recording"
-                : file?.name === SAMPLE_VIDEO.name
-                  ? "Sample clip"
-                  : "Your clip"}
-        </FrameBadge>
-        {stage === 0 && j.progress !== null && (
-          <View
-            style={{
-              position: "absolute",
-              bottom: 0,
-              left: 0,
-              height: 4,
-              backgroundColor: "white",
-              width: `${j.progress}%`,
-            }}
+        {demo && <FrameBadge>Sample run</FrameBadge>}
+        {saving && <FrameBadge>Saving on this device</FrameBadge>}
+        {stage === 0 && running && (
+          <UploadBar
+            progress={demo ? null : (j.progress ?? 0) / 100}
+            ms={DEMO_STAGE_MS[0]}
           />
         )}
-        {j.mode === "demo" && stage >= 1 && (
-          <SampleOverlay
-            caption={
-              stage === 1
-                ? "The light turns red. A blue hatchback approaches the junction."
-                : "The hatchback crosses the stop line while the light is red."
-            }
-          />
-        )}
+        {demo && stage >= 1 && <SampleOverlay caption={line || undefined} />}
         {running && stage === 1 && <ScanSweep />}
       </View>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-        <View style={{ flexDirection: "row", gap: 6 }}>
-          {["Upload", "Watch", "Law", "Judge"].map((name, i) => (
-            <View
-              key={name}
-              style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
-            >
-              <View
-                key={name}
-                accessible
-                accessibilityLabel={`${name}: ${preparing ? "awaiting saved recording" : done || i < stage ? "complete" : i === stage ? "working" : "awaiting result"}`}
-                style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: 4,
-                  backgroundColor:
-                    preparing
-                      ? C.lilac
-                      : done || i < stage
-                      ? C.accent
-                      : i === stage
-                        ? C.ink
-                        : C.lilac,
-                }}
-              />
-              <T
-                style={{
-                  fontSize: 12,
-                  lineHeight: 16,
-                  fontWeight: "700",
-                  color:
-                    !preparing && (done || i < stage)
-                      ? C.accent
-                      : !preparing && i === stage
-                        ? C.ink
-                        : C.muted,
-                }}
-              >
-                {name}
-              </T>
-            </View>
-          ))}
-        </View>
-        <T style={s.muted}>
-          {saving
-            ? "Preparing"
-            : done
-            ? "Done"
-            : !running
-              ? "Paused"
-              : j.mode === "live" && stage > 0
-                ? "Review in progress"
-                : `${stage + 1} of 4`}
-        </T>
-      </View>
-      {/* A short fade: the stage caption changes in place instead of blanking for half a second. */}
-      <FadeArrival identity={`${j.id}-${stage}-${j.status}`} distance={6}>
-        <View style={{ flexDirection: "row", gap: 12 }}>
-          <View style={{ paddingTop: 2 }}>
-            <Spark working={running} />
+      <StageDots stage={stage} preparing={preparing} />
+      {/* The caption changes in place: a short fade and rise, never a blank. */}
+      <FadeArrival identity={`${j.id}-${caption[0]}`} distance={8} duration={320}>
+        <View style={{ minHeight: 84, marginTop: 12, marginBottom: 4, paddingLeft: 40 }}>
+          <View style={{ position: "absolute", left: 0, top: 2 }}>
+            <DoneSpark working={running && !saving} done={done} />
           </View>
-          <View style={{ flex: 1, gap: 6 }}>
-            <T
-              accessibilityRole="header"
-              accessibilityLiveRegion="polite"
-              style={{
-                fontSize: 27,
-                lineHeight: 30,
-                fontWeight: "800",
-                letterSpacing: -0.7,
-              }}
-            >
-              {saving
-                ? "Securing the last recording"
-                : running || done
-                  ? captions[stage][0]
-                  : "Analysis interrupted"}
-            </T>
-            <T style={{ color: C.muted, fontSize: 16, lineHeight: 22 }}>
-              {saving
-                ? j.sourceIds.length
-                  ? `${j.sourceIds.length} saved segment${j.sourceIds.length === 1 ? "" : "s"}. Finishing the last file before upload.`
-                  : "Closing the camera file and saving it locally before upload."
-                : running || done
-                ? captions[stage][1]
-                : j.error || "Your recording is still saved."}
-            </T>
-          </View>
+          <T
+            accessibilityRole="header"
+            accessibilityLiveRegion="polite"
+            style={{ fontSize: 27, lineHeight: 30, fontWeight: "800", letterSpacing: -0.68 }}
+          >
+            {caption[0]}
+          </T>
+          <T style={{ marginTop: 6, color: C.muted, fontSize: 16, lineHeight: 22 }}>
+            {caption[1]}
+          </T>
         </View>
       </FadeArrival>
       {findings.length > 0 && (
@@ -647,6 +751,7 @@ export function StandardAnalysis() {
         <Arrival identity={j.id} distance={8}>
           <View
             style={{
+              marginTop: 6,
               backgroundColor: C.surface,
               borderRadius: 16,
               overflow: "hidden",
@@ -658,39 +763,13 @@ export function StandardAnalysis() {
           </View>
         </Arrival>
       )}
-      <View
-        style={{
-          borderWidth: 1.5,
-          borderStyle: "dashed",
-          borderColor: "#C9CDD4",
-          borderRadius: 16,
-          padding: 12,
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <View>
-          <T style={{ fontSize: 13, fontWeight: "700" }}>Estimated AI cost</T>
-          <T style={s.muted}>
-            {j.mode === "demo"
-              ? "24 s sample · estimate"
-              : "Not supplied by the API"}
-          </T>
-        </View>
-        {j.mode === "demo" ? (
-          <CostCounter value={0.0012 * (done ? 1 : stage / 4)} />
-        ) : (
-          <T style={{ color: C.accent }}>—</T>
-        )}
-      </View>
-      {j.mode === "demo" && (
-        <T style={s.muted}>
-          Sample analysis · simulated findings and licence record.
-        </T>
-      )}
+      <CostTotal
+        value={demo ? cost : null}
+        note={demo ? "24 s clip" : "Not reported by the server"}
+        settled={done}
+      />
       {!running && !done && (
-        <>
+        <View style={{ marginTop: 16, gap: 12 }}>
           <Notice error>{j.error || "Analysis interrupted."}</Notice>
           <Action
             title={j.sourceIds.length ? "Retry analysis" : "Record again"}
@@ -703,12 +782,225 @@ export function StandardAnalysis() {
                   .catch(showError);
             }}
           />
-        </>
+        </View>
       )}
-      {running && !saving && (
-        <Quiet title="Stop waiting" onPress={rr.cancel} />
+      {running && !saving && !demo && (
+        <View style={{ marginTop: 10, alignItems: "center" }}>
+          <Quiet title="Stop waiting" onPress={rr.cancel} />
+        </View>
       )}
     </Page>
+  );
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const lawRef = (law: RoadCase["offences"][number]["lawSources"][number]) =>
+  law.act && law.section ? `${law.act}, ${law.section}` : law.title || law.act || "";
+function lawSourcesOf(c: RoadCase) {
+  const seen = new Set<string>();
+  return c.offences
+    .filter((o) => o.included)
+    .flatMap((o) => o.lawSources)
+    .filter((law) => {
+      const key = lawRef(law);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+function quoteAt(
+  narration: { start_seconds: number; event: string }[],
+  at: number,
+) {
+  return (
+    narration
+      .filter((l) => Math.abs(l.start_seconds - at) <= 1)
+      .sort((a, b) => Math.abs(a.start_seconds - at) - Math.abs(b.start_seconds - at))[0]
+      ?.event || ""
+  );
+}
+/** Reference verdict(): this case's points weighed against the points already on the plate. */
+function verdict(c: RoadCase | undefined, adds: number, had: number): [string, string] {
+  if (!c || !c.offences.length)
+    return ["No suspected offence", "Gemini found nothing to report. Humanity survives."];
+  if (!adds)
+    return [
+      plural(c.offences.filter((o) => o.included).length, "suspected offence"),
+      "Nothing sent. I’m a snitch with boundaries.",
+    ];
+  if (!c.vehicle.plate)
+    return [`+${adds} demerit points.`, "I couldn’t read the plate. Add it and I’ll check their record."];
+  const total = had + adds;
+  if (!had) return [`+${adds} demerit points.`, `${20 - total} more and they’re taking the bus.`];
+  return [
+    `+${adds} demerit points.`,
+    total >= 20
+      ? `${c.vehicle.plate} already has ${had}. This could make it ${total}: licence suspended.`
+      : `${c.vehicle.plate} already has ${had}. ${20 - total} more and they’re taking the bus.`,
+  ];
+}
+
+/** Upload darkens the footage under a white progress bar; the demo fills it over the stage. */
+function UploadBar({ progress, ms }: { progress: number | null; ms: number }) {
+  const { reduced } = useRoad();
+  const v = React.useRef(new Animated.Value(progress ?? 0)).current;
+  useEffect(() => {
+    if (progress !== null) {
+      v.setValue(progress);
+      return;
+    }
+    v.setValue(reduced ? 1 : 0);
+    if (reduced) return;
+    const a = Animated.timing(v, { toValue: 1, duration: ms, easing: Easing.linear, useNativeDriver: true });
+    a.start();
+    return () => a.stop();
+  }, [progress, ms, reduced, v]);
+  return (
+    <View
+      pointerEvents="none"
+      style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 4, backgroundColor: "rgba(0,0,0,0.4)" }}
+    >
+      <Animated.View
+        style={{
+          height: 4,
+          backgroundColor: "white",
+          transformOrigin: "left center",
+          transform: [{ scaleX: v }],
+        }}
+      />
+    </View>
+  );
+}
+
+/** Upload · Watch · Law · Judge: done in Gemini Blue, current in Ink; dots pop as they advance. */
+function StageDots({ stage, preparing }: { stage: number; preparing: boolean }) {
+  return (
+    <View style={{ marginTop: 14, flexDirection: "row", flexWrap: "wrap", columnGap: 14, rowGap: 6 }}>
+      {["Upload", "Watch", "Law", "Judge"].map((name, i) => {
+        const doneDot = !preparing && i < stage,
+          now = !preparing && i === stage;
+        return (
+          <View
+            key={name}
+            accessible
+            accessibilityLabel={`${name}: ${preparing ? "waiting for the saved recording" : doneDot ? "done" : now ? "working" : "next"}`}
+            style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+          >
+            <StageDot
+              color={doneDot ? C.accent : now ? C.ink : C.lilac}
+              pop={doneDot || now}
+              identity={`${stage}`}
+              recent={i === stage || i === stage - 1}
+            />
+            <T
+              style={{
+                fontSize: 12,
+                lineHeight: 15,
+                fontWeight: "700",
+                color: doneDot ? C.accent : now ? C.ink : C.muted,
+              }}
+            >
+              {name}
+            </T>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+function StageDot({
+  color,
+  pop,
+  identity,
+  recent,
+}: {
+  color: string;
+  pop: boolean;
+  identity: string;
+  recent: boolean;
+}) {
+  const { reduced, foreground } = useRoad();
+  const v = React.useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!pop || !recent || reduced || !foreground) return;
+    v.setValue(0.6);
+    const a = Animated.sequence([
+      Animated.timing(v, { toValue: 1.5, duration: 230, easing: Easing.bezier(0.16, 1, 0.3, 1), useNativeDriver: true }),
+      Animated.timing(v, { toValue: 1, duration: 190, useNativeDriver: true }),
+    ]);
+    a.start();
+    return () => a.stop();
+  }, [identity, pop, recent, reduced, foreground, v]);
+  return (
+    <Animated.View
+      style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: color, transform: [{ scale: v }] }}
+    />
+  );
+}
+/** The caption spark spins while Gemini works and pops when the verdict lands. */
+function DoneSpark({ working, done }: { working: boolean; done: boolean }) {
+  const { reduced, foreground } = useRoad();
+  const v = React.useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!done || reduced || !foreground) return;
+    v.setValue(0);
+    const a = Animated.timing(v, { toValue: 1, duration: 620, easing: Easing.bezier(0.16, 1, 0.3, 1), useNativeDriver: true });
+    a.start();
+    return () => a.stop();
+  }, [done, reduced, foreground, v]);
+  return (
+    <Animated.View
+      style={{
+        transform: [
+          { scale: v.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0.4, 1.15, 1] }) },
+          { rotate: v.interpolate({ inputRange: [0, 1], outputRange: ["-180deg", "0deg"] }) },
+        ],
+      }}
+    >
+      <Spark working={working} />
+    </Animated.View>
+  );
+}
+/** The run's cost as a dashed receipt total; it pulses once when the run settles. */
+function CostTotal({ value, note, settled }: { value: number | null; note: string; settled: boolean }) {
+  const { reduced, foreground } = useRoad();
+  const pulse = React.useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!settled || reduced || !foreground) return;
+    pulse.setValue(1.04);
+    const a = Animated.timing(pulse, { toValue: 1, duration: 360, easing: Easing.bezier(0.16, 1, 0.3, 1), useNativeDriver: true });
+    a.start();
+    return () => a.stop();
+  }, [settled, reduced, foreground, pulse]);
+  return (
+    <Animated.View
+      style={{
+        marginTop: 6,
+        borderWidth: 1.5,
+        borderStyle: "dashed",
+        borderColor: "#C9CDD4",
+        borderRadius: 16,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 12,
+        transform: [{ scale: pulse }],
+      }}
+    >
+      <View style={{ flex: 1 }}>
+        <T style={{ fontSize: 13, lineHeight: 16, fontWeight: "700" }}>Estimated AI cost</T>
+        <T style={{ marginTop: 3, fontSize: 13, lineHeight: 17, fontWeight: "600", color: C.muted }}>
+          {note}
+        </T>
+      </View>
+      {value === null ? (
+        <T style={{ fontSize: 22, lineHeight: 24, fontWeight: "800", color: C.accent }}>—</T>
+      ) : (
+        <CostCounter value={value} />
+      )}
+    </Animated.View>
   );
 }
 
@@ -759,6 +1051,17 @@ export function StandardImpact() {
   const top = topOffender(data.scoped);
   const topPlate = top?.case.vehicle.plate || remote?.mostSpotted?.plate || "";
   const remoteCount = remote?.mostSpotted?.count || 0;
+  const meterLine = top
+    ? 20 - top.record - top.pending > 0
+      ? `${20 - top.record - top.pending} more points and they’re taking the bus.`
+      : top.pending
+        ? "Your report could take their licence."
+        : "Licence suspended. Enjoy the bus."
+    : remoteCount
+      ? `${remoteCount} server case${remoteCount === 1 ? "" : "s"}. Licence records are not available.`
+      : rr.prefs.demo
+        ? "Nobody yet. Report a red-light runner and they land here."
+        : "Licence records are not available yet.";
   const remoteOffenceCount = (code: string) => {
     const values = remote?.offenceOccurrences || {};
     if (code === "wrong_way")
@@ -774,43 +1077,55 @@ export function StandardImpact() {
   };
   const { width } = useWindowDimensions();
   return (
-    <Page title="Impact">
-      <Intro
-        title="Your impact. Their problem."
-        body="I keep receipts. Karma loves paperwork."
-      />
-      {!rr.prefs.demo && (
-        <Quiet
-          title={rr.syncingCases ? "Syncing server cases…" : "Sync server cases"}
-          disabled={rr.syncingCases}
-          onPress={() => void rr.syncCases(true).catch(showError)}
+    <Page title="Impact" gap={0}>
+      <View style={{ marginBottom: 18 }}>
+        <Intro
+          title="Your impact. Their problem."
+          body="I keep receipts. Karma loves paperwork."
         />
+      </View>
+      {!rr.prefs.demo && (
+        <View style={{ marginTop: -12, marginBottom: 6, alignItems: "flex-start" }}>
+          <Quiet
+            title={rr.syncingCases ? "Syncing server cases…" : "Sync server cases"}
+            disabled={rr.syncingCases}
+            onPress={() => void rr.syncCases(true).catch(showError)}
+          />
+        </View>
       )}
-      {!!rr.historyError && <Notice error>{rr.historyError}</Notice>}
-      <View style={{ flexDirection: "row", gap: 10 }}>
-        {[
-          [remote?.snitchedCount ?? data.sent, "Assholes reported"],
-          [remote?.billedCount ?? data.billed, "Got billed"],
-        ].map(([value, label]) => (
+      {!!rr.historyError && (
+        <View style={{ marginBottom: 12 }}>
+          <Notice error>{rr.historyError}</Notice>
+        </View>
+      )}
+      <View style={{ flexDirection: "row", gap: 10, marginBottom: 10 }}>
+        {(
+          [
+            [remote?.snitchedCount ?? data.sent, "Assholes\nreported", "reported"],
+            [remote?.billedCount ?? data.billed, "Got billed", "billed"],
+          ] as const
+        ).map(([value, label, kind], i) => (
           <View
-            key={String(label)}
+            key={kind}
             style={{
               flex: 1,
-              minHeight: 150,
-              padding: 16,
+              minHeight: width < 350 ? 132 : 150,
+              padding: width < 350 ? 14 : 16,
               backgroundColor: C.surface,
               borderRadius: 16,
               overflow: "hidden",
             }}
           >
+            {/* Prototype's receipt outline, drawn in on arrival behind the count. */}
+            <ReceiptArt kind={kind} index={i} />
             <Count value={Number(value)} size={width < 350 ? 54 : 72} />
-            <T style={{ fontSize: 15, lineHeight: 19, fontWeight: "700" }}>
+            <T style={{ marginTop: 10, fontSize: 15, lineHeight: 18, fontWeight: "700" }}>
               {label}
             </T>
           </View>
         ))}
       </View>
-      <Arrival>
+      <MeterEntrance>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={
@@ -820,17 +1135,30 @@ export function StandardImpact() {
           }
           disabled={!topPlate}
           onPress={() => setPlate(plate ? "" : normalizePlate(topPlate))}
-          style={{
-            padding: 16,
+          style={({ pressed }) => ({
+            paddingTop: 16,
+            paddingHorizontal: 16,
+            paddingBottom: 18,
             borderRadius: 16,
             backgroundColor: C.ink,
-            gap: 14,
-            borderWidth: plate ? 3 : 0,
-            borderColor: C.accent,
-          }}
+            gap: 12,
+            // Selected: a 3pt Gemini Blue ring that does not move the layout.
+            outlineWidth: plate ? 3 : 0,
+            outlineColor: C.accent,
+            outlineStyle: "solid",
+            transform: [{ scale: pressed && !rr.reduced ? 0.985 : 1 }],
+          })}
         >
-          <View style={s.row}>
-            <T style={{ fontSize: 20, fontWeight: "800", color: "white" }}>
+          <View style={[s.row, { minHeight: 33 }]}>
+            <T
+              style={{
+                fontSize: width < 350 ? 18 : 20,
+                lineHeight: 22,
+                fontWeight: "800",
+                letterSpacing: -0.2,
+                color: "white",
+              }}
+            >
               Top offender
             </T>
             {!!topPlate && (
@@ -853,45 +1181,46 @@ export function StandardImpact() {
             )}
           </View>
           <T
+            key={meterLine}
+            balance
             style={{
+              marginTop: -4,
               fontSize: width < 350 ? 16 : 17,
               lineHeight: 22,
               fontWeight: top ? "800" : "600",
               color: top ? "#FF9B8F" : "#C9CDD4",
             }}
           >
-            {top
-              ? top.record + top.pending >= 20
-                ? "Your report could take their licence."
-                : `${20 - top.record - top.pending} more points and they’re taking the bus.`
-              : remoteCount
-                ? `${remoteCount} server case${remoteCount === 1 ? "" : "s"}. Licence records are not available.`
-                : rr.prefs.demo
-                  ? "Nobody yet. Report a red-light runner and they land here."
-                  : "Licence records are not available yet."}
+            {meterLine}
           </T>
           {top ? (
-            <MeterBar record={top.record} pending={top.pending} />
+            <MeterBar
+              record={top.record}
+              pending={top.pending}
+              delay={260}
+              pendingDelay={760}
+            />
+          ) : rr.prefs.demo ? (
+            <MeterBar record={0} pending={0} />
           ) : (
             <T style={{ color: "#B6BAC2", fontSize: 12 }}>
               The backend does not return licence points for live cases.
             </T>
           )}
           {top && (
-            <MeterKey
-              record={top.record}
-              pending={top.pending}
-              demo={isSubmissionDemo(top.case)}
-            />
+            <MeterKey record={top.record} pending={top.pending} />
           )}
         </Pressable>
-      </Arrival>
-      <T style={s.section}>By offence</T>
-      <Segments
-        items={["All time", "Last 7 days", "Today"]}
-        value={period}
-        onChange={setPeriod}
-      />
+      </MeterEntrance>
+      <View>
+        <View style={[s.row, { marginBottom: 4 }]}>
+          <T style={s.section}>By offence</T>
+          <PeriodSelect value={period} onChange={setPeriod} />
+        </View>
+        <T style={{ marginBottom: 6, fontSize: 14, lineHeight: 20, color: C.muted }}>
+          Pick an offence. I’ll find the clip.
+        </T>
+      </View>
       {categories.map(([code, name], i) => (
         <Pressable
           key={code}
@@ -899,7 +1228,11 @@ export function StandardImpact() {
           accessibilityLabel={`Filter ${name}`}
           accessibilityState={{ selected: offence === code }}
           onPress={() => setOffence(offence === code ? "" : code)}
-          style={{ gap: 7, paddingVertical: 4 }}
+          style={({ pressed }) => ({
+            gap: 7,
+            paddingVertical: 9,
+            transform: [{ scale: pressed && !rr.reduced ? 0.99 : 1 }],
+          })}
         >
           <View style={s.row}>
             <T
@@ -916,6 +1249,7 @@ export function StandardImpact() {
             <T
               style={{
                 fontWeight: "700",
+                lineHeight: 20,
                 fontVariant: ["tabular-nums"],
                 color: offence === code ? C.accent : C.ink,
               }}
@@ -938,29 +1272,46 @@ export function StandardImpact() {
           />
         </Pressable>
       ))}
-      <Segments
-        items={[
-          `All ${scoped.length}`,
-          `Needs you ${scoped.filter(needs).length}`,
-          `Sent ${scoped.filter((c) => c.reporting.status === "sent").length}`,
-        ]}
-        value={status}
-        onChange={setStatus}
-      />
-      {(plate || offence || period > 0) && (
-        <Quiet
-          title="Clear filters"
-          icon="X"
-          onPress={() => {
-            setPlate("");
-            setOffence("");
-            setPeriod(0);
-          }}
+      <View style={{ marginTop: 18, marginBottom: 12 }}>
+        <Segments
+          items={[
+            ["All", scoped.length],
+            ["Needs you", scoped.filter(needs).length],
+            ["Sent", scoped.filter((c) => c.reporting.status === "sent").length],
+          ]}
+          value={status}
+          onChange={setStatus}
         />
+      </View>
+      {(plate || offence) && (
+        <View
+          style={{
+            marginBottom: 10,
+            flexDirection: "row",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          {!!plate && <FilterChip title={`Plate ${topPlate}`} onPress={() => setPlate("")} />}
+          {!!offence && (
+            <FilterChip
+              title={categories.find(([code]) => code === offence)?.[1] || offence}
+              onPress={() => setOffence("")}
+            />
+          )}
+          <Quiet
+            title="Clear filters"
+            onPress={() => {
+              setPlate("");
+              setOffence("");
+            }}
+          />
+        </View>
       )}
       <View>
         {list.map((c, i) => (
-          <Arrival key={c.id} delay={Math.min(i * 55, 220)} distance={8}>
+          <Arrival key={c.id} delay={320 + Math.min(i, 5) * 45} distance={10}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Open case ${c.vehicle.plate || c.id}`}
@@ -1021,7 +1372,8 @@ export function StandardImpact() {
               </View>
               <T
                 style={{
-                  fontSize: 14,
+                  fontSize: 13,
+                  lineHeight: 16,
                   fontWeight: "700",
                   color:
                     c.reporting.status === "sent"
@@ -1037,20 +1389,182 @@ export function StandardImpact() {
           </Arrival>
         ))}
         {!list.length && (
-          <T style={{ color: C.muted }}>
+          <T style={{ marginTop: 14, fontSize: 18, lineHeight: 26, color: C.muted }}>
             Nothing here. Suspiciously well-behaved.
           </T>
         )}
       </View>
-      <T style={s.muted}>
-        {rr.prefs.demo ? "Demo cases. " : ""}“Sent” means you confirmed sending.
-      </T>
       {remoteError && (
         <T style={s.muted}>
           Cloud impact is unavailable, so these counters use this device.
         </T>
       )}
     </Page>
+  );
+}
+
+const RECEIPT_ART = {
+  reported: [
+    ["M104 -16H144L190 30V180H104V-16Z", 537.1],
+    ["M144 -16V30H190", 92],
+    ["M119 62H173", 54],
+    ["M119 80H161", 42],
+    ["M119 98H152", 33],
+  ],
+  billed: [
+    ["M114 -12H188V176L176 168L164 176L152 168L140 176L128 168L114 176V-12Z", 538.2],
+    ["M130 22H172", 42],
+    ["M130 41H160", 30],
+    ["M130 75L143 88L166 63", 52.4],
+  ],
+} as const;
+const AnimatedArtPath = Animated.createAnimatedComponent(Path);
+/** The counter cards' receipt outlines (reference .icard-art), drawn in as Impact arrives. */
+function ReceiptArt({ kind, index }: { kind: "reported" | "billed"; index: number }) {
+  const { reduced, foreground } = useRoad();
+  const paths = RECEIPT_ART[kind];
+  // The reference draws two strokes per card: the outline, then its details as one path, so the
+  // fold and lines follow each other. Each detail segment takes its share of that second stroke.
+  const strokes = React.useRef([0, 1].map(() => new Animated.Value(reduced ? 1 : 0))).current;
+  const details = paths.slice(1).reduce((sum, [, length]) => sum + length, 0);
+  useEffect(() => {
+    if (reduced || !foreground) {
+      strokes.forEach((v) => v.setValue(1));
+      return;
+    }
+    // One stroke every 70ms across both cards, as the reference staggers its .icard-art paths.
+    const a = Animated.parallel(
+      strokes.map((v, i) => {
+        v.setValue(0);
+        return Animated.timing(v, {
+          toValue: 1,
+          duration: 900,
+          delay: 120 + (index * 2 + i) * 70,
+          easing: Easing.bezier(0.16, 1, 0.3, 1),
+          useNativeDriver: false,
+        });
+      }),
+    );
+    a.start();
+    return () => a.stop();
+  }, [strokes, index, reduced, foreground]);
+  let start = 0;
+  return (
+    <View pointerEvents="none" style={{ position: "absolute", right: -30, top: -6 }}>
+      <Svg width={150} height={150} viewBox="0 0 180 180" fill="none">
+        {paths.map(([d, length], i) => {
+          const from = i ? start / details : 0;
+          const to = i ? (start += length) / details : 1;
+          return (
+            <AnimatedArtPath
+              key={i}
+              d={d}
+              stroke="#C9CDD4"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeDasharray={[length, length]}
+              strokeDashoffset={strokes[i ? 1 : 0].interpolate({
+                inputRange: [from, to],
+                outputRange: [length, 0],
+                extrapolate: "clamp",
+              })}
+            />
+          );
+        })}
+      </Svg>
+    </View>
+  );
+}
+/** The licence meter rises in before its bar fills. */
+function MeterEntrance({ children }: React.PropsWithChildren) {
+  const { reduced, foreground } = useRoad();
+  const v = React.useRef(new Animated.Value(reduced ? 1 : 0)).current;
+  useEffect(() => {
+    if (reduced || !foreground) {
+      v.setValue(1);
+      return;
+    }
+    const a = Animated.timing(v, {
+      toValue: 1,
+      duration: 480,
+      delay: 120,
+      easing: Easing.bezier(0.16, 1, 0.3, 1),
+      useNativeDriver: true,
+    });
+    a.start();
+    return () => a.stop();
+  }, [v, reduced, foreground]);
+  return (
+    <Animated.View
+      style={{
+        marginBottom: 26,
+        opacity: v,
+        transform: [
+          { translateY: v.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) },
+          { scale: v.interpolate({ inputRange: [0, 1], outputRange: [0.98, 1] }) },
+        ],
+      }}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+const PERIODS = ["All time", "Last 7 days", "Today"];
+/** Reference: a select pill beside "By offence"; iOS shows the choices as an action sheet. */
+function PeriodSelect({ value, onChange }: { value: number; onChange: (i: number) => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Impact date range, ${PERIODS[value]}`}
+      onPress={() => {
+        if (Platform.OS === "ios")
+          ActionSheetIOS.showActionSheetWithOptions(
+            { options: [...PERIODS, "Cancel"], cancelButtonIndex: PERIODS.length },
+            (i) => i < PERIODS.length && onChange(i),
+          );
+        else onChange((value + 1) % PERIODS.length);
+      }}
+      style={({ pressed }) => ({
+        minHeight: 44,
+        paddingLeft: 14,
+        paddingRight: 11,
+        borderRadius: 999,
+        backgroundColor: C.surface,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        transform: [{ scale: pressed ? 0.96 : 1 }],
+      })}
+    >
+      <T style={{ fontSize: 14, lineHeight: 18, fontWeight: "600" }}>{PERIODS[value]}</T>
+      <View style={{ transform: [{ rotate: "90deg" }] }}>
+        <Icon name="ChevronRight" size={14} strokeWidth={2.4} />
+      </View>
+    </Pressable>
+  );
+}
+function FilterChip({ title, onPress }: { title: string; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Clear ${title}`}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        minHeight: 44,
+        paddingLeft: 14,
+        paddingRight: 10,
+        borderRadius: 999,
+        backgroundColor: C.surface,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 6,
+        transform: [{ scale: pressed ? 0.94 : 1 }],
+      })}
+    >
+      <T style={{ fontSize: 14, lineHeight: 18, fontWeight: "600" }}>{title}</T>
+      <Icon name="X" size={14} />
+    </Pressable>
   );
 }
 
@@ -1065,6 +1579,7 @@ export function Work() {
         <Action title="Analyse a clip" onPress={() => go("clip")} />
       </Page>
     );
+  const demo = isSubmissionDemo(c);
   const original = c.analysis;
   const trail = c.decisionTrail;
   const storedResult = store.records.find((r) => r.id === c.sourceId)?.result;
@@ -1074,161 +1589,278 @@ export function Work() {
     (storedResult
       ? storedResult.reportable.map((f, i) => ({
           id: String(i),
+          code: "",
           label: f.conduct,
           atSeconds: f.start_seconds,
           confidence: f.confidence,
+          included: true,
           reasoning: f.reasoning,
-          lawSources: [{ title: f.legal_basis }],
+          demeritPoints: undefined as number | undefined,
+          lawSources: [{ title: f.legal_basis }] as RoadCase["offences"][number]["lawSources"],
         }))
       : []);
+  const plate = original?.vehicle.plate || c.vehicle.plate || "";
+  const adds = casePoints(c);
+  const record = licenceRecord(c);
+  // Reference "What it found and cited": one grey table. The sample's run telemetry is fixture data;
+  // a live review shows only what the server returned.
+  const stats: Stat[] = [];
+  if (demo)
+    stats.push(
+      { k: "Model", v: "Gemini" },
+      { k: "Clip", v: "24 s · 24 frames at 1 fps" },
+      { k: "Video tokens", v: "6,192" },
+    );
+  stats.push({ k: "Plate", v: plate || "Unreadable" });
+  offences.forEach((o) =>
+    stats.push({
+      k: duration(o.atSeconds),
+      v: o.label,
+      sub: demo ? undefined : o.reasoning,
+      n: o.demeritPoints ? <PointsChip points={o.demeritPoints} /> : undefined,
+    }),
+  );
+  lawSourcesOf({ ...c, offences: offences as RoadCase["offences"] }).forEach((law) =>
+    stats.push({
+      k: "Law",
+      v: lawRef(law),
+      sub: law.act && law.section ? law.title : undefined,
+    }),
+  );
+  if (demo && plate && adds)
+    stats.push({
+      k: "Summons lookup",
+      v: record
+        ? `${plural(record.summonses, "summons").replace("summonss", "summonses")} · ${record.points} pts`
+        : "No summons on record",
+      sub: plate,
+    });
+  if (demo)
+    stats.push(
+      { k: "Report agent", v: `${(520 + offences.length * 140).toLocaleString("en-GB")} tokens` },
+      { k: "Total time", v: "19.2 s" },
+      { k: "Estimated AI cost", v: "US$0.0012" },
+      {
+        k: "At scale",
+        v: "30-min drive: US$0.09",
+        sub: `A month of driving (≈${Math.round(6.51 / 0.09 / 2)} h): US$6.51`,
+      },
+    );
+  const json = demo
+    ? {
+        description: timeline.map((l) => ({ at: duration(l.start_seconds), text: l.event })),
+        vehicle: { type: c.vehicle.type, plate: c.vehicle.plate },
+        offences: c.offences.map((o) => ({
+          code: o.code,
+          at: duration(o.atSeconds),
+          confidence: o.confidence,
+          evidence: quoteAt(timeline, o.atSeconds) || o.reasoning || null,
+          demeritPoints: o.demeritPoints ?? null,
+          lawSources: o.lawSources.map((law) => ({
+            act: law.act ?? null,
+            section: law.section ?? null,
+            title: law.title ?? null,
+            url: law.url ?? null,
+          })),
+        })),
+        missing: missing(c),
+        costUsd: 0.0012,
+      }
+    : storedResult || original;
   return (
-    <Page title="How Gemini decided" nav={false}>
-      <Intro
-        title="How Gemini decided"
-        body={`What the model saw, found and cited for ${c.id}.`}
-      />
-      {c.provenance.isDemo && (
-        <Notice>
-          Synthetic demonstration. These are sample findings, not a live Gemini
-          response.
-        </Notice>
-      )}
+    <Page
+      title="How Gemini decided"
+      nav={false}
+      gap={0}
+      headerRight={<CaseId c={c} />}
+    >
+      <T style={{ marginTop: 6, marginBottom: 18, fontSize: 16, lineHeight: 23, color: C.muted }}>
+        What Gemini saw, found and cited for {c.id.replace("SUB-", "")}.
+        {demo ? " Sample run: fixture output shaped like the backend’s." : ""}
+      </T>
       <T style={s.section}>What Gemini saw</T>
-      {timeline.length ? (
-        timeline.map((line, i) => (
-          <Arrival key={i} delay={i * 60} distance={8}>
-            <View style={{ flexDirection: "row", gap: 12 }}>
-              <T style={s.muted}>{duration(line.start_seconds)}</T>
-              <T style={{ color: C.accent, flex: 1 }}>{line.event}</T>
-            </View>
-          </Arrival>
-        ))
-      ) : (
-        <T style={s.muted}>
-          No timestamped description was saved for this case.
-        </T>
-      )}
-      <T style={s.section}>What it found and cited</T>
-      {trail?.excerptVideoUrl?.startsWith("https://") && (
-        <Action
-          title="Watch cited evidence excerpt"
-          secondary
-          icon="Video"
-          onPress={() =>
-            void Linking.openURL(trail.excerptVideoUrl!).catch(showError)
-          }
-        />
-      )}
-      <View style={s.row}>
-        <T style={s.muted}>Original plate reading</T>
-        <T style={{ color: C.accent }}>
-          {original?.vehicle.plate || "Not returned"}
-        </T>
+      <View style={{ marginTop: 12, gap: 12 }}>
+        {timeline.length ? (
+          timeline.map((line, i) => (
+            <Arrival key={i} delay={60 + Math.min(i, 9) * 50} distance={10}>
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <T
+                  style={{
+                    width: 44,
+                    fontSize: 13,
+                    lineHeight: 22,
+                    fontWeight: "700",
+                    color: C.muted,
+                    fontVariant: ["tabular-nums"],
+                  }}
+                >
+                  {duration(line.start_seconds)}
+                </T>
+                <T style={{ flex: 1, fontSize: 16, lineHeight: 22, fontWeight: "600", color: C.accent }}>
+                  {line.event}
+                </T>
+              </View>
+            </Arrival>
+          ))
+        ) : (
+          <T style={s.muted}>No timestamped description was saved for this case.</T>
+        )}
       </View>
-      {offences.map((o, i) => (
-        <Arrival key={o.id} delay={i * 60} distance={8}>
-          <View
-            style={{
-              gap: 10,
-              paddingVertical: 14,
-              borderBottomWidth: 1,
-              borderColor: C.line,
-            }}
-          >
-            <T style={{ color: C.accent, fontWeight: "700" }}>
-              {duration(o.atSeconds)} · {o.label}
-            </T>
-            <T style={s.muted}>{o.confidence >= 0.9 ? "Clear" : "Unclear"}</T>
-            {o.reasoning && <T style={{ color: C.accent }}>{o.reasoning}</T>}
-            {o.lawSources.map((law, n) => (
-              <T key={n}>{law.title}</T>
-            ))}
-          </View>
-        </Arrival>
-      ))}
-      {!!trail?.citations.length && (
-        <Disclosure
-          title="Retrieved law text"
-          note={`${trail.citations.length} citation${trail.citations.length === 1 ? "" : "s"}`}
-        >
-          {trail.citations.map((citation, index) => (
-            <View key={index} style={{ gap: 6 }}>
-              <T style={{ fontWeight: "700" }}>
-                {[citation.statute, citation.section]
-                  .filter(Boolean)
-                  .join(", ")}
-              </T>
-              {!!citation.quote && <T>{citation.quote}</T>}
-              {!!citation.penalty && (
-                <T style={s.muted}>Penalty cited: {citation.penalty}</T>
-              )}
-            </View>
-          ))}
-        </Disclosure>
-      )}
-      {!!trail?.gaps.length && (
-        <Notice>Retrieval gaps: {trail.gaps.join(" ")}</Notice>
-      )}
-      {!original && !storedResult && (
-        <T style={s.muted}>
-          This older case has no saved original response. Its edited report
-          details are available on the Case screen.
-        </T>
-      )}
-      {isSubmissionDemo(c) && (
-        <View
-          style={{
-            backgroundColor: C.surface,
-            borderRadius: 16,
-            padding: 16,
-            gap: 10,
-          }}
-        >
-          <T style={s.section}>Sample run estimate</T>
-          <View style={s.row}>
-            <T>24-second clip</T>
-            <CostCounter value={0.0012} />
-          </View>
-          <T style={s.muted}>
-            30-min drive: US$0.09 · A month of driving: US$6.51
-          </T>
-          <T style={s.muted}>
-            Design reference estimates, not measured billing for this demo.
-          </T>
+      <T style={[s.section, { marginTop: 28, marginBottom: 6 }]}>What it found and cited</T>
+      {trail?.excerptVideoUrl?.startsWith("https://") && (
+        <View style={{ marginBottom: 10 }}>
+          <Action
+            title="Watch cited evidence excerpt"
+            secondary
+            icon="Video"
+            onPress={() => void Linking.openURL(trail.excerptVideoUrl!).catch(showError)}
+          />
         </View>
       )}
-      <T style={s.muted}>
-        The API does not return its model ID, timing, token usage or frame
-        counts.
-      </T>
-      {(original || storedResult) && (
-        <Disclosure title="What Gemini returned" note="Structured JSON">
-          <T selectable style={{ fontSize: 12, lineHeight: 19 }}>
-            {JSON.stringify(storedResult || original, null, 2)}
-          </T>
-        </Disclosure>
+      <View style={{ borderRadius: 16, backgroundColor: C.surface, overflow: "hidden" }}>
+        {stats.map((stat, i) => (
+          <Arrival key={`${stat.k}-${i}`} delay={i * 60} distance={8}>
+            <View
+              style={{
+                minHeight: 50,
+                paddingVertical: 10,
+                paddingHorizontal: 14,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                borderTopWidth: i ? 1 : 0,
+                borderColor: C.line,
+              }}
+            >
+              <T
+                style={{
+                  width: 100,
+                  fontSize: 13,
+                  lineHeight: 16,
+                  fontWeight: "700",
+                  color: C.muted,
+                  fontVariant: ["tabular-nums"],
+                }}
+              >
+                {stat.k}
+              </T>
+              <View style={{ flex: 1 }}>
+                <T style={{ fontSize: 15, lineHeight: 20, fontWeight: "700", color: C.accent }}>
+                  {stat.v}
+                </T>
+                {!!stat.sub && (
+                  <T style={{ marginTop: 3, fontSize: 13, lineHeight: 17, color: C.muted }}>
+                    {stat.sub}
+                  </T>
+                )}
+              </View>
+              {stat.n}
+            </View>
+          </Arrival>
+        ))}
+      </View>
+      {!!trail?.citations.length && (
+        <View style={{ marginTop: 18 }}>
+          <Disclosure
+            title="Retrieved law text"
+            note={`${trail.citations.length} citation${trail.citations.length === 1 ? "" : "s"}`}
+          >
+            <View style={{ gap: 14 }}>
+              {trail.citations.map((citation, index) => (
+                <View key={index} style={{ gap: 6 }}>
+                  <T style={{ fontWeight: "700" }}>
+                    {[citation.statute, citation.section].filter(Boolean).join(", ")}
+                  </T>
+                  {!!citation.quote && <T>{citation.quote}</T>}
+                  {!!citation.penalty && (
+                    <T style={s.muted}>Penalty cited: {citation.penalty}</T>
+                  )}
+                </View>
+              ))}
+            </View>
+          </Disclosure>
+        </View>
+      )}
+      {!!trail?.gaps.length && (
+        <View style={{ marginTop: 12 }}>
+          <Notice>Retrieval gaps: {trail.gaps.join(" ")}</Notice>
+        </View>
+      )}
+      {!original && !storedResult && !demo && (
+        <T style={[s.muted, { marginTop: 12 }]}>
+          This older case has no saved original response. Its edited report details are
+          available on the Case screen.
+        </T>
+      )}
+      {!demo && (
+        <T style={[s.muted, { marginTop: 12 }]}>
+          The server does not return its model ID, timing, token usage or frame counts.
+        </T>
+      )}
+      {!!json && (
+        <View style={{ marginTop: 18 }}>
+          <Disclosure title="What Gemini returned" note="Structured JSON">
+            {/* Reference: the raw model output in a grey code box. */}
+            <View
+              style={{
+                marginBottom: 10,
+                maxHeight: 260,
+                borderRadius: 12,
+                backgroundColor: C.surface,
+                overflow: "hidden",
+              }}
+            >
+              <ScrollView nestedScrollEnabled contentContainerStyle={{ padding: 12 }}>
+                <T
+                  selectable
+                  style={{
+                    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+                    fontSize: 12.5,
+                    lineHeight: 18,
+                    // Menlo has no 500; anything above 400 renders as its bold.
+                    fontWeight: "400",
+                    color: "#1E3A8A",
+                  }}
+                >
+                  {/* The reference flattens nesting to a one-space indent so long lines wrap less. */}
+                  {JSON.stringify(json, null, 1).replace(/\n\s*/g, "\n ")}
+                </T>
+              </ScrollView>
+            </View>
+          </Disclosure>
+        </View>
       )}
     </Page>
   );
 }
+type Stat = { k: string; v: string; sub?: string; n?: React.ReactNode };
 
 type Finding = {
   key: string;
   label: string;
   value: string;
+  sub?: string;
   delay?: number;
   trailing?: React.ReactNode;
+  /** Still arriving: a spinner instead of the check, the value in Muted Slate. */
+  wait?: boolean;
+  /** Needs the user (an unread plate): amber instead of blue. */
+  need?: boolean;
 };
 // Reference grid: check · label · value · trailing chip, so every row's value starts on the same column.
 function FindingRow({
   label,
   value,
+  sub,
   delay = 0,
   trailing,
+  wait = false,
+  need = false,
   divider = false,
 }: Omit<Finding, "key"> & { divider?: boolean }) {
+  const tone = need ? C.warning : C.accent;
   return (
-    <Arrival distance={8} delay={delay}>
+    <Arrival distance={10} delay={delay}>
       <View
         style={{
           minHeight: 48,
@@ -1241,43 +1873,92 @@ function FindingRow({
           borderColor: C.line,
         }}
       >
-        <View
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: 11,
-            backgroundColor: C.accent,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Icon name="Check" color="white" size={14} strokeWidth={3} />
+        <View style={{ width: 24, alignItems: "center" }}>
+          {wait ? (
+            <Spinner />
+          ) : (
+            <View
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 11,
+                backgroundColor: tone,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Icon
+                name={need ? "CircleAlert" : "Check"}
+                color="white"
+                size={14}
+                strokeWidth={3}
+              />
+            </View>
+          )}
         </View>
         <T
           style={{
-            width: 62,
+            width: 66,
             fontSize: 13,
-            lineHeight: 17,
+            lineHeight: 16,
             fontWeight: "700",
-            color: C.muted,
+            color: need ? C.warning : C.muted,
             fontVariant: ["tabular-nums"],
           }}
         >
           {label}
         </T>
-        <T
-          style={{
-            flex: 1,
-            fontSize: 15,
-            lineHeight: 20,
-            fontWeight: "600",
-            color: C.accent,
-          }}
-        >
-          {value}
-        </T>
+        <View style={{ flex: 1 }}>
+          <T
+            style={{
+              fontSize: 15,
+              lineHeight: 20,
+              fontWeight: "600",
+              color: wait ? C.muted : tone,
+            }}
+          >
+            {value}
+          </T>
+          {!!sub && (
+            <T
+              style={{
+                marginTop: 3,
+                fontSize: 13,
+                lineHeight: 17,
+                color: tone,
+              }}
+            >
+              {sub}
+            </T>
+          )}
+        </View>
         {trailing}
       </View>
     </Arrival>
+  );
+}
+function Spinner() {
+  const { reduced } = useRoad();
+  const v = React.useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (reduced) return;
+    const a = Animated.loop(
+      Animated.timing(v, { toValue: 1, duration: 800, easing: Easing.linear, useNativeDriver: true }),
+    );
+    a.start();
+    return () => a.stop();
+  }, [reduced, v]);
+  return (
+    <Animated.View
+      style={{
+        width: 18,
+        height: 18,
+        borderRadius: 9,
+        borderWidth: 2.5,
+        borderColor: C.lilac,
+        borderTopColor: C.accent,
+        transform: [{ rotate: v.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "360deg"] }) }],
+      }}
+    />
   );
 }

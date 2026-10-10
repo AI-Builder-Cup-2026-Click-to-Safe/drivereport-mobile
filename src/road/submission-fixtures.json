@@ -95,12 +95,12 @@
           {
             "start_seconds": 1,
             "end_seconds": 6,
-            "event": "Daytime, dry road. A blue hatchback approaches the junction."
+            "event": "Daytime, dry road. A blue hatchback is ahead of the camera car, approaching a junction."
           },
           {
             "start_seconds": 6,
             "end_seconds": 11,
-            "event": "The traffic light turns amber."
+            "event": "The traffic light at the junction turns amber."
           },
           {
             "start_seconds": 11,
@@ -109,13 +109,23 @@
           },
           {
             "start_seconds": 12,
-            "end_seconds": 20,
+            "end_seconds": 14,
             "event": "The hatchback crosses the stop line while the light is red."
           },
           {
+            "start_seconds": 14,
+            "end_seconds": 20,
+            "event": "It carries on through the junction without slowing."
+          },
+          {
             "start_seconds": 20,
-            "end_seconds": 24,
+            "end_seconds": 23,
             "event": "Its plate reads WXY 2048."
+          },
+          {
+            "start_seconds": 23,
+            "end_seconds": 24,
+            "event": "It pulls away and leaves the frame."
           }
         ]
       },
@@ -216,12 +226,12 @@
           {
             "start_seconds": 1,
             "end_seconds": 6,
-            "event": "Daytime, dry road. A blue hatchback approaches the junction."
+            "event": "Daytime, dry road. A blue hatchback is ahead of the camera car, approaching a junction."
           },
           {
             "start_seconds": 6,
             "end_seconds": 11,
-            "event": "The traffic light turns amber."
+            "event": "The traffic light at the junction turns amber."
           },
           {
             "start_seconds": 11,
@@ -230,13 +240,23 @@
           },
           {
             "start_seconds": 12,
-            "end_seconds": 20,
+            "end_seconds": 14,
             "event": "The hatchback crosses the stop line while the light is red."
           },
           {
+            "start_seconds": 14,
+            "end_seconds": 20,
+            "event": "It carries on through the junction without slowing."
+          },
+          {
             "start_seconds": 20,
+            "end_seconds": 23,
+            "event": "Glare on the plate. I can’t read it."
+          },
+          {
+            "start_seconds": 23,
             "end_seconds": 24,
-            "event": "Glare on the plate. I can\u2019t read it."
+            "event": "It pulls away and leaves the frame."
           }
         ]
       },

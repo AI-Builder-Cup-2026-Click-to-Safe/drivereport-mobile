@@ -3,6 +3,7 @@ import {
   Alert,
   AccessibilityInfo,
   Animated,
+  Easing,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -16,7 +17,11 @@ import {
   type TextProps,
   type TextInputProps,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import { useIsFocused } from "@react-navigation/native";
 import { setStatusBarStyle } from "expo-status-bar";
 import { router, usePathname } from "expo-router";
 import { SvgXml } from "react-native-svg";
@@ -25,6 +30,7 @@ import { BrandMark } from "./brand";
 import { Motion, DecorationViewport, FadeArrival } from "./motion";
 import { useRoad } from "./context";
 import { SubmissionIcon, SlidingPill } from "./submission-navigation";
+import { Spark } from "./spark";
 import { pendingCases } from "./submission-model";
 export const C = {
   bg: "#FFFFFF",
@@ -59,15 +65,60 @@ export const go = (name: string) => {
   if (["home", "review", "impact"].includes(name)) router.navigate(path);
   else router.push(path);
 };
-export function T({ style, ...p }: TextProps) {
+export function T({ balance, ...p }: TextProps & { balance?: boolean }) {
+  return balance ? <BalancedText {...p} /> : <PlainText {...p} />;
+}
+function PlainText({ style, ...p }: TextProps) {
   return (
     <Text
+      // The reference sets text-wrap: pretty, so a paragraph never ends on one orphaned word.
+      lineBreakStrategyIOS="push-out"
       {...p}
       style={[
-        { fontFamily: "Manrope", fontSize: 16, lineHeight: 23, color: C.ink },
+        // 500 is the reference's body weight; 400 read noticeably thinner on device.
+        {
+          fontFamily: "Manrope",
+          fontSize: 16,
+          lineHeight: 23,
+          fontWeight: "500",
+          color: C.ink,
+        },
         style,
       ]}
     />
+  );
+}
+/**
+ * text-wrap: balance — a heading that wraps onto two lines breaks at the word that evens them out.
+ * The break is chosen once from the first layout; three or more lines are left as laid out.
+ */
+function BalancedText({ children, onTextLayout, ...p }: TextProps) {
+  const [balanced, setBalanced] = useState<{ from: string; to: string }>();
+  const source = typeof children === "string" ? children : undefined;
+  return (
+    <PlainText
+      {...p}
+      onTextLayout={(e) => {
+        onTextLayout?.(e);
+        const lines = e.nativeEvent.lines;
+        if (!source || balanced?.from === source || lines.length !== 2) return;
+        const chars = lines[0].text.length + lines[1].text.length;
+        const perChar = (lines[0].width + lines[1].width) / Math.max(1, chars);
+        let at = -1,
+          best = Infinity;
+        for (let i = source.indexOf(" "); i > 0; i = source.indexOf(" ", i + 1)) {
+          const longest = Math.max(i, source.length - i - 1) * perChar;
+          if (longest < best) [at, best] = [i, longest];
+        }
+        if (at > 0)
+          setBalanced({
+            from: source,
+            to: `${source.slice(0, at)}\n${source.slice(at + 1)}`,
+          });
+      }}
+    >
+      {source && balanced?.from === source ? balanced.to : children}
+    </PlainText>
   );
 }
 export function Icon({
@@ -116,8 +167,8 @@ export function Action({
   small?: boolean;
   fadeOnEnable?: boolean;
   controlRef?: React.Ref<View>;
-  /** A custom glyph before the title, e.g. the Gemini spark. */
-  leading?: React.ReactNode;
+  /** A custom glyph before the title, e.g. the Gemini spark; may react to the pressed state. */
+  leading?: React.ReactNode | ((pressed: boolean) => React.ReactNode);
 }) {
   const { reduced, foreground } = useRoad();
   const previous = useRef(disabled);
@@ -166,30 +217,34 @@ export function Action({
                 : pressed
                   ? "#000000"
                   : C.ink,
-            opacity: pressed ? 0.85 : 1,
             transform: [{ scale: pressed && !reduced ? 0.97 : 1 }],
           },
           !secondary && !disabled && primaryLift,
         ]}
       >
-        {leading}
-        {icon && (
-          <Icon
-            name={icon}
-            color={disabled ? C.muted : secondary ? C.ink : "white"}
-            size={19}
-          />
+        {({ pressed }) => (
+          <>
+            {typeof leading === "function" ? leading(pressed) : leading}
+            {icon && (
+              <Icon
+                name={icon}
+                color={disabled ? C.muted : secondary ? C.ink : "white"}
+                size={20}
+              />
+            )}
+            <T
+              style={{
+                fontWeight: "700",
+                fontSize: 17,
+                lineHeight: 21,
+                color: disabled ? C.muted : secondary ? C.ink : "white",
+                textAlign: "center",
+              }}
+            >
+              {title}
+            </T>
+          </>
         )}
-        <T
-          style={{
-            fontWeight: "700",
-            fontSize: 17,
-            color: disabled ? C.muted : secondary ? C.ink : "white",
-            textAlign: "center",
-          }}
-        >
-          {title}
-        </T>
       </Pressable>
     </Animated.View>
   );
@@ -210,6 +265,7 @@ export function TextLink({
   size = 15,
   align = "center",
   inline = false,
+  weight = "700",
   accessibilityLabel,
 }: {
   title: string;
@@ -220,6 +276,8 @@ export function TextLink({
   align?: "center" | "flex-start";
   /** Keep the line height; the 44pt target comes from hitSlop instead. */
   inline?: boolean;
+  /** 600 for a text action (How Gemini decided), 700 for an inline link (Read the law). */
+  weight?: "600" | "700";
   accessibilityLabel?: string;
 }) {
   return (
@@ -242,7 +300,7 @@ export function TextLink({
         style={{
           fontSize: size,
           lineHeight: size + 5,
-          fontWeight: "700",
+          fontWeight: weight,
           color: C.accent,
         }}
       >
@@ -289,15 +347,17 @@ export function Quiet({
       accessibilityState={{ disabled }}
       style={({ pressed }) => ({
         minHeight: 44,
-        paddingHorizontal: 7,
+        ...(compact ? { width: 44, borderRadius: 22 } : { paddingHorizontal: 6 }),
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
-        gap: 7,
-        opacity: disabled ? 0.3 : pressed ? 0.5 : 1,
+        gap: 6,
+        opacity: disabled ? 0.28 : !compact && pressed ? 0.55 : 1,
+        backgroundColor: compact && pressed ? C.surface : "transparent",
+        transform: [{ scale: compact && pressed ? 0.88 : 1 }],
       })}
     >
-      {icon && <Icon name={icon} size={20} />}
+      {icon && <Icon name={icon} size={compact ? 22 : 20} />}
       {!compact && (
         <T style={{ fontSize: 15, fontWeight: "600", color: C.muted }}>
           {title}
@@ -347,14 +407,16 @@ export function Notice({
 }
 export function Intro({ title, body }: { title: string; body?: string }) {
   return (
-    <View style={{ gap: 9 }}>
+    <View style={{ gap: 6, marginTop: 6 }}>
       <T
+        key={title}
         accessibilityRole="header"
+        balance
         style={{
           fontSize: 30,
           lineHeight: 33,
           fontWeight: "800",
-          letterSpacing: -0.65,
+          letterSpacing: -0.75,
         }}
       >
         {title}
@@ -383,12 +445,13 @@ export function Field({
   const [height, setHeight] = useState(84);
   const [focused, setFocused] = useState(false);
   return (
-    <View style={{ gap: 5, flex: 1, minWidth: 110 }}>
+    <View style={{ gap: 6, flex: 1, minWidth: 110 }}>
       <T
         style={{
           fontSize: 12,
-          color: missing ? C.warning : focused ? C.accent : C.muted,
-          fontWeight: "600",
+          lineHeight: 14,
+          color: missing ? C.warning : C.muted,
+          fontWeight: "700",
         }}
       >
         {label}
@@ -402,17 +465,20 @@ export function Field({
           multiline &&
           setHeight(Math.max(84, e.nativeEvent.contentSize.height + 22))
         }
-        placeholderTextColor={missing ? C.warning : C.muted}
+        placeholderTextColor={missing ? C.warning : "#7B5B3F"}
         style={{
           fontFamily: "Manrope",
           fontSize: 16,
-          lineHeight: 23,
+          lineHeight: multiline ? 23 : undefined,
+          fontWeight: multiline ? "500" : "600",
           color: textColor,
-          borderWidth: 1,
-          borderColor: focused ? C.accent : missing ? "#F3B46B" : C.line,
-          backgroundColor: missing ? C.warningBg : C.surface,
+          borderWidth: 1.5,
+          borderStyle: missing && !focused ? "dashed" : "solid",
+          borderColor: focused ? C.accent : missing ? C.warning : C.line,
+          backgroundColor: C.bg,
           borderRadius: 12,
-          padding: 12,
+          paddingHorizontal: 14,
+          paddingVertical: multiline ? 12 : 0,
           minHeight: 48,
           ...(multiline ? { height, textAlignVertical: "top" as const } : {}),
         }}
@@ -441,8 +507,8 @@ export const styles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
   },
-  section: { fontSize: 16, fontWeight: "700", lineHeight: 24 },
-  muted: { color: C.muted, fontSize: 12, lineHeight: 18 },
+  section: { fontSize: 15, fontWeight: "700", lineHeight: 20 },
+  muted: { color: C.muted, fontSize: 13, lineHeight: 18 },
   card: {
     padding: 16,
     borderWidth: 1,
@@ -484,55 +550,48 @@ export function Page({
   const openedOn = usePathname();
   const [path] = useState(openedOn);
   const rr = useRoad();
+  const insets = useSafeAreaInsets();
   const viewport = useRef<View>(null);
   const [offset, setOffset] = useState(0);
   const visibility = React.useMemo(() => ({ offset, viewport }), [offset]);
+  const back = () =>
+    router.canGoBack()
+      ? router.back()
+      : go(
+          path === "/work" || path === "/handoff"
+            ? "review"
+            : path === "/review"
+              ? "impact"
+              : "home",
+        );
   return (
     <SafeAreaView
       edges={["top", "left", "right"]}
       style={{ flex: 1, backgroundColor: C.bg }}
     >
       <FadeArrival identity={path} duration={160} distance={0}>
-        <View
-          style={{
-            height: 56,
-            paddingHorizontal: 20,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          {headerLeft ??
-            (home ? (
+        {home ? (
+          <View
+            style={{
+              height: 56,
+              paddingLeft: 20,
+              paddingRight: 10,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            {headerLeft ?? (
               <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+                style={{ flexDirection: "row", alignItems: "center", gap: 9 }}
               >
                 <BrandMark color={C.ink} />
-                <T style={{ fontWeight: "700", fontSize: 17 }}>Click-to-Safe</T>
+                <T style={{ fontWeight: "800", fontSize: 18, lineHeight: 22 }}>
+                  Click-to-Safe
+                </T>
               </View>
-            ) : path === "/impact" ? (
-              <View style={{ width: 44 }} />
-            ) : (
-              <Quiet
-                title="Back"
-                compact
-                icon="ChevronLeft"
-                onPress={() =>
-                  router.canGoBack()
-                    ? router.back()
-                    : go(
-                        path === "/work" || path === "/handoff"
-                          ? "review"
-                          : path === "/review"
-                            ? "impact"
-                            : "home",
-                      )
-                }
-              />
-            ))}
-          {!home && <T style={{ fontWeight: "700", fontSize: 16 }}>{title}</T>}
-          {headerRight ??
-            (home ? (
+            )}
+            {headerRight ?? (
               <Quiet
                 onFocus={onActionFocus}
                 title="Settings"
@@ -540,10 +599,40 @@ export function Page({
                 icon="Settings"
                 onPress={() => go("settings")}
               />
-            ) : (
-              <View style={{ width: 44 }} />
-            ))}
-        </View>
+            )}
+          </View>
+        ) : (
+          // Reference bar: 56 · 1fr · 56, so the title stays centred and a long id truncates.
+          <View
+            style={{
+              height: 56,
+              paddingHorizontal: 8,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <View style={{ width: 56, alignItems: "flex-start" }}>
+              {headerLeft ??
+                (path === "/impact" ? null : (
+                  <Quiet title="Back" compact icon="ChevronLeft" onPress={back} />
+                ))}
+            </View>
+            <View style={{ flex: 1, alignItems: "center" }}>
+              <T
+                numberOfLines={1}
+                style={{ fontWeight: "700", fontSize: 16, lineHeight: 20 }}
+              >
+                {title}
+              </T>
+            </View>
+            <View
+              style={{ width: 56, alignItems: "flex-end", overflow: "hidden" }}
+            >
+              {headerRight}
+            </View>
+          </View>
+        )}
       </FadeArrival>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -563,7 +652,7 @@ export function Page({
               justifyContent: centered ? "center" : undefined,
               paddingHorizontal: 20,
               paddingTop: 8,
-              paddingBottom: 26,
+              paddingBottom: 28,
               gap: 22,
             }}
           >
@@ -581,14 +670,36 @@ export function Page({
             </DecorationViewport.Provider>
           </ScrollView>
         </View>
+        {/* Notices and toasts take their own space above the footer or tab bar, as in the reference. */}
+        {rr.job?.notice && path !== "/analysis" && (
+          <CompletionNotice
+            onOpen={() => go("analysis")}
+            onDismiss={rr.dismissNotice}
+          />
+        )}
+        {rr.undo && (
+          <SentToast
+            until={rr.undo.until}
+            onUndo={() =>
+              void rr
+                .undoSent()
+                .then(() => {
+                  go("impact");
+                  notify("Unmarked. The receipts are still here.");
+                })
+                .catch(showError)
+            }
+          />
+        )}
+        <FlashToast />
         {footer && (
           <FadeArrival identity={path} distance={0}>
             <View
               style={{
                 paddingHorizontal: 20,
-                paddingTop: 10,
+                paddingTop: 12,
                 paddingBottom: 14,
-                gap: 9,
+                gap: 8,
                 backgroundColor: C.bg,
                 borderTopWidth: 1,
                 borderTopColor: C.line,
@@ -599,99 +710,206 @@ export function Page({
           </FadeArrival>
         )}
       </KeyboardAvoidingView>
-      {rr.job?.notice && path !== "/analysis" && (
-        <FadeArrival distance={0}>
-          <View style={{ paddingHorizontal: 18, paddingBottom: 7 }}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Review completed analysis"
-              onPress={() => go("analysis")}
-              style={{
-                backgroundColor: C.surface,
-                padding: 12,
-                borderRadius: 16,
-              }}
-            >
-              <T style={{ fontSize: 12, fontWeight: "700" }}>
-                I’ve documented the audacity. See the case →
-              </T>
-            </Pressable>
-          </View>
-        </FadeArrival>
-      )}
-      {rr.undo && (
-        <SentToast
-          until={rr.undo.until}
-          onUndo={() => void rr.undoSent().catch(showError)}
-        />
-      )}
-      {nav ? (
-        <Navigation onActionFocus={onActionFocus} />
-      ) : (
-        <SafeAreaView edges={["bottom"]} />
-      )}
+      {/* The tab bar itself is one persistent bar in the root layout; leave room for it. */}
+      <View style={{ height: nav ? TAB_BAR_HEIGHT + insets.bottom : insets.bottom }} />
     </SafeAreaView>
   );
 }
+function CompletionNotice({
+  onOpen,
+  onDismiss,
+}: {
+  onOpen: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <FadeArrival distance={18}>
+      <View
+        accessibilityRole="summary"
+        style={{
+          marginHorizontal: 14,
+          marginBottom: 10,
+          paddingVertical: 9,
+          paddingLeft: 14,
+          paddingRight: 6,
+          borderRadius: 16,
+          backgroundColor: C.surface,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 12,
+        }}
+      >
+        <Spark size={22} />
+        <View style={{ flex: 1 }}>
+          <T style={{ fontSize: 15, lineHeight: 18, fontWeight: "700" }}>
+            I’ve documented the audacity.
+          </T>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="See the case"
+            onPress={onOpen}
+            hitSlop={{ top: 8, bottom: 8 }}
+          >
+            <T style={{ fontSize: 14, lineHeight: 20, fontWeight: "700", color: C.accent }}>
+              See the case
+            </T>
+          </Pressable>
+        </View>
+        <Quiet title="Dismiss report notification" compact icon="X" onPress={onDismiss} />
+      </View>
+    </FadeArrival>
+  );
+}
+
+/* ---------- toasts: the Undo deadline and short confirmations ---------- */
+type Flash = { message: string; id: number } | null;
+let flash: Flash = null;
+let flashTimer: ReturnType<typeof setTimeout> | undefined;
+const flashListeners = new Set<() => void>();
+const emitFlash = () => flashListeners.forEach((listener) => listener());
+/** A short confirmation toast on the current screen (the reference's C.notify without an action). */
+export function notify(message: string, ms = 3200) {
+  flash = { message, id: Date.now() };
+  emitFlash();
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => {
+    flash = null;
+    emitFlash();
+  }, ms);
+}
+function FlashToast() {
+  const focused = useIsFocused();
+  const current = React.useSyncExternalStore(
+    (listener) => {
+      flashListeners.add(listener);
+      return () => flashListeners.delete(listener);
+    },
+    () => flash,
+  );
+  if (!focused || !current) return null;
+  return <ToastCard key={current.id} text={current.message} />;
+}
 function SentToast({ until, onUndo }: { until: number; onUndo: () => void }) {
+  return (
+    <ToastCard
+      text="Marked sent. Fat-fingered it?"
+      action="Undo"
+      onAction={onUndo}
+      until={until}
+    />
+  );
+}
+function ToastCard({
+  text,
+  action,
+  onAction,
+  until,
+}: {
+  text: string;
+  action?: string;
+  onAction?: () => void;
+  until?: number;
+}) {
   const { reduced, foreground } = useRoad();
+  const enter = useRef(new Animated.Value(reduced ? 1 : 0)).current;
   const progress = useRef(new Animated.Value(1)).current;
-  const pop = useRef(new Animated.Value(1)).current;
   React.useEffect(() => {
-    const remaining = Math.max(0, until - Date.now());
-    progress.setValue(remaining / 8000);
-    pop.setValue(1);
-    if (reduced || !foreground) return;
-    pop.setValue(0.85);
-    const a = Animated.parallel([
-      Animated.timing(progress, {
-        toValue: 0,
-        duration: remaining,
-        useNativeDriver: true,
-      }),
-      Animated.sequence([
-        Animated.timing(pop, {
-          toValue: 1.12,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pop, {
-          toValue: 1,
-          duration: 170,
-          useNativeDriver: true,
-        }),
-      ]),
-    ]);
+    if (reduced || !foreground) {
+      enter.setValue(1);
+      return;
+    }
+    const a = Animated.timing(enter, {
+      toValue: 1,
+      duration: 340,
+      easing: Easing.bezier(0.16, 1, 0.3, 1),
+      useNativeDriver: true,
+    });
     a.start();
     return () => a.stop();
-  }, [until, reduced, foreground, progress, pop]);
+  }, [enter, reduced, foreground]);
+  React.useEffect(() => {
+    if (!until) return;
+    // The countdown keeps running under reduced motion: it is a timer, not movement.
+    const remaining = Math.max(0, until - Date.now());
+    progress.setValue(remaining / 8000);
+    const a = Animated.timing(progress, {
+      toValue: 0,
+      duration: remaining,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    });
+    a.start();
+    return () => a.stop();
+  }, [until, progress]);
   return (
-    <View
+    <Animated.View
+      accessibilityLiveRegion="polite"
       style={{
-        margin: 12,
-        padding: 14,
-        backgroundColor: C.ink,
+        marginHorizontal: 14,
+        marginBottom: 10,
+        paddingTop: 10,
+        paddingBottom: 12,
+        paddingLeft: 16,
+        paddingRight: action ? 10 : 16,
+        minHeight: 56,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
         borderRadius: 16,
+        backgroundColor: C.ink,
         overflow: "hidden",
+        shadowColor: C.ink,
+        shadowOffset: { width: 0, height: 14 },
+        shadowOpacity: 0.3,
+        shadowRadius: 15,
+        opacity: enter,
+        transform: [
+          {
+            translateY: enter.interpolate({
+              inputRange: [0, 1],
+              outputRange: [16, 0],
+            }),
+          },
+          {
+            scale: enter.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.96, 1],
+            }),
+          },
+        ],
       }}
     >
-      <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
-        <Animated.View style={{ transform: [{ scale: pop }] }}>
-          <Icon name="Check" color="white" />
-        </Animated.View>
-        <T style={{ color: "white", flex: 1, fontSize: 15 }}>
-          Report marked sent.
-        </T>
+      <T
+        style={{
+          flex: 1,
+          color: "white",
+          fontSize: 15,
+          lineHeight: 20,
+          fontWeight: "600",
+        }}
+      >
+        {text}
+      </T>
+      {action && (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Undo"
-          onPress={onUndo}
-          style={{ backgroundColor: "white", borderRadius: 24, padding: 12 }}
+          accessibilityLabel={action}
+          onPress={onAction}
+          style={({ pressed }) => ({
+            minHeight: 44,
+            paddingHorizontal: 16,
+            borderRadius: 999,
+            backgroundColor: "white",
+            justifyContent: "center",
+            transform: [{ scale: pressed ? 0.94 : 1 }],
+          })}
         >
-          <T style={{ fontWeight: "700" }}>Undo</T>
+          <T style={{ fontSize: 15, lineHeight: 18, fontWeight: "800" }}>
+            {action}
+          </T>
         </Pressable>
-      </View>
-      {!reduced && (
+      )}
+      {!!until && (
         <Animated.View
           style={{
             position: "absolute",
@@ -705,107 +923,217 @@ function SentToast({ until, onUndo }: { until: number; onUndo: () => void }) {
           }}
         />
       )}
-    </View>
+    </Animated.View>
   );
 }
-export function Navigation({ onActionFocus }: { onActionFocus?: () => void }) {
+
+/* ---------- the tab bar: one persistent bar under the tab routes ---------- */
+export const TAB_BAR_HEIGHT = 68;
+const TAB_ROUTES = ["/", "/review", "/impact"];
+let lastPending = -1;
+export function Navigation() {
   const path = usePathname(),
     rr = useRoad();
+  const insets = useSafeAreaInsets();
+  const shown = TAB_ROUTES.includes(path);
   const active =
-    path === "/"
-      ? "home"
-      : path.slice(1) === "impact"
-        ? "history"
-        : path.slice(1);
+    path === "/" ? "home" : path === "/impact" ? "history" : "review";
   const pending = pendingCases(rr.cases).length;
   const { width } = useWindowDimensions();
   const tabIndex = ["home", "review", "history"].indexOf(active);
+  const [lastIndex, setLastIndex] = useState(tabIndex);
+  if (shown && tabIndex !== lastIndex) setLastIndex(tabIndex);
+  // Leaving the tab routes, the bar sinks; coming back, it rises on the travel curve.
+  const travel = useRef(new Animated.Value(shown ? 0 : 1)).current;
+  React.useEffect(() => {
+    const a = Animated.timing(travel, {
+      toValue: shown ? 0 : 1,
+      duration: rr.reduced ? 0 : shown ? 420 : 240,
+      delay: shown && !rr.reduced ? 90 : 0,
+      easing: shown ? Easing.bezier(0.32, 0.72, 0, 1) : Easing.bezier(0.4, 0, 1, 1),
+      useNativeDriver: true,
+    });
+    a.start();
+    return () => a.stop();
+  }, [shown, rr.reduced, travel]);
+  const height = TAB_BAR_HEIGHT + insets.bottom;
   return (
-    <SafeAreaView
-      edges={["bottom"]}
+    <Animated.View
+      pointerEvents={shown ? "auto" : "none"}
       style={{
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height,
+        paddingBottom: insets.bottom,
         backgroundColor: C.bg,
         borderTopWidth: 1,
         borderColor: C.line,
+        transform: [
+          {
+            translateY: travel.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0, height + 2],
+            }),
+          },
+        ],
       }}
     >
-      <View style={{ height: 68, flexDirection: "row", paddingHorizontal: 14 }}>
-        <SlidingPill index={Math.max(0, tabIndex)} width={width} />
+      <View
+        style={{
+          height: TAB_BAR_HEIGHT,
+          flexDirection: "row",
+          paddingHorizontal: 14,
+        }}
+      >
+        <SlidingPill index={Math.max(0, shown ? tabIndex : lastIndex)} width={width} />
         {(["home", "review", "history"] as const).map((key, i) => (
-          <Pressable
+          <TabButton
             key={key}
-            onFocus={onActionFocus}
-            accessibilityRole="tab"
-            accessibilityLabel={["Home", "Cases", "Impact"][i]}
-            accessibilityState={{ selected: active === key }}
+            label={["Home", "Cases", "Impact"][i]}
+            selected={shown && active === key}
             onPress={() => {
-              if (active !== key) {
+              if (active !== key || !shown) {
                 if (key === "review")
                   rr.select(pendingCases(rr.cases)[0]?.id || "");
                 go(key === "history" ? "impact" : key);
               }
             }}
-            style={{
-              flex: 1,
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 3,
-            }}
           >
-            <View
-              style={{
-                height: 33,
-                width: 56,
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: 18,
-              }}
-            >
-              <SubmissionIcon name={key} active={active === key} />
-            </View>
-            <T
-              style={{
-                fontSize: 12,
-                lineHeight: 16,
-                color: active === key ? C.ink : C.muted,
-                fontWeight: active === key ? "800" : "600",
-              }}
-            >
-              {["Home", "Cases", "Impact"][i]}
-            </T>
-            {key === "review" && pending > 0 && (
-              <View
-                style={{
-                  position: "absolute",
-                  left: "50%",
-                  marginLeft: 12,
-                  top: 4,
-                  minWidth: 18,
-                  height: 18,
-                  paddingHorizontal: 4,
-                  borderRadius: 9,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: C.warning,
-                }}
-              >
-                <T
-                  style={{
-                    fontSize: 11,
-                    lineHeight: 13,
-                    fontWeight: "700",
-                    color: "white",
-                    fontVariant: ["tabular-nums"],
-                  }}
-                >
-                  {pending}
-                </T>
-              </View>
-            )}
-          </Pressable>
+            <SubmissionIcon
+              name={key}
+              active={shown ? active === key : lastIndex === i}
+            />
+            {key === "review" && pending > 0 && <CountBadge value={pending} />}
+          </TabButton>
         ))}
       </View>
-    </SafeAreaView>
+    </Animated.View>
+  );
+}
+function TabButton({
+  label,
+  selected,
+  onPress,
+  children,
+}: React.PropsWithChildren<{
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}>) {
+  const { reduced } = useRoad();
+  // The icon presses in to 86% and springs back, like the reference's .tab:active .nav-ico.
+  const scale = useRef(new Animated.Value(1)).current;
+  const press = (to: number) =>
+    reduced
+      ? undefined
+      : to < 1
+        ? Animated.timing(scale, {
+            toValue: to,
+            duration: 80,
+            useNativeDriver: true,
+          }).start()
+        : Animated.spring(scale, {
+            toValue: 1,
+            speed: 18,
+            bounciness: 12,
+            useNativeDriver: true,
+          }).start();
+  return (
+    <Pressable
+      accessibilityRole="tab"
+      accessibilityLabel={label}
+      accessibilityState={{ selected }}
+      onPressIn={() => press(0.86)}
+      onPressOut={() => press(1)}
+      onPress={onPress}
+      style={{
+        flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 3,
+      }}
+    >
+      <Animated.View
+        style={{
+          height: 33,
+          width: 56,
+          alignItems: "center",
+          justifyContent: "center",
+          transform: [{ scale }],
+        }}
+      >
+        {React.Children.toArray(children)[0]}
+      </Animated.View>
+      <T
+        style={{
+          fontSize: 12,
+          lineHeight: 16,
+          color: selected ? C.ink : C.muted,
+          fontWeight: selected ? "800" : "600",
+        }}
+      >
+        {label}
+      </T>
+      {React.Children.toArray(children).slice(1)}
+    </Pressable>
+  );
+}
+function CountBadge({ value }: { value: number }) {
+  const { reduced } = useRoad();
+  const pop = useRef(new Animated.Value(1)).current;
+  React.useEffect(() => {
+    const rose = lastPending >= 0 && value > lastPending;
+    lastPending = value;
+    if (!rose || reduced) return;
+    pop.setValue(0);
+    const a = Animated.sequence([
+      Animated.delay(160),
+      Animated.timing(pop, {
+        toValue: 1.3,
+        duration: 250,
+        easing: Easing.bezier(0.16, 1, 0.3, 1),
+        useNativeDriver: true,
+      }),
+      Animated.timing(pop, {
+        toValue: 1,
+        duration: 170,
+        useNativeDriver: true,
+      }),
+    ]);
+    a.start();
+    return () => a.stop();
+  }, [value, reduced, pop]);
+  return (
+    <Animated.View
+      style={{
+        position: "absolute",
+        left: "50%",
+        marginLeft: 12,
+        top: 4,
+        minWidth: 18,
+        height: 18,
+        paddingHorizontal: 4,
+        borderRadius: 9,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: C.warning,
+        transform: [{ scale: pop }],
+      }}
+    >
+      <T
+        style={{
+          fontSize: 11,
+          lineHeight: 13,
+          fontWeight: "700",
+          color: "white",
+          fontVariant: ["tabular-nums"],
+        }}
+      >
+        {value}
+      </T>
+    </Animated.View>
   );
 }
 export function Segments({
@@ -813,7 +1141,8 @@ export function Segments({
   value,
   onChange,
 }: {
-  items: string[];
+  /** A label, or [label, count] to show the count in bold ("All **5**"). */
+  items: (string | [string, number])[];
   value: number;
   onChange: (i: number) => void;
 }) {
@@ -869,19 +1198,22 @@ export function Segments({
           }}
         />
       )}
-      {items.map((s, i) => (
+      {items.map((item, i) => {
+        const [label, count] = typeof item === "string" ? [item, undefined] : item;
+        return (
         <Pressable
-          key={s}
+          key={label}
           accessibilityRole="button"
-          accessibilityLabel={s}
+          accessibilityLabel={count === undefined ? label : `${label} ${count}`}
           accessibilityState={{ selected: value === i }}
           onPress={() => onChange(i)}
-          style={{
+          style={({ pressed }) => ({
             flex: 1,
             minHeight: 44,
             justifyContent: "center",
             alignItems: "center",
-          }}
+            transform: [{ scale: pressed ? 0.94 : 1 }],
+          })}
         >
           <T
             numberOfLines={1}
@@ -893,10 +1225,16 @@ export function Segments({
               fontVariant: ["tabular-nums"],
             }}
           >
-            {s}
+            {label}
+            {count !== undefined && (
+              <T style={{ fontSize: 14, lineHeight: 18, fontWeight: "800", color: value === i ? C.ink : C.muted }}>
+                {` ${count}`}
+              </T>
+            )}
           </T>
         </Pressable>
-      ))}
+        );
+      })}
     </View>
   );
 }
