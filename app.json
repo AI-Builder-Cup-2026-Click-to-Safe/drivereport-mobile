@@ -59,6 +59,7 @@
       "expo-font",
       "./plugins/withNoPushEntitlement",
       "./plugins/withPodDeploymentTarget",
+      "./plugins/withSceneLifecycle",
       "@react-native-community/datetimepicker",
       [
         "expo-splash-screen",
