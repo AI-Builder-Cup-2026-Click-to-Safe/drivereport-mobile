@@ -12,8 +12,6 @@ import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as FS from "expo-file-system/legacy";
 import { useStore } from "../lib/store";
-import { checkConnection } from "../lib/api";
-import { hasBuiltInConnection, validateApiUrl } from "../lib/domain";
 import { useRoad } from "./context";
 import { Turn, FadeArrival } from "./motion";
 import {
@@ -48,10 +46,7 @@ export {
 export function Developer() {
   const rr = useRoad(),
     store = useStore();
-  const [url, setUrl] = useState(store.settings.apiUrl),
-    [token, setToken] = useState(store.settings.token),
-    [reveal, setReveal] = useState(false),
-    [chosen, setChosen] = useState(""),
+  const [chosen, setChosen] = useState(""),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState("");
   const [testNumber, setTestNumber] = useState(rr.prefs.testRecipient || "");
@@ -252,62 +247,6 @@ export function Developer() {
       {__DEV__ && (
         <Quiet title="Replay Home entrance" onPress={replayHomeEntrance} />
       )}
-      <T style={s.section}>Backend settings</T>
-      {hasBuiltInConnection ? (
-        <Notice>AI analysis is ready. No access token setup is needed.</Notice>
-      ) : (
-        <>
-          <Field
-            label="Base URL"
-            value={url}
-            onChangeText={setUrl}
-            autoCapitalize="none"
-            keyboardType="url"
-          />
-          <View style={{ gap: 5 }}>
-            <Field
-              label="Access token"
-              value={token}
-              onChangeText={setToken}
-              secureTextEntry={!reveal}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <Quiet
-              title={reveal ? "Hide access token" : "Show access token"}
-              icon={reveal ? "EyeOff" : "Eye"}
-              onPress={() => setReveal(!reveal)}
-            />
-          </View>
-          <Action
-            title="Save connection"
-            secondary
-            onPress={() =>
-              void Promise.resolve()
-                .then(() =>
-                  store.saveSettings({
-                    ...store.settings,
-                    apiUrl: validateApiUrl(url.trim()),
-                    token: token.trim(),
-                  }),
-                )
-                .then(() => setMessage("Connection saved securely."))
-                .catch(showError)
-            }
-          />
-        </>
-      )}
-      <Quiet
-        title="Check URL"
-        onPress={() =>
-          void checkConnection({
-            ...store.settings,
-            apiUrl: hasBuiltInConnection ? store.settings.apiUrl : url,
-          })
-            .then(setMessage)
-            .catch(showError)
-        }
-      />
       {message && <Notice>{message}</Notice>}
       <View style={s.row}>
         <View style={{ flex: 1 }}>
@@ -581,9 +520,7 @@ export function Settings() {
           }
         />
       </SettingsGroup>
-      {/* feat/standard-design's Footage section. Both rows report fixed behaviour, not preferences:
-          recordings import as protected (never rotated out) and are kept for Share original clip;
-          face blurring waits on annotated evidence from the server. */}
+      {/* Recordings import as protected and remain available for Share original clip. */}
       <SettingsGroup title="Footage" index={2}>
         <SettingsRow
           icon="Video"
@@ -591,12 +528,6 @@ export function Settings() {
           note="Original clips stay on this device."
           status="on"
           trailing={<Icon name="Check" size={20} />}
-        />
-        <SettingsRow
-          icon="UserRound"
-          title="Blur unrelated faces"
-          note="Unavailable until annotated evidence is connected."
-          status="unavailable"
         />
       </SettingsGroup>
       {message && (
