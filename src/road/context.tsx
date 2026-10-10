@@ -100,6 +100,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     [syncingCases, setSyncingCases] = useState(false),
     [historyError, setHistoryError] = useState("");
   const [undo, setUndo] = useState<{ id: string; until: number } | null>(null);
+  const [screenReader, setScreenReader] = useState(false);
   useEffect(() => {
     if (!undo) return;
     const timer = setTimeout(
@@ -175,6 +176,11 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
       "reduceMotionChanged",
       setOSReduced,
     );
+    void AccessibilityInfo.isScreenReaderEnabled().then(setScreenReader);
+    const reader = AccessibilityInfo.addEventListener(
+      "screenReaderChanged",
+      setScreenReader,
+    );
     const app = AppState.addEventListener("change", (s) =>
       setForeground(s === "active"),
     );
@@ -184,6 +190,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
       // eslint-disable-next-line react-hooks/exhaustive-deps
       run.current++;
       motion.remove();
+      reader.remove();
       app.remove();
     };
   }, []);
@@ -441,10 +448,10 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     if (!ready || error) throw Error(error || "Still restoring your data.");
     if (!demo && pr.current.region !== "MY")
       throw Error(
-        "Live legal analysis is currently configured for Malaysia only. Select Malaysia or use the demo.",
+        "Live analysis supports Malaysia only. Set the region to Malaysia in Developer settings.",
       );
     if (!demo && !old.current.settings.token)
-      throw Error("Add your API access token in Developer before analysing.");
+      throw Error("This build isn’t connected to the analysis server yet. Add its access token in Developer settings.");
     const generation = ++run.current;
     const j: Job = preparedRecording
       ? {
@@ -512,7 +519,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
           if (mapped[0]) select(mapped[0].id);
         }
       }
-      if (run.current === generation && alive.current)
+      if (run.current === generation && alive.current) {
         updateJob({
           ...j,
           status: "complete",
@@ -520,6 +527,10 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
           progress: 100,
           notice: true,
         });
+        AccessibilityInfo.announceForAccessibility(
+          "I’ve documented the audacity. The case is ready in Cases.",
+        );
+      }
     } catch (e) {
       if (run.current === generation && alive.current)
         updateJob({
@@ -575,7 +586,14 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         seed,
         undo,
         confirmSent,
-        startUndo: (id) => setUndo({ id, until: Date.now() + 8000 }),
+        startUndo: (id) => {
+          // VoiceOver users hear the toast instead of seeing it, so give them longer to reach Undo.
+          const seconds = screenReader ? 20 : 8;
+          setUndo({ id, until: Date.now() + seconds * 1000 });
+          AccessibilityInfo.announceForAccessibility(
+            `Marked sent. Fat-fingered it? Undo is available for ${seconds} seconds.`,
+          );
+        },
         undoSent,
       }}
     >

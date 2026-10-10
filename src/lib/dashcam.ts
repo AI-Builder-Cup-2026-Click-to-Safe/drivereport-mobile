@@ -61,7 +61,7 @@ export async function recordSegments(options: {
       const result = await options.record();
       if (!result)
         throw new Error(
-          "The camera stopped without saving a clip. Check History and start again.",
+          "The camera stopped without saving a clip. Start a new recording.",
         );
       const write = options.save(result.uri, startedAt).catch(options.onError);
       writes.add(write);

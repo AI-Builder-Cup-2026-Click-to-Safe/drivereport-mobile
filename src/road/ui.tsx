@@ -7,6 +7,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Switch,
@@ -17,6 +18,7 @@ import {
   type TextProps,
   type TextInputProps,
 } from "react-native";
+import * as Haptics from "expo-haptics";
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -45,6 +47,26 @@ export const C = {
   warning: "#A84B0A",
   warningBg: "#FFF4E5",
   dark: "#000000",
+  // The submission's remaining roles: points and penalties, Sent green, the photo-blue on footage.
+  penalty: "#C81E1E",
+  penaltyLight: "#FF9B8F",
+  green: "#15803D",
+  lineHover: "#C9CDD4",
+  gemPhoto: "#4F8BFF",
+  paper: "#F5F5F0",
+  prompt: "#7B5B3F",
+  amberLine: "#F3B46B",
+  code: "#1E3A8A",
+};
+/** Fire-and-forget haptics; iOS applies the user's System Haptics setting itself. */
+export const haptic = {
+  select: () => void Haptics.selectionAsync().catch(() => {}),
+  tap: () =>
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}),
+  success: () =>
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
+      () => {},
+    ),
 };
 export const showError = (e: unknown) =>
   Alert.alert("Click-to-Safe", e instanceof Error ? e.message : String(e));
@@ -68,11 +90,17 @@ export const go = (name: string) => {
 export function T({ balance, ...p }: TextProps & { balance?: boolean }) {
   return balance ? <BalancedText {...p} /> : <PlainText {...p} />;
 }
+/**
+ * How far text may grow with the reader's text size. Body copy doubles; titles and display type
+ * grow less so a 42pt headline never breaks inside a word at the accessibility sizes.
+ */
+export const fontCap = (size: number) => (size >= 28 ? 1.25 : size >= 20 ? 1.5 : 2);
 function PlainText({ style, ...p }: TextProps) {
   return (
     <Text
       // The reference sets text-wrap: pretty, so a paragraph never ends on one orphaned word.
       lineBreakStrategyIOS="push-out"
+      maxFontSizeMultiplier={fontCap(StyleSheet.flatten(style)?.fontSize ?? 16)}
       {...p}
       style={[
         // 500 is the reference's body weight; 400 read noticeably thinner on device.
@@ -316,8 +344,8 @@ export function TextLink({
 export function Toggle(props: React.ComponentProps<typeof Switch>) {
   return (
     <Switch
-      trackColor={{ true: C.accent, false: "#C9CDD4" }}
-      ios_backgroundColor="#C9CDD4"
+      trackColor={{ true: C.accent, false: C.lineHover }}
+      ios_backgroundColor={C.lineHover}
       {...props}
     />
   );
@@ -457,6 +485,7 @@ export function Field({
         {label}
       </T>
       <TextInput
+        maxFontSizeMultiplier={1.6}
         accessibilityLabel={label}
         value={value}
         onChangeText={onChangeText}
@@ -465,7 +494,7 @@ export function Field({
           multiline &&
           setHeight(Math.max(84, e.nativeEvent.contentSize.height + 22))
         }
-        placeholderTextColor={missing ? C.warning : "#7B5B3F"}
+        placeholderTextColor={missing ? C.warning : C.prompt}
         style={{
           fontFamily: "Manrope",
           fontSize: 16,
@@ -531,6 +560,8 @@ export function Page({
   gap = 24,
   onScrollStart,
   onActionFocus,
+  onRefresh,
+  refreshing = false,
 }: {
   title: string;
   home?: boolean;
@@ -544,6 +575,9 @@ export function Page({
   gap?: number;
   onScrollStart?: () => void;
   onActionFocus?: () => void;
+  /** Pull to refresh, the native way to ask for fresh server data. */
+  onRefresh?: () => void;
+  refreshing?: boolean;
 }) {
   // Keep the route this screen opened on. The global path changes for the outgoing screen
   // mid-transition, which remounted its scroll view (jumping to the top) while it faded out.
@@ -586,7 +620,10 @@ export function Page({
                 style={{ flexDirection: "row", alignItems: "center", gap: 9 }}
               >
                 <BrandMark color={C.ink} />
-                <T style={{ fontWeight: "800", fontSize: 18, lineHeight: 22 }}>
+                <T
+                  maxFontSizeMultiplier={1.3}
+                  style={{ fontWeight: "800", fontSize: 18, lineHeight: 22 }}
+                >
                   Click-to-Safe
                 </T>
               </View>
@@ -619,8 +656,11 @@ export function Page({
                 ))}
             </View>
             <View style={{ flex: 1, alignItems: "center" }}>
+              {/* The bar keeps its 56pt height, like a native navigation bar title. */}
               <T
+                accessibilityRole="header"
                 numberOfLines={1}
+                maxFontSizeMultiplier={1.35}
                 style={{ fontWeight: "700", fontSize: 16, lineHeight: 20 }}
               >
                 {title}
@@ -640,6 +680,15 @@ export function Page({
       >
         <View ref={viewport} collapsable={false} style={{ flex: 1 }}>
           <ScrollView
+            refreshControl={
+              onRefresh ? (
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  tintColor={C.muted}
+                />
+              ) : undefined
+            }
             onScrollBeginDrag={onScrollStart}
             onScroll={(event) => setOffset(event.nativeEvent.contentOffset.y)}
             scrollEventThrottle={100}
@@ -680,15 +729,16 @@ export function Page({
         {rr.undo && (
           <SentToast
             until={rr.undo.until}
-            onUndo={() =>
+            onUndo={() => {
+              haptic.tap();
               void rr
                 .undoSent()
                 .then(() => {
                   go("impact");
                   notify("Unmarked. The receipts are still here.");
                 })
-                .catch(showError)
-            }
+                .catch(showError);
+            }}
           />
         )}
         <FlashToast />
@@ -761,6 +811,14 @@ function CompletionNotice({
   );
 }
 
+/** Speaks a changing status to VoiceOver; accessibilityLiveRegion only works on Android. */
+export function Announce({ message }: { message: string }) {
+  React.useEffect(() => {
+    if (message) AccessibilityInfo.announceForAccessibility(message);
+  }, [message]);
+  return null;
+}
+
 /* ---------- toasts: the Undo deadline and short confirmations ---------- */
 type Flash = { message: string; id: number } | null;
 let flash: Flash = null;
@@ -769,6 +827,8 @@ const flashListeners = new Set<() => void>();
 const emitFlash = () => flashListeners.forEach((listener) => listener());
 /** A short confirmation toast on the current screen (the reference's C.notify without an action). */
 export function notify(message: string, ms = 3200) {
+  // accessibilityLiveRegion only speaks on Android; iOS needs an explicit announcement.
+  AccessibilityInfo.announceForAccessibility(message);
   flash = { message, id: Date.now() };
   emitFlash();
   clearTimeout(flashTimer);
@@ -917,7 +977,7 @@ function ToastCard({
             right: 0,
             bottom: 0,
             height: 3,
-            backgroundColor: "#4F8BFF",
+            backgroundColor: C.gemPhoto,
             transformOrigin: "left center",
             transform: [{ scaleX: progress }],
           }}
@@ -992,6 +1052,7 @@ export function Navigation() {
           <TabButton
             key={key}
             label={["Home", "Cases", "Impact"][i]}
+            count={key === "review" ? pending : 0}
             selected={shown && active === key}
             onPress={() => {
               if (active !== key || !shown) {
@@ -1014,11 +1075,14 @@ export function Navigation() {
 }
 function TabButton({
   label,
+  count = 0,
   selected,
   onPress,
   children,
 }: React.PropsWithChildren<{
   label: string;
+  /** Cases waiting for the user; the badge is visual, so VoiceOver hears it in the label. */
+  count?: number;
   selected: boolean;
   onPress: () => void;
 }>) {
@@ -1043,7 +1107,7 @@ function TabButton({
   return (
     <Pressable
       accessibilityRole="tab"
-      accessibilityLabel={label}
+      accessibilityLabel={count ? `${label}, ${count} ${count === 1 ? "needs" : "need"} you` : label}
       accessibilityState={{ selected }}
       onPressIn={() => press(0.86)}
       onPressOut={() => press(1)}
@@ -1066,7 +1130,9 @@ function TabButton({
       >
         {React.Children.toArray(children)[0]}
       </Animated.View>
+      {/* Tab labels stay put in their fixed bar, as UITabBar's do. */}
       <T
+        maxFontSizeMultiplier={1.15}
         style={{
           fontSize: 12,
           lineHeight: 16,
@@ -1123,6 +1189,7 @@ function CountBadge({ value }: { value: number }) {
       }}
     >
       <T
+        maxFontSizeMultiplier={1}
         style={{
           fontSize: 11,
           lineHeight: 13,
@@ -1206,7 +1273,10 @@ export function Segments({
           accessibilityRole="button"
           accessibilityLabel={count === undefined ? label : `${label} ${count}`}
           accessibilityState={{ selected: value === i }}
-          onPress={() => onChange(i)}
+          onPress={() => {
+            if (value !== i) haptic.select();
+            onChange(i);
+          }}
           style={({ pressed }) => ({
             flex: 1,
             minHeight: 44,

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, Platform, Pressable, StyleSheet, View } from "react-native";
+import { AppState, Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Device from "expo-device";
@@ -23,7 +23,8 @@ export function Recording() {
   const [ready, setReady] = useState(false),
     [elapsed, setElapsed] = useState(0),
     [ending, setEnding] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [blocked, setBlocked] = useState(false);
   const wanted = useRef(true),
     started = useRef(false),
     mounted = useRef(true),
@@ -50,9 +51,8 @@ export function Recording() {
         .then((p) => {
           if (!p.granted) {
             wanted.current = false;
-            setError(
-              "Camera permission is required. Enable it in device Settings.",
-            );
+            setBlocked(true);
+            setError("Click-to-Safe needs the camera to record. Allow it in Settings.");
           }
         })
         .catch(showError);
@@ -163,12 +163,12 @@ export function Recording() {
       } else if (ids.current.length) {
         if (!store.settings.token) {
           rr.failRecording(
-            "Recording saved. Add your API token, then retry the saved clips.",
+            "Recording saved. This build isn’t connected to the analysis server yet, so the clips wait here.",
           );
           go("developer");
           showError(
             Error(
-              "Recording saved. Add your API token, then analyse the saved clips in Developer.",
+              "Recording saved. Add the analysis server’s access token here, then analyse the saved clips.",
             ),
           );
         } else {
@@ -263,9 +263,28 @@ export function Recording() {
           </T>
           <T style={{ color: "#9A9EA5", textAlign: "center" }}>Eyes on the road. Gemini reads the clip after you stop.</T>
           {error && (
-            <T style={{ color: "#f2b3a0", fontSize: 12, textAlign: "center" }}>
+            <T style={{ color: "#f2b3a0", fontSize: 14, lineHeight: 19, textAlign: "center" }}>
               {error}
             </T>
+          )}
+          {blocked && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open Settings"
+              onPress={() => void Linking.openSettings()}
+              style={({ pressed }) => ({
+                minHeight: 44,
+                paddingHorizontal: 18,
+                borderRadius: 999,
+                borderWidth: 1.5,
+                borderColor: "#eeeae4",
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: pressed ? 0.6 : 1,
+              })}
+            >
+              <T style={{ color: "#eeeae4", fontWeight: "700" }}>Open Settings</T>
+            </Pressable>
           )}
           {!demo && !ready && !error && (
             <T style={{ color: "#a7a1aa" }}>Starting camera…</T>

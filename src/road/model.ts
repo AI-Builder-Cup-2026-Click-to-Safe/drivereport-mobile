@@ -96,6 +96,8 @@ export type Preferences = {
   phone: string;
   email: string;
   demo: boolean;
+  /** Developer settings stay hidden on release builds until the version line is tapped five times. */
+  developer?: boolean;
   testRecipient?: string;
   testMessage?: string;
 };

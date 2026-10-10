@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, Easing, View } from "react-native";
+import { Animated, Easing, View, useWindowDimensions } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 import Svg, { Path, Rect } from "react-native-svg";
 import { useRoad } from "./context";
@@ -71,7 +71,7 @@ export function PointsChip({
     <Stamp delay={delay}>
       <View
         style={{
-          backgroundColor: "#C81E1E",
+          backgroundColor: C.penalty,
           paddingHorizontal: 9,
           paddingVertical: 4,
           borderRadius: 99,
@@ -92,8 +92,11 @@ export function PointsChip({
     </Stamp>
   ) : null;
 }
+// The stat's rolling slots are measured in points, so they grow with the text they clip.
+const STAT_CAP = 1.4;
 export function RoadStat() {
   const { reduced, foreground } = useRoad();
+  const k = Math.min(useWindowDimensions().fontScale, STAT_CAP);
   const focused = useIsFocused();
   const [index, setIndex] = useState(0);
   const previous = useRef(0);
@@ -130,10 +133,10 @@ export function RoadStat() {
   const digits = String(n),
     oldDigits = String(oldNumber);
   const slots = Math.max(digits.length, oldDigits.length);
-  const rising = v.interpolate({ inputRange: [0, 1], outputRange: [20, 0] });
+  const rising = v.interpolate({ inputRange: [0, 1], outputRange: [20 * k, 0] });
   const departing = v.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, -20],
+    outputRange: [0, -20 * k],
   });
   // Reference .home-stat: 700 14px muted, the number in Ink 800.
   const statText = {
@@ -158,23 +161,23 @@ export function RoadStat() {
           style={{
             width: v.interpolate({
               inputRange: [0, 1],
-              outputRange: [oldDigits.length * 8.8, digits.length * 8.8],
+              outputRange: [oldDigits.length * 8.8 * k, digits.length * 8.8 * k],
             }),
-            height: 20,
+            height: 20 * k,
             overflow: "hidden",
           }}
         >
           {Array.from({ length: slots }, (_, i) => {
             const before = oldDigits.padStart(slots, " ")[i];
             const after = digits.padStart(slots, " ")[i];
-            const right = (slots - i - 1) * 8.8;
+            const right = (slots - i - 1) * 8.8 * k;
             return (
               <View
                 key={i}
-                style={{ position: "absolute", right, width: 8.8, height: 20 }}
+                style={{ position: "absolute", right, width: 8.8 * k, height: 20 * k }}
               >
                 {before === after ? (
-                  <T
+                  <T maxFontSizeMultiplier={STAT_CAP}
                     style={[
                       statText,
                       { ...digitText, fontVariant: ["tabular-nums"] },
@@ -194,7 +197,7 @@ export function RoadStat() {
                         }),
                       }}
                     >
-                      <T
+                      <T maxFontSizeMultiplier={STAT_CAP}
                         style={[
                           statText,
                           { ...digitText, fontVariant: ["tabular-nums"] },
@@ -209,7 +212,7 @@ export function RoadStat() {
                         opacity: v,
                       }}
                     >
-                      <T
+                      <T maxFontSizeMultiplier={STAT_CAP}
                         style={[
                           statText,
                           { ...digitText, fontVariant: ["tabular-nums"] },
@@ -224,9 +227,9 @@ export function RoadStat() {
             );
           })}
         </Animated.View>
-        <T style={statText}> {n === 1 ? "person dies" : "people die"} on </T>
-        <View style={{ height: 20, overflow: "hidden" }}>
-          <T style={[statText, { opacity: 0 }]}>{place}</T>
+        <T maxFontSizeMultiplier={STAT_CAP} style={statText}> {n === 1 ? "person dies" : "people die"} on </T>
+        <View style={{ height: 20 * k, overflow: "hidden" }}>
+          <T maxFontSizeMultiplier={STAT_CAP} style={[statText, { opacity: 0 }]}>{place}</T>
           <Animated.View
             style={{
               position: "absolute",
@@ -237,7 +240,7 @@ export function RoadStat() {
               }),
             }}
           >
-            <T style={statText}>{oldPlace}</T>
+            <T maxFontSizeMultiplier={STAT_CAP} style={statText}>{oldPlace}</T>
           </Animated.View>
           <Animated.View
             style={{
@@ -246,10 +249,10 @@ export function RoadStat() {
               opacity: v,
             }}
           >
-            <T style={statText}>{place}</T>
+            <T maxFontSizeMultiplier={STAT_CAP} style={statText}>{place}</T>
           </Animated.View>
         </View>
-        <T style={statText}>
+        <T maxFontSizeMultiplier={STAT_CAP} style={statText}>
           {" "}
           roads {place === "Singapore" ? "every 3 days." : "every day."}
         </T>
@@ -330,7 +333,7 @@ export function MeterBar({
             bottom: 0,
             left: 0,
             width: `${(pts / 20) * 100}%`,
-            backgroundColor: light ? C.ink : "#F5F5F0",
+            backgroundColor: light ? C.ink : C.paper,
             transformOrigin: "left center",
             transform: [{ scaleX: solid }],
           }}
@@ -351,8 +354,8 @@ export function MeterBar({
           }}
         >
           <Svg width={STRIPES_WIDTH} height={18}>
-            <Rect width={STRIPES_WIDTH} height={18} fill="#C81E1E" />
-            <Path d={STRIPES} fill="#FF9B8F" />
+            <Rect width={STRIPES_WIDTH} height={18} fill={C.penalty} />
+            <Path d={STRIPES} fill={C.penaltyLight} />
           </Svg>
         </Animated.View>
       )}
@@ -388,7 +391,7 @@ export function MeterKey({
     fontSize: 13,
     lineHeight: 17,
     fontWeight: "600" as const,
-    color: "#C9CDD4",
+    color: C.lineHover,
   };
   const value = {
     color: "white",
@@ -412,7 +415,7 @@ export function MeterKey({
               width: 12,
               height: 12,
               borderRadius: 3,
-              backgroundColor: "#F5F5F0",
+              backgroundColor: C.paper,
             }}
           />
           <T style={label}>
@@ -428,13 +431,13 @@ export function MeterKey({
               height: 12,
               borderRadius: 3,
               overflow: "hidden",
-              backgroundColor: "#C81E1E",
+              backgroundColor: C.penalty,
             }}
           >
             <Svg width={12} height={12}>
               <Path
                 d="M-3 9L9 -3M1 13L13 1M5 17L17 5"
-                stroke="#FF9B8F"
+                stroke={C.penaltyLight}
                 strokeWidth={2.2}
               />
             </Svg>
@@ -530,7 +533,7 @@ export function Receipt({ c, before }: { c: RoadCase; before: number }) {
   }, [reduced, foreground, record, out.total]);
   const dashed = {
     borderStyle: "dashed" as const,
-    borderColor: "#C9CDD4",
+    borderColor: C.lineHover,
   };
   return (
     <Animated.View
@@ -560,17 +563,18 @@ export function Receipt({ c, before }: { c: RoadCase; before: number }) {
           <Plate value={c.vehicle.plate} />
           <Stamp reported delay={RECEIPT_STAMP_AT}>
             <T
+              maxFontSizeMultiplier={1.3}
               style={{
                 marginRight: 4,
                 paddingHorizontal: 10,
                 paddingTop: 7,
                 paddingBottom: 6,
                 borderWidth: 2.5,
-                borderColor: "#15803D",
+                borderColor: C.green,
                 borderRadius: 8,
                 overflow: "hidden",
                 backgroundColor: "rgba(232,246,236,0.8)",
-                color: "#15803D",
+                color: C.green,
                 fontSize: 15,
                 lineHeight: 17,
                 fontWeight: "800",
@@ -690,7 +694,7 @@ export function SampleOverlay({
           width: "31.4%",
           height: "46%",
           borderWidth: 1.5,
-          borderColor: "#4F8BFF",
+          borderColor: C.gemPhoto,
           borderRadius: 6,
         }}
       />
@@ -703,7 +707,7 @@ export function SampleOverlay({
           height: "4.6%",
           borderWidth: 1.5,
           borderStyle: unread ? "dashed" : "solid",
-          borderColor: unread ? "#F3B46B" : "#4F8BFF",
+          borderColor: unread ? C.amberLine : C.gemPhoto,
           borderRadius: 3,
         }}
       />

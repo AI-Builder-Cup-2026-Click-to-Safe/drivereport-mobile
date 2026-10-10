@@ -136,12 +136,13 @@ export function Plate({
       }}
     >
       <T
+        maxFontSizeMultiplier={1.3}
         style={{
           backgroundColor: value ? C.ink : "transparent",
-          color: value ? "#F5F5F0" : C.muted,
+          color: value ? C.paper : C.muted,
           borderRadius: 7,
           borderWidth: value ? 0 : 1.5,
-          borderColor: "#C9CDD4",
+          borderColor: C.lineHover,
           overflow: "hidden",
           paddingHorizontal: value ? 11 : 12,
           paddingVertical: value ? 7 : 8,
@@ -233,8 +234,8 @@ export function ScanSweep() {
           <Svg width="100%" height="100%">
             <Defs>
               <LinearGradient id="sweep">
-                <Stop offset="0" stopColor="#4F8BFF" stopOpacity="0" />
-                <Stop offset="90%" stopColor="#4F8BFF" stopOpacity={0.35} />
+                <Stop offset="0" stopColor={C.gemPhoto} stopOpacity="0" />
+                <Stop offset="90%" stopColor={C.gemPhoto} stopOpacity={0.35} />
                 <Stop offset="96%" stopColor="white" stopOpacity={0.85} />
                 <Stop offset="1" stopColor="white" stopOpacity="0" />
               </LinearGradient>
@@ -286,6 +287,7 @@ export function CaseId({ c }: { c: RoadCase }) {
     <T
       numberOfLines={1}
       ellipsizeMode="tail"
+      maxFontSizeMultiplier={1.2}
       style={{
         fontSize: 13,
         lineHeight: 16,

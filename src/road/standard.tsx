@@ -19,6 +19,7 @@ import { demoFrameFor } from "./media";
 import { useStore } from "../lib/store";
 import {
   Action,
+  Announce,
   C,
   Icon,
   Intro,
@@ -30,6 +31,7 @@ import {
   go,
   showError,
   styles as s,
+  TextLink,
 } from "./ui";
 import {
   Arrival,
@@ -234,11 +236,11 @@ export function Clip() {
     try {
       if (!store.settings.token)
         throw Error(
-          "Add your API access token in Settings → Developer before analysing.",
+          "This build isn’t connected to the analysis server yet. Add its access token in Developer settings.",
         );
       if (rr.prefs.region !== "MY")
         throw Error(
-          "Live legal analysis currently supports Malaysia. Change the region in Settings.",
+          "Live analysis supports Malaysia only. Set the region to Malaysia in Developer settings.",
         );
       let id = file?.id;
       if (!id) {
@@ -687,7 +689,7 @@ export function StandardAnalysis() {
                 color: C.muted,
               }}
             >
-              Long clips can take up to an hour. I’ll notify you when it’s done.
+              Long clips take a while. Keep Click-to-Safe open and I’ll flag it when it’s done.
             </T>
             <Quiet title="Back to home" onPress={() => go("home")} />
           </View>
@@ -728,6 +730,7 @@ export function StandardAnalysis() {
         {running && stage === 1 && <ScanSweep />}
       </View>
       <StageDots stage={stage} preparing={preparing} />
+      <Announce message={caption[0]} />
       {/* The caption changes in place: a short fade and rise, never a blank. */}
       <FadeArrival identity={`${j.id}-${caption[0]}`} distance={8} duration={320}>
         <View style={{ minHeight: 84, marginTop: 12, marginBottom: 4, paddingLeft: 40 }}>
@@ -978,7 +981,7 @@ function CostTotal({ value, note, settled }: { value: number | null; note: strin
         marginTop: 6,
         borderWidth: 1.5,
         borderStyle: "dashed",
-        borderColor: "#C9CDD4",
+        borderColor: C.lineHover,
         borderRadius: 16,
         paddingVertical: 10,
         paddingHorizontal: 14,
@@ -1004,13 +1007,16 @@ function CostTotal({ value, note, settled }: { value: number | null; note: strin
   );
 }
 
+const PAGE = 30;
 export function StandardImpact() {
   const rr = useRoad(),
     store = useStore();
   const [period, setPeriod] = useState(0),
     [status, setStatus] = useState(0),
     [plate, setPlate] = useState(""),
-    [offence, setOffence] = useState("");
+    [offence, setOffence] = useState(""),
+    // Live history can grow without bound; rows render a page at a time inside the scroll view.
+    [shown, setShown] = useState(PAGE);
   const [remote, setRemote] = useState<Awaited<
     ReturnType<typeof store.getImpact>
   > | null>(null);
@@ -1077,22 +1083,18 @@ export function StandardImpact() {
   };
   const { width } = useWindowDimensions();
   return (
-    <Page title="Impact" gap={0}>
+    <Page
+      title="Impact"
+      gap={0}
+      onRefresh={rr.prefs.demo ? undefined : () => void rr.syncCases(true).catch(showError)}
+      refreshing={rr.syncingCases}
+    >
       <View style={{ marginBottom: 18 }}>
         <Intro
           title="Your impact. Their problem."
           body="I keep receipts. Karma loves paperwork."
         />
       </View>
-      {!rr.prefs.demo && (
-        <View style={{ marginTop: -12, marginBottom: 6, alignItems: "flex-start" }}>
-          <Quiet
-            title={rr.syncingCases ? "Syncing server cases…" : "Sync server cases"}
-            disabled={rr.syncingCases}
-            onPress={() => void rr.syncCases(true).catch(showError)}
-          />
-        </View>
-      )}
       {!!rr.historyError && (
         <View style={{ marginBottom: 12 }}>
           <Notice error>{rr.historyError}</Notice>
@@ -1169,7 +1171,7 @@ export function StandardImpact() {
                   fontWeight: "800",
                   letterSpacing: 1.2,
                   color: C.ink,
-                  backgroundColor: "#F5F5F0",
+                  backgroundColor: C.paper,
                   paddingHorizontal: 11,
                   paddingVertical: 6,
                   borderRadius: 7,
@@ -1188,7 +1190,7 @@ export function StandardImpact() {
               fontSize: width < 350 ? 16 : 17,
               lineHeight: 22,
               fontWeight: top ? "800" : "600",
-              color: top ? "#FF9B8F" : "#C9CDD4",
+              color: top ? C.penaltyLight : C.lineHover,
             }}
           >
             {meterLine}
@@ -1310,7 +1312,7 @@ export function StandardImpact() {
         </View>
       )}
       <View>
-        {list.map((c, i) => (
+        {list.slice(0, shown).map((c, i) => (
           <Arrival key={c.id} delay={320 + Math.min(i, 5) * 45} distance={10}>
             <Pressable
               accessibilityRole="button"
@@ -1377,7 +1379,7 @@ export function StandardImpact() {
                   fontWeight: "700",
                   color:
                     c.reporting.status === "sent"
-                      ? "#15803D"
+                      ? C.green
                       : c.reporting.status === "needs_info"
                         ? C.warning
                         : C.ink,
@@ -1388,11 +1390,32 @@ export function StandardImpact() {
             </Pressable>
           </Arrival>
         ))}
-        {!list.length && (
-          <T style={{ marginTop: 14, fontSize: 18, lineHeight: 26, color: C.muted }}>
-            Nothing here. Suspiciously well-behaved.
-          </T>
+        {list.length > shown && (
+          <TextLink
+            title={`Show ${Math.min(PAGE, list.length - shown)} more`}
+            weight="600"
+            onPress={() => setShown(shown + PAGE)}
+          />
         )}
+        {!list.length &&
+          (rr.cases.length ? (
+            <T style={{ marginTop: 14, fontSize: 18, lineHeight: 26, color: C.muted }}>
+              Nothing here. Suspiciously well-behaved.
+            </T>
+          ) : (
+            // First use: say where cases come from and offer the way in.
+            <View style={{ marginTop: 14, alignItems: "flex-start" }}>
+              <T style={{ fontSize: 18, lineHeight: 26, color: C.muted }}>
+                No reports yet. Analyse a clip and it lands here.
+              </T>
+              <TextLink
+                title="Analyse a clip"
+                weight="600"
+                align="flex-start"
+                onPress={() => go("clip")}
+              />
+            </View>
+          ))}
       </View>
       {remoteError && (
         <T style={s.muted}>
@@ -1459,7 +1482,7 @@ function ReceiptArt({ kind, index }: { kind: "reported" | "billed"; index: numbe
             <AnimatedArtPath
               key={i}
               d={d}
-              stroke="#C9CDD4"
+              stroke={C.lineHover}
               strokeWidth={2}
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -1819,7 +1842,7 @@ export function Work() {
                     lineHeight: 18,
                     // Menlo has no 500; anything above 400 renders as its bold.
                     fontWeight: "400",
-                    color: "#1E3A8A",
+                    color: C.code,
                   }}
                 >
                   {/* The reference flattens nesting to a one-space indent so long lines wrap less. */}

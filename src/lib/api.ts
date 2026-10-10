@@ -158,7 +158,7 @@ export async function analyseVideo(
   region: "MY" | "SG" | "JP" = "MY",
 ) {
   if (!settings.token.trim())
-    throw new Error("Add your API access token in Settings to analyse videos.");
+    throw new Error("This build isn’t connected to the analysis server yet. Add its access token in Developer settings.");
   let uri =
     i.remoteApiUrl === validateApiUrl(settings.apiUrl)
       ? i.remoteUri

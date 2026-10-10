@@ -50,6 +50,7 @@ import {
   T,
   TextLink,
   go,
+  haptic,
   showError,
   styles as s,
 } from "./ui";
@@ -237,7 +238,7 @@ function Evidence({
                 height: 12,
                 marginLeft: -2,
                 borderRadius: 2,
-                backgroundColor: "#4F8BFF",
+                backgroundColor: C.gemPhoto,
               }}
             />
           ))}
@@ -441,7 +442,7 @@ function FactBox({
           ? C.accent
           : missing
             ? inAsk
-              ? "#F3B46B"
+              ? C.amberLine
               : C.warning
             : C.line,
         backgroundColor: C.bg,
@@ -499,11 +500,13 @@ function FactInput({
       inAsk={inAsk}
     >
       <TextInput
+        maxFontSizeMultiplier={1.6}
         accessibilityLabel={label}
         value={value}
         onChangeText={onChangeText}
         multiline={multiline}
-        placeholderTextColor="#7B5B3F"
+        returnKeyType={multiline ? "default" : "done"}
+        placeholderTextColor={C.prompt}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         style={{
@@ -531,31 +534,36 @@ export function Review() {
   const queue = pendingCases(rr.cases);
   const c = rr.cases.find((c) => c.id === rr.selected) || queue[0];
   const index = c ? queue.indexOf(c) : -1;
+  const sentCount = rr.cases.filter((x) => x.reporting.status === "sent").length;
   return c ? (
     <CaseReview key={c.id} c={c} index={index} />
   ) : (
-    <Page title="Cases" headerLeft={<View />}>
+    <Page
+      title="Cases"
+      headerLeft={<View />}
+      onRefresh={rr.prefs.demo ? undefined : () => void rr.syncCases(true).catch(showError)}
+      refreshing={rr.syncingCases}
+    >
+      {/* First use and "everything is sent" are different empty states. */}
       <Intro
-        title="I can’t snitch on thin air."
+        title={sentCount ? "All caught up." : "I can’t snitch on thin air."}
         body={
           rr.syncingCases
             ? "Checking the server for shared cases…"
-            : "Give me a clip. I’ll check for clown behaviour."
+            : sentCount
+              ? `Nothing needs you. Your ${sentCount === 1 ? "sent report lives" : `${sentCount} sent reports live`} in Impact.`
+              : "Give me a clip. I’ll check for clown behaviour."
         }
       />
-      {!rr.prefs.demo && (
-        <Quiet
-          title={rr.syncingCases ? "Syncing cases…" : "Sync server cases"}
-          disabled={rr.syncingCases}
-          onPress={() => void rr.syncCases(true).catch(showError)}
-        />
-      )}
       {!!rr.historyError && <Notice error>{rr.historyError}</Notice>}
       <Action
         title="Analyse a clip"
         leading={(pressed) => <Spark size={20} pressed={pressed} />}
         onPress={() => go("clip")}
       />
+      {sentCount > 0 && (
+        <TextLink title="See your impact" weight="600" onPress={() => go("impact")} />
+      )}
     </Page>
   );
 }
@@ -661,6 +669,8 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
       await rr.changeCase(c.id, {
         reporting: { status: "opened", confirmedByUser: false },
       });
+      // The handoff reads the selected case; this one may be showing only as the queue's first.
+      rr.select(c.id);
       go("handoff");
     } catch (e) {
       showError(e);
@@ -773,7 +783,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
             fontSize: 13,
             lineHeight: 16,
             fontWeight: "700",
-            color: locked ? "#15803D" : C.ink,
+            color: locked ? C.green : C.ink,
           }}
         >
           {labels[c.reporting.status]}
@@ -940,6 +950,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                     }}
                     disabled={locked}
                     onPress={() => {
+                      haptic.select();
                       update({
                         offences: c.offences.map((f) =>
                           f.id === o.id ? { ...f, included: !f.included } : f,
@@ -1017,7 +1028,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                         marginTop: 6,
                         fontSize: 13,
                         lineHeight: 17,
-                        color: "#C81E1E",
+                        color: C.penalty,
                         fontWeight: "700",
                       }}
                     >
@@ -1090,10 +1101,12 @@ export function Handoff() {
   if (!c)
     return (
       <Page title="WhatsApp" nav={false}>
-        <Action title="Back to Review" onPress={() => go("review")} />
+        <Action title="Back to Cases" onPress={() => go("review")} />
       </Page>
     );
   const sent = c.reporting.status === "sent";
+  const localClip =
+    !c.provenance.isDemo && !!c.evidence.originalVideoUrl?.startsWith("file:");
   // Points already on the licence plus other Sent reports for this plate: where the bar starts.
   const before =
     (licenceRecord(c)?.points ?? 0) +
@@ -1106,6 +1119,7 @@ export function Handoff() {
       )
       .reduce((n, x) => n + casePoints(x), 0);
   const confirm = async () => {
+    haptic.tap();
     setBusy(true);
     setCelebrating(true);
     try {
@@ -1181,20 +1195,25 @@ export function Handoff() {
             body={
               c.evidence.excerptVideoUrl?.startsWith("https://")
                 ? "Tap Send in WhatsApp, then tell me here."
-                : "Attach the clip, tap Send in WhatsApp, then tell me here."
+                : localClip
+                  ? "Tap Send in WhatsApp, then share the clip to the same chat."
+                  : "Attach the clip, tap Send in WhatsApp, then tell me here."
             }
           />
           <StateCard c={c} sent={celebrating} />
-          {!c.provenance.isDemo &&
-            c.evidence.originalVideoUrl?.startsWith("file:") && (
-              <Action
-                title="Share original clip"
-                secondary
-                icon="Upload"
-                disabled={busy}
-                onPress={() => void shareOriginal(c).catch(showError)}
-              />
-            )}
+          {/* openWhatsAppDraft also copies the report, so say so instead of overwriting silently. */}
+          <T style={{ marginTop: -12, marginBottom: 12, fontSize: 13, lineHeight: 18, color: C.muted }}>
+            The report text is on your clipboard too, in case WhatsApp drops it.
+          </T>
+          {localClip && (
+            <Action
+              title="Share original clip"
+              secondary
+              icon="Upload"
+              disabled={busy}
+              onPress={() => void shareOriginal(c).catch(showError)}
+            />
+          )}
         </>
       )}
     </Page>
@@ -1223,8 +1242,13 @@ function SentReceipt({
       undoOnLeave.started = "";
     };
   }, [c.id]);
-  // The whole page jumps a little as the Reported stamp lands.
+  // The whole page jumps a little as the Reported stamp lands, and the phone taps back.
   const jolt = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!foreground) return;
+    const thud = setTimeout(haptic.success, reduced ? 0 : RECEIPT_STAMP_AT + 330);
+    return () => clearTimeout(thud);
+  }, [reduced, foreground]);
   useEffect(() => {
     if (reduced || !foreground) return;
     const a = Animated.sequence([
@@ -1324,7 +1348,7 @@ function StateCard({ c, sent }: { c: RoadCase; sent: boolean }) {
           alignItems: "center",
           justifyContent: "space-between",
           gap: 12,
-          backgroundColor: tone.interpolate({ inputRange: [0, 1], outputRange: [C.surface, "#E8F6EC"] }),
+          backgroundColor: tone.interpolate({ inputRange: [0, 1], outputRange: [C.surface, C.mint] }),
         }}
       >
         <Plate value={c.vehicle.plate} />
@@ -1337,11 +1361,11 @@ function StateCard({ c, sent }: { c: RoadCase; sent: boolean }) {
               paddingHorizontal: 12,
               paddingVertical: 8,
               borderRadius: 999,
-              backgroundColor: sent ? "#E8F6EC" : C.lilac,
+              backgroundColor: sent ? C.mint : C.lilac,
             }}
           >
             {sent ? (
-              <DrawCheck color="#15803D" />
+              <DrawCheck color={C.green} />
             ) : (
               <Icon name="MessageCircle" size={16} />
             )}
@@ -1350,7 +1374,7 @@ function StateCard({ c, sent }: { c: RoadCase; sent: boolean }) {
                 fontSize: sent ? 17 : 14,
                 lineHeight: sent ? 20 : 18,
                 fontWeight: "700",
-                color: sent ? "#15803D" : C.ink,
+                color: sent ? C.green : C.ink,
               }}
             >
               {sent ? "Sent" : "Draft opened"}

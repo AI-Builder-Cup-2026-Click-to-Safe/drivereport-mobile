@@ -8,6 +8,8 @@ import {
 } from "react-native";
 import { Arrival } from "./standard-ui";
 import * as DocumentPicker from "expo-document-picker";
+import Constants from "expo-constants";
+import * as Device from "expo-device";
 import * as FS from "expo-file-system/legacy";
 import { useStore } from "../lib/store";
 import { checkConnection } from "../lib/api";
@@ -18,6 +20,7 @@ import {
   Action,
   C,
   Field,
+  Segments,
   Icon,
   Intro,
   Notice,
@@ -26,6 +29,7 @@ import {
   T,
   Toggle,
   go,
+  notify,
   showError,
   focusControl,
   styles as s,
@@ -208,7 +212,7 @@ export function Developer() {
         </View>
       )}
       <Action
-        title="Analyse video"
+        title="Analyse with Gemini"
         icon="ArrowRight"
         disabled={!file || busy || rr.job?.status === "running"}
         onPress={analyse}
@@ -319,6 +323,19 @@ export function Developer() {
           }
         />
       </View>
+      {/* Region moved here when Settings took the submission's two groups; live analysis needs MY. */}
+      <View style={{ gap: 8 }}>
+        <T style={{ fontWeight: "700" }}>Region</T>
+        <Segments
+          items={(["MY", "SG", "JP"] as const).map((r) => regionNames[r])}
+          value={(["MY", "SG", "JP"] as const).indexOf(rr.prefs.region)}
+          onChange={(i) =>
+            void rr
+              .setPrefs({ region: (["MY", "SG", "JP"] as const)[i] })
+              .catch(showError)
+          }
+        />
+      </View>
       <T style={s.muted}>
         {rr.prefs.demo
           ? "Demo cases and motion previews are separate from your real footage."
@@ -338,7 +355,7 @@ export function Developer() {
               disabled={rr.job?.status === "running"}
               onPress={() => {
                 setChosen(i.id);
-                setMessage("Clip selected. Tap Analyse video to upload.");
+                setMessage("Clip selected. Tap Analyse with Gemini to upload.");
               }}
             />
           </View>
@@ -363,6 +380,9 @@ export function Settings() {
     includePersonal: p.includePersonal,
   });
   const [saving, setSaving] = useState(false);
+  const [versionTaps, setVersionTaps] = useState(0);
+  const developerVisible =
+    __DEV__ || !Device.isDevice || p.developer || versionTaps >= 5;
   const saveAndClose = (
     patch: Parameters<typeof rr.setPrefs>[0],
     ref: React.RefObject<View | null>,
@@ -524,7 +544,7 @@ export function Settings() {
         <SettingsRow
           icon="Languages"
           title="English format"
-          note="Dates and spelling"
+          note={p.language === "en-GB" ? "Dates read as 3 Oct" : "Dates read as Oct 3"}
           onPress={() => {
             const options = ["English (UK)", "English (US)"];
             if (Platform.OS === "ios")
@@ -574,13 +594,34 @@ export function Settings() {
           <Notice>{message}</Notice>
         </View>
       )}
-      <View style={{ marginTop: 18, alignItems: "center" }}>
-        <Quiet title="Developer" icon="Settings" onPress={() => go("developer")} />
+      <View style={{ marginTop: 18, alignItems: "center", gap: 2 }}>
+        {developerVisible && (
+          <Quiet title="Developer" icon="Settings" onPress={() => go("developer")} />
+        )}
+        {/* Five taps unlock Developer on release builds, the way iOS hides build tools. */}
+        <Pressable
+          accessibilityRole="text"
+          accessibilityLabel={`Version ${appVersion}`}
+          onPress={() => {
+            const taps = versionTaps + 1;
+            setVersionTaps(taps);
+            if (taps === 5 && !p.developer) {
+              void rr.setPrefs({ developer: true }).catch(showError);
+              notify("Developer settings unlocked.");
+            }
+          }}
+          style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 12 }}
+        >
+          <T style={{ fontSize: 13, lineHeight: 16, color: C.muted }}>
+            Version {appVersion}
+          </T>
+        </Pressable>
       </View>
     </Page>
   );
 }
 const setNote = { fontSize: 13, lineHeight: 19, color: C.muted };
+const appVersion = `${Constants.expoConfig?.version ?? "1.0.0"} (${Constants.expoConfig?.ios?.buildNumber ?? "1"})`;
 function SettingsGroup({
   title,
   index,
