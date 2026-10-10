@@ -11,7 +11,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.aibuildercup.clicktosafe2",
-      "buildNumber": "5",
+      "buildNumber": "6",
       "infoPlist": {
         "LSApplicationQueriesSchemes": [
           "whatsapp"
