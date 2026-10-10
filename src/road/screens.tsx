@@ -581,6 +581,24 @@ export function Settings() {
           }
         />
       </SettingsGroup>
+      {/* feat/standard-design's Footage section. Both rows report fixed behaviour, not preferences:
+          recordings import as protected (never rotated out) and are kept for Share original clip;
+          face blurring waits on annotated evidence from the server. */}
+      <SettingsGroup title="Footage" index={2}>
+        <SettingsRow
+          icon="Video"
+          title="Keep original recordings"
+          note="Original clips stay on this device."
+          status="on"
+          trailing={<Icon name="Check" size={20} />}
+        />
+        <SettingsRow
+          icon="UserRound"
+          title="Blur unrelated faces"
+          note="Unavailable until annotated evidence is connected."
+          status="unavailable"
+        />
+      </SettingsGroup>
       {message && (
         <View style={{ marginTop: 16 }}>
           <Notice>{message}</Notice>
@@ -664,6 +682,7 @@ function SettingsRow({
   trailing,
   onPress,
   controlRef,
+  status,
 }: {
   icon: React.ComponentProps<typeof Icon>["name"];
   title: string;
@@ -672,6 +691,8 @@ function SettingsRow({
   trailing?: React.ReactNode;
   onPress?: () => void;
   controlRef?: React.Ref<View>;
+  /** A read-only row's state ("on", "unavailable"); VoiceOver reads the row as one item. */
+  status?: string;
 }) {
   const Row = onPress ? Pressable : View;
   return (
@@ -684,7 +705,9 @@ function SettingsRow({
             accessibilityLabel: title,
             accessibilityState: open === undefined ? undefined : { expanded: open },
           }
-        : {})}
+        : status
+          ? { accessible: true, accessibilityLabel: `${title}, ${status}. ${note}` }
+          : {})}
       style={{
         minHeight: 60,
         paddingVertical: 8,
