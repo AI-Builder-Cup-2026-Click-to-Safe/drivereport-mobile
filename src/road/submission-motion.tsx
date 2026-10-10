@@ -13,6 +13,8 @@ import { shortDate } from "./format";
 import { T, C, styles as s } from "./ui";
 import { Plate } from "./standard-ui";
 
+/** When the REPORTED stamp hits the paper, measured from its delay; the page jolt keys off this. */
+export const STAMP_LAND_MS = 170;
 export function Stamp({
   children,
   delay = 0,
@@ -23,13 +25,32 @@ export function Stamp({
   useEffect(() => {
     v.setValue(reduced || !foreground ? 1 : 0);
     if (reduced || !foreground) return;
-    const a = Animated.timing(v, {
-      toValue: 1,
-      duration: reported ? 480 : 460,
-      delay,
-      easing: Easing.bezier(0.16, 1, 0.3, 1),
-      useNativeDriver: true,
-    });
+    const a = reported
+      ? // The stamp falls (accelerating) onto the paper and lands at a known moment, then settles
+        // while the page takes the hit. An ease-out slam landed after ~80ms and drifted for 400ms,
+        // so the jolt read as a second, separate animation.
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(v, {
+            toValue: 0.7,
+            duration: STAMP_LAND_MS,
+            easing: Easing.in(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(v, {
+            toValue: 1,
+            duration: 300,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }),
+        ])
+      : Animated.timing(v, {
+          toValue: 1,
+          duration: 460,
+          delay,
+          easing: Easing.bezier(0.16, 1, 0.3, 1),
+          useNativeDriver: true,
+        });
     a.start();
     return () => a.stop();
   }, [v, reduced, foreground, delay, reported]);
@@ -37,7 +58,12 @@ export function Stamp({
   return (
     <Animated.View
       style={{
-        opacity: v.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0, 1, 1] }),
+        opacity: v.interpolate(
+          reported
+            ? // Visible for most of the fall, not only at the last instant.
+              { inputRange: [0, 0.25, 1], outputRange: [0, 1, 1] }
+            : { inputRange: [0, 0.7, 1], outputRange: [0, 1, 1] },
+        ),
         transform: [
           {
             scale: v.interpolate({

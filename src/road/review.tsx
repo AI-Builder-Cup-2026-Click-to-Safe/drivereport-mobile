@@ -32,6 +32,7 @@ import {
   PointsChip,
   RECEIPT_STAMP_AT,
   Receipt,
+  STAMP_LAND_MS,
   receiptOutcome,
   Stamp,
   SampleOverlay,
@@ -1247,21 +1248,23 @@ function SentReceipt({
   }, [c.id]);
   // The whole page jumps a little as the Reported stamp lands, and the phone taps back.
   const jolt = useRef(new Animated.Value(0)).current;
+  // One frame before the stamp lands, so the hit and the jolt are a single beat.
+  const impact = RECEIPT_STAMP_AT + STAMP_LAND_MS - 16;
   useEffect(() => {
     if (!foreground) return;
-    const thud = setTimeout(haptic.success, reduced ? 0 : RECEIPT_STAMP_AT + 330);
+    const thud = setTimeout(haptic.success, reduced ? 0 : impact);
     return () => clearTimeout(thud);
-  }, [reduced, foreground]);
+  }, [reduced, foreground, impact]);
   useEffect(() => {
     if (reduced || !foreground) return;
     const a = Animated.sequence([
-      Animated.delay(RECEIPT_STAMP_AT + 330),
-      Animated.timing(jolt, { toValue: 1, duration: 80, easing: Easing.out(Easing.quad), useNativeDriver: true }),
-      Animated.timing(jolt, { toValue: 0, duration: 200, easing: Easing.bezier(0.16, 1, 0.3, 1), useNativeDriver: true }),
+      Animated.delay(impact),
+      Animated.timing(jolt, { toValue: 1, duration: 70, easing: Easing.out(Easing.quad), useNativeDriver: true }),
+      Animated.timing(jolt, { toValue: 0, duration: 220, easing: Easing.bezier(0.16, 1, 0.3, 1), useNativeDriver: true }),
     ]);
     a.start();
     return () => a.stop();
-  }, [jolt, reduced, foreground]);
+  }, [jolt, reduced, foreground, impact]);
   return (
     <Animated.View
       style={{
