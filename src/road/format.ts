@@ -33,3 +33,40 @@ export function shortDate(
 /** Uppercase with single spaces, the way a plate is printed. */
 export const typedPlate = (value: string) =>
   value.toUpperCase().replace(/\s+/g, " ").trimStart();
+
+/** "GMT+8" for an IANA zone, the way the reference labels incident times. */
+export function zoneLabel(timeZone: string, at = new Date()) {
+  if (/^(GMT|UTC)/.test(timeZone)) return timeZone;
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+    }).formatToParts(at);
+    const part = (type: string) =>
+      Number(parts.find((p) => p.type === type)?.value);
+    const local = Date.UTC(
+      part("year"),
+      part("month") - 1,
+      part("day"),
+      part("hour"),
+      part("minute"),
+    );
+    const minutes = Math.round(
+      (local - Math.floor(at.getTime() / 60000) * 60000) / 60000,
+    );
+    if (!Number.isFinite(minutes)) return timeZone;
+    const sign = minutes < 0 ? "-" : "+";
+    const h = Math.floor(Math.abs(minutes) / 60);
+    const m = Math.abs(minutes) % 60;
+    return minutes
+      ? `GMT${sign}${h}${m ? `:${String(m).padStart(2, "0")}` : ""}`
+      : "GMT";
+  } catch {
+    return timeZone;
+  }
+}
