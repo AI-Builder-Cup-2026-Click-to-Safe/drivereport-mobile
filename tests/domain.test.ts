@@ -135,3 +135,12 @@ test("accepts secure API hosts only and formats timestamps", () => {
   assert.throws(() => validateApiUrl("https://user:secret@example.com"));
   assert.equal(timecode(65.2), "01:05");
 });
+
+test("keeps server cost including zero, without treating missing or invalid cost as free", () => {
+  for (const value of [0, 0.03456789]) {
+    assert.equal(parseReview({ reportable: [], verdict: "", estimated_ai_cost_usd: value }).estimated_ai_cost_usd, value);
+  }
+  for (const value of [undefined, null, -1, Infinity, "0.1"]) {
+    assert.equal(parseReview({ reportable: [], verdict: "", estimated_ai_cost_usd: value }).estimated_ai_cost_usd, undefined);
+  }
+});

@@ -1,5 +1,5 @@
 import { MAX_VIDEO_BYTES } from "../lib/video-policy";
-import { lawPlaceholder } from "./analysis-progress";
+import { lawPlaceholder, reviewCost } from "./analysis-progress";
 import React, { useEffect, useState } from "react";
 import {
   ActionSheetIOS,
@@ -534,6 +534,10 @@ export function StandardAnalysis() {
     rr.allCases.find((c) => j.caseIds.includes(c.id)) ||
     (demo ? (submissionFixtures.allCases[0] as RoadCase) : undefined);
   const file = store.records.find((r) => j.sourceIds.includes(r.id));
+  const liveCost = reviewCost(
+    done ? j.sourceIds.map((id) => store.records.find((r) => r.id === id)?.result?.estimated_ai_cost_usd) : [],
+    running,
+  );
   const preparingUpload = file?.stage === "preparing" && running;
   const f =
     demo && running && stage < 4
@@ -798,8 +802,8 @@ export function StandardAnalysis() {
         </Arrival>
       )}
       {!preparing && !preparingUpload && <CostTotal
-        value={demo ? cost : null}
-        note={demo ? "24 s clip" : "Not reported by the server"}
+        value={demo ? cost : liveCost.value}
+        note={demo ? "Demo estimate · 24 s clip" : liveCost.note}
         settled={done}
       />}
       {!running && !done && (

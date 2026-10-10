@@ -8,3 +8,15 @@ export function lawPlaceholder(stage: number, done: boolean, hasIncludedOffences
     wait: false,
   };
 }
+
+// Only present a total when every source has a server estimate. Old reviews
+// and failed runs must not look like free analysis or a complete partial total.
+export function reviewCost(values: (number | undefined)[], running: boolean) {
+  if (running) return { value: null, note: "Calculated after analysis" };
+  if (!values.length || values.some((n) => n === undefined || !Number.isFinite(n) || n < 0))
+    return { value: null, note: "Not available for this review" };
+  return {
+    value: values.reduce<number>((sum, n) => sum + (n ?? 0), 0),
+    note: "Gemini tokens only · USD",
+  };
+}

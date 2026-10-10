@@ -19,6 +19,7 @@ export type Review = {
   verdict: string;
   reportable: Finding[];
   follow_up_exhausted: boolean;
+  estimated_ai_cost_usd?: number;
   review_id?: string;
   created_at?: string;
   case?: unknown;
@@ -149,6 +150,10 @@ export function parseReview(input: unknown): Review {
   const httpsUrl = (v: unknown) =>
     typeof v === "string" && v.startsWith("https://") ? v : undefined;
   return {
+    estimated_ai_cost_usd:
+      typeof r.estimated_ai_cost_usd === "number" &&
+      Number.isFinite(r.estimated_ai_cost_usd) && r.estimated_ai_cost_usd >= 0
+        ? r.estimated_ai_cost_usd : undefined,
     verdict: r.verdict,
     reportable,
     follow_up_exhausted: r.follow_up_exhausted === true,
