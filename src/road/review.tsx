@@ -81,11 +81,13 @@ function RealVideo({
   seek,
   revision,
   onTime,
+  caption,
 }: {
   uri: string;
   seek: number;
   revision: number;
   onTime: (time: number) => void;
+  caption?: string;
 }) {
   const [failed, setFailed] = useState(false);
   const player = useVideoPlayer(uri, (p) => {
@@ -116,17 +118,50 @@ function RealVideo({
       available.
     </Notice>
   ) : (
-    <VideoView
-      player={player}
-      nativeControls
-      contentFit="contain"
-      style={{
-        width: "100%",
-        height: 220,
-        borderRadius: 10,
-        backgroundColor: C.dark,
-      }}
-    />
+    <View>
+      <VideoView
+        player={player}
+        nativeControls
+        contentFit="contain"
+        style={{
+          width: "100%",
+          height: 220,
+          borderRadius: 10,
+          backgroundColor: C.dark,
+        }}
+      />
+      {/* What Gemini saw at this moment, as a subtitle above the native controls. */}
+      {!!caption && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            left: 10,
+            right: 10,
+            bottom: 52,
+            alignItems: "center",
+          }}
+        >
+          <T
+            numberOfLines={3}
+            style={{
+              fontSize: 13,
+              lineHeight: 18,
+              color: "white",
+              fontWeight: "600",
+              textAlign: "center",
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              borderRadius: 6,
+              overflow: "hidden",
+              backgroundColor: "#111318BD",
+            }}
+          >
+            {caption}
+          </T>
+        </View>
+      )}
+    </View>
   );
 }
 function Evidence({
@@ -134,11 +169,13 @@ function Evidence({
   seek,
   revision,
   onTime,
+  subtitle,
 }: {
   c: RoadCase;
   seek: number;
   revision: number;
   onTime: (time: number) => void;
+  subtitle?: string;
 }) {
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(Math.max(0, seek));
@@ -274,6 +311,7 @@ function Evidence({
       seek={seek}
       revision={revision}
       onTime={onTime}
+      caption={subtitle}
     />
   ) : (
     <Notice error>Original evidence is unavailable.</Notice>
@@ -802,10 +840,13 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
         </View>
       )}
       <View style={{ gap: 8 }}>
-        <Evidence c={c} seek={seek} revision={revision} onTime={setPlayhead} />
-        {line && !c.provenance.isDemo && (
-          <T style={{ color: C.accent, fontSize: 13 }}>{line.event}</T>
-        )}
+        <Evidence
+          c={c}
+          seek={seek}
+          revision={revision}
+          onTime={setPlayhead}
+          subtitle={line?.event}
+        />
       </View>
       <View
         style={{
