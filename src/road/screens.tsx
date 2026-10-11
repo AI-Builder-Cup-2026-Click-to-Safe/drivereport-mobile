@@ -295,7 +295,13 @@ export function Settings() {
     p = rr.prefs;
   const jpjDefault =
     (p.recipients.MY || MALAYSIA_JPJ_WHATSAPP) === MALAYSIA_JPJ_WHATSAPP;
-  const [recipient, setRecipient] = useState(p.recipients[p.region]),
+  // The number reports go to now, so the field opens on it rather than empty.
+  const current =
+    p.region === "MY"
+      ? p.recipients.MY || MALAYSIA_JPJ_WHATSAPP
+      : p.recipients[p.region];
+  const shown = current ? `+${current}` : "";
+  const [recipient, setRecipient] = useState(shown),
     [open, setOpen] = useState(""),
     [message, setMessage] = useState("");
   const recipientRef = useRef<View>(null),
@@ -325,10 +331,7 @@ export function Settings() {
       .catch(showError)
       .finally(() => setSaving(false));
   };
-  useEffect(
-    () => setRecipient(p.recipients[p.region]),
-    [p.region, p.recipients],
-  );
+  useEffect(() => setRecipient(shown), [shown]);
   const save = (patch: Parameters<typeof rr.setPrefs>[0]) =>
     void rr.setPrefs(patch).catch(showError);
   // Settings: Reporting, Preferences and Footage groups of 60pt rows, without dividers.
