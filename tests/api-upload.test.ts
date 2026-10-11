@@ -5,13 +5,14 @@ import { URL } from "node:url";
 import { createRequire } from "node:module";
 import { reviewWindowMinutes } from "../src/lib/video-policy.ts";
 import { validateApiUrl, parseReview } from "../src/lib/domain.ts";
+import { parseReviewHistory } from "../src/lib/history.ts";
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
 const code = ts.transpileModule(readFileSync(new URL("../src/lib/api.ts", import.meta.url), "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS },
 }).outputText;
 
-function client(options: { failPreparation?: boolean } = {}) {
+function client(options: { failPreparation?: boolean; fetch?: (url: string, options: { signal: AbortSignal }) => Promise<unknown> } = {}) {
   const uploads: { file: string; options: { headers: object } }[] = [];
   const requests: { url: string; body: Record<string, unknown> }[] = [];
   let preparations = 0;
@@ -35,18 +36,18 @@ function client(options: { failPreparation?: boolean } = {}) {
         },
       };
       if (name === "./domain") return { validateApiUrl, parseReview };
-      if (name === "./history") return {};
+      if (name === "./history") return { parseReviewHistory };
       throw Error(name);
     },
     module, module.exports,
-    async (url: string, options: { body: string }) => {
+    options.fetch ?? (async (url: string, options: { body: string }) => {
       requests.push({ url, body: JSON.parse(options.body) });
       return { ok: true, json: async () => url.endsWith("/v1/uploads")
         ? { upload_url: "https://storage.googleapis.com/test/silent", video_uri: "gs://test/silent" }
         : { verdict: "Clear", reportable: [] } };
-    },
+    }),
   );
-  return { run: module.exports.analyseVideo, uploads, requests, stats: () => ({ preparations, cleanups }) };
+  return { run: module.exports.analyseVideo, api: module.exports, uploads, requests, stats: () => ({ preparations, cleanups }) };
 }
 const incident = { id: "test", file: "file:///original-with-audio.mp4", mime: "video/mp4", size: 999 };
 const settings = { token: "fixture-not-a-real-token", apiUrl: "https://example.com" };
@@ -91,4 +92,21 @@ test("cancellation after preparation cleans the copy without starting an upload"
   await assert.rejects(c.run(incident, settings, controller.signal, async () => {}), /cancelled/);
   assert.equal(c.requests.length, 0);
   assert.deepEqual(c.stats(), { preparations: 1, cleanups: 1 });
+});
+
+test("a timed-out request explains the timeout instead of React Native's bare 'Aborted'", async () => {
+  const controller = new AbortController();
+  const c = client({
+    // React Native's fetch rejects an aborted request with DOMException("Aborted", "AbortError").
+    fetch: (_url, { signal }) => new Promise((_resolve, reject) =>
+      signal.addEventListener("abort", () => reject(Object.assign(Error("Aborted"), { name: "AbortError" })))),
+  });
+  const history = c.api.listReviewHistory(settings, controller.signal);
+  controller.abort();
+  await assert.rejects(history, /took too long to respond/);
+});
+
+test("network failures that were not aborted keep their own message", async () => {
+  const c = client({ fetch: async () => { throw TypeError("Network request failed"); } });
+  await assert.rejects(c.api.listReviewHistory(settings, new AbortController().signal), /Network request failed/);
 });

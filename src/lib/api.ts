@@ -32,6 +32,13 @@ async function request(
         : {}),
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
+  }).catch((e: unknown) => {
+    // React Native rejects an aborted fetch with a bare "Aborted"; callers abort on timeout.
+    if (signal.aborted)
+      throw new Error(
+        "The server took too long to respond. Check your connection and retry.",
+      );
+    throw e;
   });
   if (!response.ok) {
     if (response.status === 401 || response.status === 403)
