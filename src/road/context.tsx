@@ -572,7 +572,8 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         refreshEvidence,
         syncCases,
         syncingCases,
-        historyError,
+        // Demo mode never syncs, so a live sync's failure must not linger over the sample cases.
+        historyError: prefs.demo ? "" : historyError,
         prepareRecording,
         recordingSaved,
         failRecording,
