@@ -3,6 +3,7 @@ import { lawPlaceholder, reviewCost } from "./analysis-progress";
 import React, { useEffect, useState } from "react";
 import {
   ActionSheetIOS,
+  Alert,
   Animated,
   Easing,
   Image,
@@ -207,6 +208,19 @@ export function Clip() {
   const saved = store.records.filter(
     (r) => r.name !== SAMPLE_VIDEO.name || r.dashcamSession,
   );
+  const remove = (id: string, name: string) =>
+    Alert.alert("Delete this video?", `${name} is removed from this device. This can’t be undone.`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: () =>
+          void store
+            .remove(id)
+            .then(() => setChosen((current) => (current === id ? "" : current)))
+            .catch(showError),
+      },
+    ]);
   const thumbnail = file ? file.thumbnail : sample?.thumbnail;
   const size = file ? file.size : sample?.size;
   const choose = async () => {
@@ -425,20 +439,34 @@ export function Clip() {
       {saved.length > 0 && (
         <Disclosure title="Saved recordings" note={String(saved.length)}>
           {saved.map((r) => (
-            <Pressable
+            <View
               key={r.id}
-              accessibilityRole="button"
-              accessibilityLabel={`Select ${r.name}`}
-              onPress={() => setChosen(r.id)}
               style={{
-                paddingVertical: 12,
+                flexDirection: "row",
+                alignItems: "center",
                 borderBottomWidth: 1,
                 borderColor: C.line,
               }}
             >
-              <T style={{ fontWeight: "600" }}>{r.name}</T>
-              <T style={s.muted}>{(r.size / 1e6).toFixed(1)} MB</T>
-            </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Select ${r.name}`}
+                onPress={() => setChosen(r.id)}
+                style={{ flex: 1, paddingVertical: 12 }}
+              >
+                <T style={{ fontWeight: "600" }}>{r.name}</T>
+                <T style={s.muted}>{(r.size / 1e6).toFixed(1)} MB</T>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Delete ${r.name}`}
+                hitSlop={8}
+                onPress={() => remove(r.id, r.name)}
+                style={{ padding: 10 }}
+              >
+                <Icon name="Trash2" size={18} color={C.muted} />
+              </Pressable>
+            </View>
           ))}
         </Disclosure>
       )}
