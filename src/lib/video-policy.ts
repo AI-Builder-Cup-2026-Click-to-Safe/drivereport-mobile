@@ -1,4 +1,6 @@
 export const MAX_VIDEO_SECONDS = 30 * 60;
+// The server refuses shorter clips: a few frames give Gemini nothing to review.
+export const MIN_VIDEO_SECONDS = 1;
 export const MAX_VIDEO_BYTES = 500 * 1024 * 1024;
 // Leave headroom for the camera container to finish below the upload ceiling.
 export const MAX_CAPTURE_BYTES = 490 * 1024 * 1024;
@@ -7,6 +9,8 @@ export type VideoInfo = { duration: number; audioTracks: number; videoTracks: nu
 export function validateVideo(info: VideoInfo, bytes?: number) {
   if (!Number.isFinite(info.duration) || info.duration <= 0 || info.videoTracks < 1)
     throw new Error("This file has no playable video. Choose another video.");
+  if (info.duration < MIN_VIDEO_SECONDS)
+    throw new Error("Videos must be at least 1 second long. Choose a longer video.");
   if (info.duration > MAX_VIDEO_SECONDS)
     throw new Error("Videos must be 30 minutes or shorter. Trim this video and try again.");
   if (bytes !== undefined && (!Number.isFinite(bytes) || bytes <= 0 || bytes > MAX_VIDEO_BYTES))

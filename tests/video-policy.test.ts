@@ -25,3 +25,8 @@ test("long videos request affordable server windows without changing the source"
   assert.equal(reviewWindowMinutes(1800), 5);
   assert.throws(() => reviewWindowMinutes(NaN), /duration is unavailable/);
 });
+
+test("refuses a clip shorter than a second before anything is uploaded", () => {
+  assert.throws(() => validateVideo({ duration: 0.23, audioTracks: 0, videoTracks: 1 }), /at least 1 second/);
+  assert.doesNotThrow(() => validateVideo({ duration: 1, audioTracks: 0, videoTracks: 1 }));
+});

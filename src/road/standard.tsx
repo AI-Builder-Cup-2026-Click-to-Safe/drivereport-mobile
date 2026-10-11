@@ -247,6 +247,12 @@ export function Clip() {
   const start = async () => {
     setBusy(true);
     try {
+      // Demo dataset mode plays the sample run only: no upload, no Gemini bill.
+      if (rr.prefs.demo) {
+        void rr.begin([], true).catch(showError);
+        go("analysis");
+        return;
+      }
       if (!store.settings.token)
         throw Error(
           "This build isn’t connected to the analysis server yet. Add its access token in Developer settings.",
