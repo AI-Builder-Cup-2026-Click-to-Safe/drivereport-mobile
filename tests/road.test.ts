@@ -15,6 +15,7 @@ import {
   MALAYSIA_JPJ_WHATSAPP,
   missing,
   normalizePlate,
+  playableEvidence,
   recipient,
   reportText,
   validation,
@@ -461,4 +462,39 @@ test("submission sample drafts let the tester choose a chat, never default to JP
   c.provenance.isDemo = false;
   c.region = "MY";
   assert.equal(new URL(whatsapp(c, prefs)).pathname, "/60134498997");
+});
+
+test("the player leads with the annotated copy and falls back to the recording", () => {
+  const local = "file:///var/mobile/clip.mp4";
+  const boxes = "https://storage.googleapis.com/bucket/annotated/abc?sig=x";
+
+  // Both exist: the toggle picks between them.
+  const both = { originalVideoUrl: local, annotatedVideoUrl: boxes };
+  assert.equal(playableEvidence(both, true), boxes);
+  assert.equal(playableEvidence(both, false), local);
+
+  // Not rendered yet, or a clean review: the recording plays either way, so
+  // the screen has nothing to toggle between.
+  const plain = { originalVideoUrl: local, annotatedVideoUrl: null };
+  assert.equal(playableEvidence(plain, true), local);
+  assert.equal(playableEvidence(plain, false), local);
+
+  // A signed link that has gone missing must not be handed to the player.
+  assert.equal(
+    playableEvidence({ originalVideoUrl: local, annotatedVideoUrl: "" }, true),
+    local,
+  );
+  assert.equal(
+    playableEvidence({ originalVideoUrl: null, annotatedVideoUrl: null }, true),
+    null,
+  );
+
+  // Asking for boxes when only the server copy of the original survives.
+  assert.equal(
+    playableEvidence(
+      { originalVideoUrl: "https://example.com/original", annotatedVideoUrl: boxes },
+      true,
+    ),
+    boxes,
+  );
 });
