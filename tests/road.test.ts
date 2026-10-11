@@ -81,6 +81,11 @@ test("report uses case jurisdiction, encoded factual draft and opt-in private de
       { ...prefs, recipients: { ...prefs.recipients, MY: "60111111111" } },
       c,
     ),
+    "60111111111",
+  );
+  // A missing override still reaches JPJ rather than nobody.
+  assert.equal(
+    recipient({ ...prefs, recipients: { ...prefs.recipients, MY: "" } }, c),
     MALAYSIA_JPJ_WHATSAPP,
   );
   assert.ok(whatsapp(c, prefs).startsWith("https://wa.me/60134498997?"));

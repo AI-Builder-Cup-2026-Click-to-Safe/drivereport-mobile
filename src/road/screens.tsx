@@ -32,6 +32,7 @@ import {
 } from "./ui";
 import {
   defaultWhatsAppTestMessage,
+  MALAYSIA_JPJ_WHATSAPP,
   regionNames,
   whatsappTest,
 } from "./model";
@@ -292,6 +293,8 @@ export function Developer() {
 export function Settings() {
   const rr = useRoad(),
     p = rr.prefs;
+  const jpjDefault =
+    (p.recipients.MY || MALAYSIA_JPJ_WHATSAPP) === MALAYSIA_JPJ_WHATSAPP;
   const [recipient, setRecipient] = useState(p.recipients[p.region]),
     [open, setOpen] = useState(""),
     [message, setMessage] = useState("");
@@ -335,9 +338,13 @@ export function Settings() {
         <SettingsRow
           controlRef={recipientRef}
           icon="MessageCircle"
-          title={p.region === "MY" ? "Official JPJ WhatsApp" : "Authority WhatsApp"}
+          title={
+            p.region === "MY" && jpjDefault
+              ? "Official JPJ WhatsApp"
+              : "Authority WhatsApp"
+          }
           note={
-            p.region === "MY"
+            p.region === "MY" && jpjDefault
               ? "+60 13-449 8997"
               : p.recipients[p.region]
                 ? `+${p.recipients[p.region]}`
@@ -349,12 +356,13 @@ export function Settings() {
         {open === "recipient" && (
           <FadeArrival distance={8}>
             <View style={{ gap: 8, paddingTop: 4, paddingBottom: 14 }}>
-              {p.region === "MY" ? (
+              {p.region === "MY" && (
                 <>
                   <Notice>
-                    Live Malaysia reports open a draft to JPJ’s traffic-offence
-                    WhatsApp hotline, +60 13-449 8997. Nothing is sent until you
-                    tap Send in WhatsApp.
+                    {jpjDefault
+                      ? "Live Malaysia reports open a draft to JPJ’s traffic-offence WhatsApp hotline, +60 13-449 8997."
+                      : `Live Malaysia reports now open a draft to +${p.recipients.MY}, not JPJ’s hotline.`}{" "}
+                    Nothing is sent until you tap Send in WhatsApp.
                   </Notice>
                   <T style={setNote}>
                     The draft includes the Case facts and evidence links. JPJ may
@@ -362,7 +370,8 @@ export function Settings() {
                     phone number to investigate the complaint.
                   </T>
                 </>
-              ) : (
+              )}
+              {
                 <>
                   <Field
                     label="Recipient number"
@@ -391,11 +400,23 @@ export function Settings() {
                       );
                     }}
                   />
+                  {p.region === "MY" && !jpjDefault && (
+                    <Quiet
+                      title="Use JPJ hotline again"
+                      onPress={() =>
+                        saveAndClose(
+                          { recipients: { ...p.recipients, MY: MALAYSIA_JPJ_WHATSAPP } },
+                          recipientRef,
+                          "Reports go to JPJ’s hotline again.",
+                        )
+                      }
+                    />
+                  )}
                   <T style={setNote}>
                     Real reports open WhatsApp at this number. Sample clips never do.
                   </T>
                 </>
-              )}
+              }
             </View>
           </FadeArrival>
         )}

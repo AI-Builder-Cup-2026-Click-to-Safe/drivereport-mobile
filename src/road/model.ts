@@ -178,7 +178,7 @@ export function recipient(p: Preferences, c: RoadCase) {
     c.provenance.isDemo
       ? p.testRecipient || ""
       : c.region === "MY"
-        ? MALAYSIA_JPJ_WHATSAPP
+        ? p.recipients.MY || MALAYSIA_JPJ_WHATSAPP
         : p.recipients[c.region]
   ).replace(/[\s()+-]/g, "");
   if (!/^[1-9]\d{7,14}$/.test(v))
