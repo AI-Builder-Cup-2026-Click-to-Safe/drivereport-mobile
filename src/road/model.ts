@@ -676,6 +676,27 @@ export function editCase(c: RoadCase, patch: Partial<RoadCase>): RoadCase {
   };
 }
 
+/** Which recording the evidence player shows.
+ *
+ * The annotated copy is the review made visible — it carries the boxes Gemini
+ * drew — so it leads whenever the server has rendered one. Rendering happens
+ * after the verdict and can fail, and a clean review never produces one at all,
+ * so the untouched recording is both the fallback and the other side of the
+ * toggle. Returns null only when there is nothing to play. */
+export function playableEvidence(
+  evidence: Pick<
+    RoadCase["evidence"],
+    "originalVideoUrl" | "annotatedVideoUrl"
+  >,
+  annotated: boolean,
+): string | null {
+  return (
+    (annotated && https(evidence.annotatedVideoUrl)) ||
+    evidence.originalVideoUrl ||
+    null
+  );
+}
+
 /** iOS may relocate Documents on app updates. Resolve local evidence through the
  * original recording store, which persists filenames instead of container URLs. */
 export function restoreEvidence(

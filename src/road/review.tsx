@@ -23,6 +23,7 @@ import {
   labels,
   missing,
   normalizePlate,
+  playableEvidence,
   reportText,
   validation,
   whatsapp,
@@ -179,6 +180,13 @@ function Evidence({
 }) {
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(Math.max(0, seek));
+  // Default to the annotated copy, which is the point of the review; it only
+  // exists once the server has rendered it, so fall back until it arrives.
+  const [annotated, setAnnotated] = useState(true);
+  const played = playableEvidence(c.evidence, annotated);
+  // Offer the switch only when the two sides really are different recordings.
+  const switchable =
+    playableEvidence(c.evidence, true) !== playableEvidence(c.evidence, false);
   useEffect(() => {
     setTime(Math.max(0, seek));
     setPlaying(false);
@@ -304,17 +312,77 @@ function Evidence({
         </T>
       </View>
     </View>
-  ) : c.evidence.originalVideoUrl ? (
-    <RealVideo
-      key={c.id}
-      uri={c.evidence.originalVideoUrl}
-      seek={seek}
-      revision={revision}
-      onTime={onTime}
-      caption={subtitle}
-    />
+  ) : played ? (
+    <View>
+      <RealVideo
+        key={`${c.id}-${annotated ? "annotated" : "original"}`}
+        uri={played}
+        seek={seek}
+        revision={revision}
+        onTime={onTime}
+        caption={subtitle}
+      />
+      {/* The boxes are the reasoning made visible, so the annotated copy leads;
+          the untouched recording stays one tap away for anyone checking it. */}
+      {switchable && <Lens annotated={annotated} onChange={setAnnotated} />}
+    </View>
   ) : (
     <Notice error>Original evidence is unavailable.</Notice>
+  );
+}
+/** Switches the player between the annotated copy and the untouched recording. */
+function Lens({
+  annotated,
+  onChange,
+}: {
+  annotated: boolean;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        marginTop: 8,
+        padding: 3,
+        borderRadius: 10,
+        backgroundColor: C.surface,
+      }}
+    >
+      {[
+        { on: true, label: "AI analysis", hint: "Play the video with Gemini's boxes" },
+        { on: false, label: "Original", hint: "Play the untouched recording" },
+      ].map((tab) => (
+        <Pressable
+          key={tab.label}
+          accessibilityRole="button"
+          accessibilityState={{ selected: annotated === tab.on }}
+          accessibilityLabel={tab.hint}
+          onPress={() => {
+            if (annotated === tab.on) return;
+            haptic.select();
+            onChange(tab.on);
+          }}
+          style={{
+            flex: 1,
+            minHeight: 36,
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 8,
+            backgroundColor: annotated === tab.on ? C.bg : "transparent",
+          }}
+        >
+          <T
+            style={{
+              fontSize: 13,
+              fontWeight: "600",
+              color: annotated === tab.on ? C.ink : C.muted,
+            }}
+          >
+            {tab.label}
+          </T>
+        </Pressable>
+      ))}
+    </View>
   );
 }
 function DateField({
