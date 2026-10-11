@@ -47,7 +47,7 @@ import {
   Spark,
 } from "./standard-ui";
 import { shortDate } from "./format";
-import { DEMO_STAGE_MS } from "./analysis-timing";
+import { DEMO_STAGE_MS, REVEAL_STAGE_MS } from "./analysis-timing";
 import { SAMPLE_VIDEO, useSamplePreview } from "../lib/sample";
 import { FadeArrival, ImpactBar } from "./motion";
 import {
@@ -507,19 +507,45 @@ export function StandardAnalysis() {
   const rr = useRoad(),
     store = useStore(),
     j = rr.job;
-  const done = j?.status === "complete",
+  const complete = j?.status === "complete",
     running = j?.status === "running";
-  const stage = !j ? 0 : done ? 4 : Math.max(0, j.stage);
   const demo = j?.mode === "demo";
-  // How far the current demo stage has got, so rows and the cost fill in through the stage.
+  // A live review answers all at once. When it finishes on this screen, its real
+  // results are revealed stage by stage, as the demo does, instead of all at once.
+  const [reveal, setReveal] = useState<number | null>(null);
+  const watchedLive = React.useRef<string | null>(null);
+  const jobId = j?.id;
+  useEffect(() => {
+    if (!jobId || demo) return;
+    if (running) watchedLive.current = jobId;
+    else if (complete && watchedLive.current === jobId) {
+      watchedLive.current = null;
+      if (!rr.reduced) setReveal(1);
+    }
+  }, [jobId, running, complete, demo, rr.reduced]);
+  useEffect(() => {
+    if (reveal === null) return;
+    const timer = setTimeout(
+      () => setReveal(reveal >= 3 ? null : reveal + 1),
+      REVEAL_STAGE_MS[reveal],
+    );
+    return () => clearTimeout(timer);
+  }, [reveal]);
+  const revealing = reveal !== null,
+    done = complete && !revealing,
+    busy = running || revealing,
+    animated = demo || revealing;
+  const stage = !j ? 0 : reveal ?? (complete ? 4 : Math.max(0, j.stage));
+  const stageMs = demo ? DEMO_STAGE_MS : REVEAL_STAGE_MS;
+  // How far the current stage has got, so rows and the cost fill in through the stage.
   const [now, setNow] = useState(() => Date.now());
   const [stageStart, setStageStart] = useState(() => Date.now());
   useEffect(() => setStageStart(Date.now()), [j?.id, stage]);
   useEffect(() => {
-    if (!running || !demo) return;
+    if (!busy || !animated) return;
     const timer = setInterval(() => setNow(Date.now()), 200);
     return () => clearInterval(timer);
-  }, [running, demo]);
+  }, [busy, animated]);
   if (!j)
     return (
       <Page title="Gemini at work" nav={false}>
@@ -529,26 +555,26 @@ export function StandardAnalysis() {
     );
   const preparing = j.stage < 0,
     saving = preparing && running;
-  const recordingFailed = preparing && !running && !done;
+  const recordingFailed = preparing && !busy && !done;
   const result =
     rr.allCases.find((c) => j.caseIds.includes(c.id)) ||
     (demo ? (submissionFixtures.allCases[0] as RoadCase) : undefined);
   const file = store.records.find((r) => j.sourceIds.includes(r.id));
   const liveCost = reviewCost(
     done ? j.sourceIds.map((id) => store.records.find((r) => r.id === id)?.result?.estimated_ai_cost_usd) : [],
-    running,
+    busy,
   );
   const preparingUpload = file?.stage === "preparing" && running;
   const f =
-    demo && running && stage < 4
-      ? Math.max(0, Math.min(1, (now - stageStart) / DEMO_STAGE_MS[stage]))
+    animated && busy && stage < 4
+      ? Math.max(0, Math.min(1, (now - stageStart) / stageMs[stage]))
       : 1;
   const narration = result?.analysis?.timeline || [];
   const offences = result?.offences || [];
   const sources = result ? lawSourcesOf(result) : [];
   // Reference stepOf(): how much of the current stage's output has arrived.
   const k =
-    !demo || done || stage < 1
+    !animated || done || stage < 1
       ? 99
       : stage === 1
         ? Math.min(narration.length, Math.floor(f * narration.length * 1.1) + 1)
@@ -575,7 +601,7 @@ export function StandardAnalysis() {
         ]
     : preparingUpload
       ? ["Preparing your video", "Checking the video and removing audio on this device before upload. Keep Click-to-Safe open."]
-    : !running && !done
+    : !busy && !done
       ? ["Analysis interrupted", j.error || "Your recording is still saved."]
       : stage >= 4
         ? verdict(result, adds, record?.points ?? 0)
@@ -594,7 +620,7 @@ export function StandardAnalysis() {
             )[stage];
   // Each stage leaves one result row (reference rows()): Watched, Law, the offence with its points, Record.
   const findings: Finding[] = [];
-  if (result && (done || demo)) {
+  if (result && (done || animated)) {
     if (stage >= 1) {
       const watched = stage >= 2;
       const frames = 24;
@@ -762,7 +788,7 @@ export function StandardAnalysis() {
           />
         )}
         {demo && stage >= 1 && <SampleOverlay caption={line || undefined} />}
-        {running && stage === 1 && <ScanSweep />}
+        {busy && stage === 1 && <ScanSweep />}
       </View>
       {!recordingFailed && <StageDots stage={stage} preparing={preparing || preparingUpload} />}
       <Announce message={caption[0]} />
@@ -770,7 +796,7 @@ export function StandardAnalysis() {
       <FadeArrival identity={`${j.id}-${caption[0]}`} distance={8} duration={320}>
         <View style={{ minHeight: 84, marginTop: 12, marginBottom: 4, paddingLeft: 40 }}>
           <View style={{ position: "absolute", left: 0, top: 2 }}>
-            <DoneSpark working={running && !saving} done={done} />
+            <DoneSpark working={busy && !saving} done={done} />
           </View>
           <T
             accessibilityRole="header"
@@ -806,7 +832,7 @@ export function StandardAnalysis() {
         note={demo ? "Demo estimate · 24 s clip" : liveCost.note}
         settled={done}
       />}
-      {!running && !done && (
+      {!busy && !done && (
         <View style={{ marginTop: 16, gap: 12 }}>
           <Notice error>{j.error || "Analysis interrupted."}</Notice>
           {recordingFailed && (
