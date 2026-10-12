@@ -27,7 +27,8 @@ import {
 } from "./model";
 import { applyReportDefaults, type ReportDefaults } from "./report-defaults";
 import fixtures from "./submission-fixtures.json";
-import { isSubmissionDemo } from "./submission-model";
+import { isSubmissionDemo, pendingCases } from "./submission-model";
+import { mergeCaseHistory } from "./case-history";
 import { DEMO_STAGE_MS } from "./analysis-timing";
 export type Job = {
   id: string;
@@ -222,43 +223,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
           const remote = fetched.flatMap((result) =>
             result.status === "fulfilled" ? result.value : [],
           );
-          const statusByReview = new Map(
-            history.map((item) => [item.reviewId, item.reportingStatus]),
-          );
-          let next = cr.current.map((local) => {
-            const serverStatus = local.reviewId
-              ? statusByReview.get(local.reviewId)
-              : undefined;
-            if (!serverStatus || local.reporting.status === "sent")
-              return local;
-            return {
-              ...local,
-              reporting: {
-                ...local.reporting,
-                status: serverStatus,
-                confirmedByUser: serverStatus === "sent",
-              },
-            };
-          });
-          for (const serverCase of remote) {
-            const index = next.findIndex(
-              (local) =>
-                (local.reviewId && local.reviewId === serverCase.reviewId) ||
-                local.id === serverCase.id,
-            );
-            const serverStatus = serverCase.reviewId
-              ? statusByReview.get(serverCase.reviewId)
-              : undefined;
-            if (serverStatus)
-              serverCase.reporting = {
-                status: serverStatus,
-                confirmedByUser: serverStatus === "sent",
-              };
-            if (index >= 0)
-              next[index] = mergeServerCase(next[index], serverCase);
-            else next = [...next, serverCase];
-          }
-          await persistCases(next);
+          await persistCases(mergeCaseHistory(cr.current, remote, history));
           lastHistorySync.current = Date.now();
           if (fetched.some((result) => result.status === "rejected"))
             setHistoryError("Some server cases could not be downloaded. Retry.");
@@ -314,7 +279,8 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
               next.push(JSON.parse(JSON.stringify(sample)));
           }
         await persistCases(next);
-        select(next.find((c) => c.provenance.isDemo === p.demo)?.id || "");
+        const visible = next.filter((c) => c.provenance.isDemo === p.demo);
+        select((p.demo ? visible[0] : pendingCases(visible)[0])?.id || "");
         if (!p.demo) void syncCases(true);
         if (savedJob) {
           const j: Job | null = JSON.parse(savedJob);
@@ -526,7 +492,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
           if (run.current !== generation) return;
           if (!record || record.stage === "error")
             throw Error(record?.error || "Analysis unavailable.");
-          const mapped = fromLegacy(record, j.region);
+          const mapped = fromLegacy(record, j.region, new Date().toISOString());
           await persistCases([
             ...mapped,
             ...cr.current.filter((c) => c.sourceId !== id),
