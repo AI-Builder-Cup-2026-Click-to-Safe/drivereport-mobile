@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Easing,
   Image,
@@ -25,6 +26,7 @@ import {
   normalizePlate,
   playableEvidence,
   reportText,
+  signedLinkExpired,
   validation,
   whatsapp,
   type RoadCase,
@@ -119,43 +121,33 @@ function RealVideo({
       available.
     </Notice>
   ) : (
-    <View>
+    <View style={{ borderRadius: 10, overflow: "hidden", backgroundColor: C.dark }}>
       <VideoView
         player={player}
         nativeControls
         contentFit="contain"
-        style={{
-          width: "100%",
-          height: 220,
-          borderRadius: 10,
-          backgroundColor: C.dark,
-        }}
+        style={{ width: "100%", height: 220, backgroundColor: C.dark }}
       />
-      {/* What Gemini saw at this moment, as a subtitle above the native controls. */}
-      {!!caption && (
+      {/* What Gemini saw at this moment, as a subtitle under the picture so it
+          never covers the player's controls. The strip keeps its height
+          between lines, so the page does not jump as the video plays. */}
+      {caption !== undefined && (
         <View
-          pointerEvents="none"
           style={{
-            position: "absolute",
-            left: 10,
-            right: 10,
-            bottom: 52,
-            alignItems: "center",
+            minHeight: 46,
+            paddingHorizontal: 12,
+            paddingVertical: 8,
+            justifyContent: "center",
           }}
         >
           <T
-            numberOfLines={3}
+            numberOfLines={2}
             style={{
               fontSize: 13,
               lineHeight: 18,
               color: "white",
               fontWeight: "600",
               textAlign: "center",
-              paddingHorizontal: 8,
-              paddingVertical: 4,
-              borderRadius: 6,
-              overflow: "hidden",
-              backgroundColor: "#111318BD",
             }}
           >
             {caption}
@@ -315,7 +307,8 @@ function Evidence({
   ) : played ? (
     <View>
       <RealVideo
-        key={`${c.id}-${annotated ? "annotated" : "original"}`}
+        // Keyed on the link too, so a refreshed link gets a fresh player.
+        key={`${c.id}-${annotated ? "annotated" : "original"}-${played}`}
         uri={played}
         seek={seek}
         revision={revision}
@@ -688,6 +681,52 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
   // Keep fields mounted while typing, even after the first character resolves a missing fact.
   const [askKeys] = useState(() => missing(c));
   const changing = useRef(false);
+  // Signed evidence links last six hours; a case opened later fetches new ones
+  // rather than showing "could not be opened".
+  const stale = [
+    c.evidence.originalVideoUrl,
+    c.evidence.annotatedVideoUrl,
+    c.evidence.excerptVideoUrl,
+  ].some((url) => signedLinkExpired(url));
+  useEffect(() => {
+    if (stale) void rr.refreshEvidence(c.id).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [c.id, stale]);
+  // Old or repeated cases leave the queue; they stay in Impact and are never sent.
+  const dismiss = (shown: string[]) => {
+    // The queue shows one case per plate, so its hidden repeats go with it.
+    const plates = new Set(
+      rr.cases
+        .filter((q) => shown.includes(q.id))
+        .map((q) => normalizePlate(q.vehicle.plate))
+        .filter(Boolean),
+    );
+    const ids = rr.cases
+      .filter(
+        (q) =>
+          shown.includes(q.id) ||
+          (q.reporting.status !== "sent" && plates.has(normalizePlate(q.vehicle.plate))),
+      )
+      .map((q) => q.id);
+    Alert.alert(
+      shown.length > 1 ? `Clear all ${shown.length} waiting cases?` : "Dismiss this case?",
+      `${shown.length > 1 ? "They leave" : "It leaves"} the queue and ${shown.length > 1 ? "are" : "is"} not reported. Sent reports are unaffected.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: ids.length > 1 ? "Clear all" : "Dismiss",
+          style: "destructive",
+          onPress: () => {
+            const next = queue.find((q) => !shown.includes(q.id));
+            void rr
+              .dismissCases(ids)
+              .then(() => rr.select(next?.id || ""))
+              .catch(showError);
+          },
+        },
+      ],
+    );
+  };
   const locked = c.reporting.status === "sent",
     error = validation(c);
   const update = (patch: Partial<RoadCase>) =>
@@ -861,6 +900,15 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                 disabled={!!error || busy}
                 onPress={() => void send()}
               />
+              <View style={{ flexDirection: "row", justifyContent: "center", gap: 16 }}>
+                <Quiet title="Dismiss case" onPress={() => dismiss([c.id])} />
+                {queue.length > 1 && (
+                  <Quiet
+                    title={`Clear all ${queue.length}`}
+                    onPress={() => dismiss(queue.map((q) => q.id))}
+                  />
+                )}
+              </View>
               {!!error && (
                 <T
                   style={{
@@ -913,7 +961,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
           seek={seek}
           revision={revision}
           onTime={setPlayhead}
-          subtitle={line?.event}
+          subtitle={c.analysis?.timeline.length ? line?.event || "" : undefined}
         />
       </View>
       <View

@@ -16,6 +16,7 @@ import {
   missing,
   normalizePlate,
   playableEvidence,
+  signedLinkExpired,
   recipient,
   reportText,
   validation,
@@ -497,4 +498,13 @@ test("the player leads with the annotated copy and falls back to the recording",
     ),
     boxes,
   );
+});
+
+test("signed evidence links are refetched once they lapse", () => {
+  const link = "https://storage.googleapis.com/b/annotated/a?X-Goog-Date=20261011T033004Z&X-Goog-Expires=21600&X-Goog-Signature=x";
+  const signedAt = Date.UTC(2026, 9, 11, 3, 30, 4);
+  assert.equal(signedLinkExpired(link, signedAt + 60 * 60 * 1000), false);
+  assert.equal(signedLinkExpired(link, signedAt + 6 * 60 * 60 * 1000), true);
+  for (const other of [null, "file:///clip.mp4", "https://example.com/a.mp4"])
+    assert.equal(signedLinkExpired(other, signedAt + 7 * 60 * 60 * 1000), false);
 });

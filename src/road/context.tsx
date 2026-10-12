@@ -76,6 +76,7 @@ type Context = {
   begin: (ids: string[], demo?: boolean) => Promise<void>;
   cancel: () => void;
   dismissNotice: () => void;
+  dismissCases: (ids: string[]) => Promise<void>;
   reduced: boolean;
   foreground: boolean;
   seed: () => Promise<void>;
@@ -580,6 +581,10 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         job,
         begin,
         cancel,
+        dismissCases: (ids) =>
+          persistCases(
+            cr.current.map((c) => (ids.includes(c.id) ? { ...c, dismissed: true } : c)),
+          ),
         dismissNotice: () => {
           if (jr.current) updateJob({ ...jr.current, notice: false });
         },

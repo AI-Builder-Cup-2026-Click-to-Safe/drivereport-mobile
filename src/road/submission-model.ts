@@ -2,10 +2,19 @@ import { normalizePlate, type RoadCase } from "./model.ts";
 export const submissionSource = "submission_fixture_v1";
 export const isSubmissionDemo = (c: RoadCase) =>
   c.provenance.isDemo && c.provenance.factsSource === submissionSource;
-export const pendingCases = (cases: RoadCase[]) =>
-  cases.filter((c) =>
-    ["ready", "needs_info", "opened"].includes(c.reporting.status),
-  );
+export const pendingCases = (cases: RoadCase[]) => {
+  const plates = new Set<string>();
+  return cases.filter((c) => {
+    if (c.dismissed || !["ready", "needs_info", "opened"].includes(c.reporting.status))
+      return false;
+    // One case per plate: analysing the same clip again must not queue it twice.
+    const plate = normalizePlate(c.vehicle.plate);
+    if (!plate) return true;
+    if (plates.has(plate)) return false;
+    plates.add(plate);
+    return true;
+  });
+};
 export const casePoints = (c: RoadCase) =>
   c.offences
     .filter((o) => o.included)

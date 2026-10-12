@@ -75,6 +75,8 @@ export type RoadCase = {
   provenance: { isDemo: boolean; factsSource: string; legalRetrieval: string };
   sourceId?: string;
   reviewId?: string;
+  /** Taken out of the queue by the user; kept so a sync does not bring it back. */
+  dismissed?: boolean;
   decisionTrail?: DecisionTrail;
   analysis?: {
     vehicle: RoadCase["vehicle"];
@@ -716,4 +718,17 @@ export function restoreEvidence(
         : c.evidence.thumbnailUrl,
     },
   };
+}
+
+/** True when a GCS signed URL has passed its expiry (or will within a minute).
+ * Local files and unsigned links never expire. */
+export function signedLinkExpired(url: string | null | undefined, now = Date.now()) {
+  if (!url?.startsWith("https://")) return false;
+  const query = new URL(url).searchParams;
+  const signed = query.get("X-Goog-Date");
+  const seconds = Number(query.get("X-Goog-Expires"));
+  const match = signed?.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/);
+  if (!match || !Number.isFinite(seconds)) return false;
+  const [, y, mo, d, h, mi, se] = match.map(Number);
+  return Date.UTC(y, mo - 1, d, h, mi, se) + seconds * 1000 - 60000 <= now;
 }

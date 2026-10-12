@@ -75,3 +75,19 @@ test("native nav uses all 72 paired points from the authored geometry", () => {
     assert.ok(form.geometry.a.flat().every(Number.isFinite));
   }
 });
+
+test("the queue skips dismissed cases and repeats of the same plate", () => {
+  const [first, second] = cases().map((c) => ({
+    ...c,
+    vehicle: { ...c.vehicle, plate: "WC 7178 W" },
+    reporting: { ...c.reporting, status: "ready" as const },
+  }));
+  const repeat = { ...second, id: "repeat", vehicle: { ...second.vehicle, plate: "wc7178w" } };
+  assert.deepEqual(pendingCases([first, repeat]).map((c) => c.id), [first.id]);
+  assert.deepEqual(
+    pendingCases([{ ...first, dismissed: true }, repeat]).map((c) => c.id),
+    ["repeat"],
+  );
+  const unread = { ...second, id: "unread", vehicle: { ...second.vehicle, plate: null } };
+  assert.equal(pendingCases([unread, { ...unread, id: "unread-2" }]).length, 2);
+});
