@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
+  AccessibilityInfo,
+  Alert,
   Animated,
   Easing,
   Image,
@@ -7,10 +9,12 @@ import {
   Modal,
   Platform,
   Pressable,
+  StyleSheet,
   TextInput,
   View,
   type TextInputProps,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useVideoPlayer, VideoView } from "expo-video";
 import Svg, { Path } from "react-native-svg";
@@ -51,10 +55,12 @@ import {
   Quiet,
   T,
   TextLink,
+  focusControl,
   go,
   haptic,
   showError,
   styles as s,
+  useTextScale,
 } from "./ui";
 
 async function openWhatsAppDraft(
@@ -65,6 +71,29 @@ async function openWhatsAppDraft(
   await Linking.openURL(whatsapp(c, prefs));
 }
 
+/**
+ * Fresh signed evidence links before a draft opens. Offline or on a slow server, the reporter may
+ * still open the draft with the links saved on this device rather than being blocked outright.
+ */
+async function freshOrSaved(refresh: () => Promise<RoadCase>, saved: RoadCase) {
+  try {
+    return await refresh();
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : "The server could not be reached.";
+    const open = await new Promise<boolean>((resolve) =>
+      Alert.alert(
+        "Evidence links not refreshed",
+        `${reason} The draft can still open with the links saved on this device; they may have expired.`,
+        [
+          { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+          { text: "Open draft", onPress: () => resolve(true) },
+        ],
+        { cancelable: true, onDismiss: () => resolve(false) },
+      ),
+    );
+    return open ? saved : null;
+  }
+}
 async function shareOriginal(c: RoadCase) {
   const uri = c.evidence.originalVideoUrl;
   if (!uri?.startsWith("file:"))
@@ -349,14 +378,16 @@ function Lens({
       }}
     >
       {[
-        { on: true, label: "AI analysis", hint: "Play the video with Gemini's boxes" },
-        { on: false, label: "Original", hint: "Play the untouched recording" },
+        { on: true, label: "AI analysis", hint: "Plays the video with Gemini's boxes" },
+        { on: false, label: "Original", hint: "Plays the untouched recording" },
       ].map((tab) => (
         <Pressable
           key={tab.label}
           accessibilityRole="button"
           accessibilityState={{ selected: annotated === tab.on }}
-          accessibilityLabel={tab.hint}
+          // The visible words are the name, so Voice Control's "Tap Original" works.
+          accessibilityLabel={tab.label}
+          accessibilityHint={tab.hint}
           onPress={() => {
             if (annotated === tab.on) return;
             haptic.select();
@@ -364,7 +395,7 @@ function Lens({
           }}
           style={{
             flex: 1,
-            minHeight: 36,
+            minHeight: 44,
             alignItems: "center",
             justifyContent: "center",
             borderRadius: 8,
@@ -399,9 +430,11 @@ function DateField({
   onChange: (v: string) => void;
 }) {
   const rr = useRoad();
+  const insets = useSafeAreaInsets();
   const [open, setOpen] = useState(false);
   const value = c.incident[kind];
   const [draft, setDraft] = useState(new Date());
+  const title = kind === "date" ? "Incident date" : "Incident time";
   const date = () =>
     new Date(
       `${c.incident.date || "2026-01-01"}T${c.incident.time || "12:00"}:00`,
@@ -413,6 +446,15 @@ function DateField({
         : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`,
     );
   };
+  const shown = value
+    ? kind === "date"
+      ? new Intl.DateTimeFormat(rr.prefs.language, {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        }).format(date())
+      : value
+    : "";
   return (
     <FactBox
       label={
@@ -431,18 +473,12 @@ function DateField({
               setOpen(true);
             }
       }
-      accessibilityLabel={`Edit ${kind}`}
+      // The value and whether it is still needed, not only what the button does.
+      accessibilityLabel={`${title}, ${shown || "missing, needed before reporting"}`}
+      accessibilityHint="Opens a picker"
     >
       <T style={[factValue, { color: valueColor(c, kind, value) }]}>
-        {value
-          ? kind === "date"
-            ? new Intl.DateTimeFormat(rr.prefs.language, {
-                day: "numeric",
-                month: "short",
-                year: "numeric",
-              }).format(date())
-            : value
-          : `Add ${kind}`}
+        {shown || `Add ${kind}`}
       </T>
       <Modal
         visible={open}
@@ -450,25 +486,27 @@ function DateField({
         animationType={rr.reduced ? "none" : "fade"}
         onRequestClose={() => setOpen(false)}
       >
-        <View
-          style={{
-            flex: 1,
-            justifyContent: "flex-end",
-            backgroundColor: "#20282b66",
-          }}
-        >
+        <View style={{ flex: 1, justifyContent: "flex-end" }}>
+          {/* Tapping outside the sheet cancels, as it does for a system sheet. */}
+          <Pressable
+            accessible={false}
+            importantForAccessibility="no"
+            onPress={() => setOpen(false)}
+            style={[StyleSheet.absoluteFill, { backgroundColor: "#20282b66" }]}
+          />
           <View
+            accessibilityViewIsModal
             style={{
               backgroundColor: C.surface,
               padding: 24,
-              paddingBottom: 40,
+              paddingBottom: Math.max(24, insets.bottom + 8),
               gap: 15,
               borderTopLeftRadius: 20,
               borderTopRightRadius: 20,
             }}
           >
-            <T style={s.section}>
-              {kind === "date" ? "Incident date" : "Incident time"}
+            <T accessibilityRole="header" style={s.section}>
+              {title}
             </T>
             <DateTimePicker
               value={draft}
@@ -522,6 +560,7 @@ function FactBox({
   inAsk = false,
   onPress,
   accessibilityLabel,
+  accessibilityHint,
   children,
 }: React.PropsWithChildren<{
   label: string;
@@ -532,11 +571,14 @@ function FactBox({
   inAsk?: boolean;
   onPress?: () => void;
   accessibilityLabel?: string;
+  accessibilityHint?: string;
 }>) {
   const Box = onPress ? Pressable : View;
   return (
     <Box
-      {...(onPress ? { onPress, accessibilityRole: "button" as const, accessibilityLabel } : {})}
+      {...(onPress
+        ? { onPress, accessibilityRole: "button" as const, accessibilityLabel, accessibilityHint }
+        : {})}
       style={{
         flexGrow: 1,
         flexBasis: wide ? "100%" : "40%",
@@ -608,7 +650,9 @@ function FactInput({
     >
       <TextInput
         maxFontSizeMultiplier={1.6}
-        accessibilityLabel={label}
+        // The dashed amber border is visual only; VoiceOver hears that the fact is still needed.
+        accessibilityLabel={missing ? `${label}, missing` : label}
+        accessibilityHint={missing ? "Needed before reporting" : undefined}
         value={value}
         onChangeText={onChangeText}
         multiline={multiline}
@@ -675,9 +719,25 @@ export function Review() {
   );
 }
 
+// Previous/Next swaps the whole keyed case view; this carries the pressed control across it.
+let switchedBy: "previous" | "next" | null = null;
 function CaseReview({ c, index }: { c: RoadCase; index: number }) {
   const rr = useRoad();
   const queue = pendingCases(rr.cases);
+  const previousRef = useRef<View>(null),
+    nextRef = useRef<View>(null);
+  // At accessibility text sizes the offence row wraps its chips instead of squeezing the name.
+  const largeText = useTextScale(16) > 1.4;
+  useEffect(() => {
+    if (!switchedBy) return;
+    focusControl(switchedBy === "previous" ? previousRef : nextRef);
+    switchedBy = null;
+    // Queued, so it follows the focused control's name rather than cutting it off.
+    AccessibilityInfo.announceForAccessibilityWithOptions(
+      `Case ${index + 1} of ${queue.length}${c.vehicle.plate ? `, ${c.vehicle.plate}` : ""}`,
+      { queue: true },
+    );
+  }, [index, queue.length, c.vehicle.plate]);
   const record = licenceRecord(c);
   const points = casePoints(c);
   const [seek, setSeek] = useState(!c.vehicle.plate ? 20 : 12),
@@ -771,7 +831,8 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
     changing.current = true;
     setBusy(true);
     try {
-      const fresh = await rr.refreshEvidence(c.id);
+      const fresh = await freshOrSaved(() => rr.refreshEvidence(c.id), c);
+      if (!fresh) return;
       await openWhatsAppDraft(fresh, rr.prefs);
       await rr.changeCase(c.id, {
         reporting: { status: "opened", confirmedByUser: false },
@@ -802,11 +863,15 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
         index >= 0 ? (
           queue.length > 1 ? (
             <Quiet
+              controlRef={previousRef}
               title="Previous case"
               compact
               icon="ChevronLeft"
               disabled={index === 0}
-              onPress={() => rr.select(queue[index - 1].id)}
+              onPress={() => {
+                switchedBy = "previous";
+                rr.select(queue[index - 1].id);
+              }}
             />
           ) : (
             <View />
@@ -819,11 +884,15 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
       headerRight={
         index >= 0 && queue.length > 1 ? (
           <Quiet
+            controlRef={nextRef}
             title="Next case"
             compact
             icon="ChevronRight"
             disabled={index === queue.length - 1}
-            onPress={() => rr.select(queue[index + 1].id)}
+            onPress={() => {
+              switchedBy = "next";
+              rr.select(queue[index + 1].id);
+            }}
           />
         ) : undefined
       }
@@ -856,7 +925,8 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
           ) : (
             <>
               <Action
-                title="Report via WhatsApp"
+                // Refreshing signed evidence links can take a moment; say so instead of a dead button.
+                title={busy ? "Opening WhatsApp…" : "Report via WhatsApp"}
                 icon="MessageCircle"
                 disabled={!!error || busy}
                 onPress={() => void send()}
@@ -868,7 +938,6 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                     fontSize: 14,
                     lineHeight: 19,
                     color: C.muted,
-                    textDecorationLine: missing(c).length ? "underline" : "none",
                   }}
                 >
                   {error}
@@ -985,7 +1054,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
             </View>
           )}
           <View style={{ gap: 0 }}>
-            <View style={[s.row, { paddingBottom: 6 }]}>
+            <View style={[s.row, { paddingBottom: 6, flexWrap: "wrap" }]}>
               <T style={s.section}>Suspected offences</T>
               <T style={{ fontSize: 12, fontWeight: "700", color: C.muted }}>
                 In report
@@ -1005,6 +1074,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                 <View
                   style={{
                     flexDirection: "row",
+                    flexWrap: largeText ? "wrap" : "nowrap",
                     gap: 12,
                     alignItems: "center",
                     paddingVertical: 8,
@@ -1041,7 +1111,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                       {duration(o.atSeconds)}
                     </T>
                   </Pressable>
-                  <View style={{ flex: 1 }}>
+                  <View style={largeText ? { flexGrow: 1, flexBasis: 160 } : { flex: 1 }}>
                     <T
                       style={{
                         color: C.accent,
@@ -1081,7 +1151,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                     <View
                       style={{
                         borderWidth: 2,
-                        borderColor: o.included ? C.accent : "#A9AEB8",
+                        borderColor: o.included ? C.accent : C.control,
                         borderRadius: 7,
                         width: 24,
                         height: 24,
@@ -1287,9 +1357,8 @@ export function Handoff() {
                   weight="600"
                   leading={<Icon name="MessageCircle" size={16} color={C.accent} />}
                   onPress={() =>
-                    void rr
-                      .refreshEvidence(c.id)
-                      .then((fresh) => openWhatsAppDraft(fresh, rr.prefs))
+                    void freshOrSaved(() => rr.refreshEvidence(c.id), c)
+                      .then((fresh) => fresh && openWhatsAppDraft(fresh, rr.prefs))
                       .catch(showError)
                   }
                 />

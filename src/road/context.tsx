@@ -3,6 +3,7 @@ import React, {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -11,6 +12,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import * as Device from "expo-device";
 import { useStore } from "../lib/store";
+import { notConnectedMessage } from "../lib/domain";
+import { useLatestCallbacks } from "../lib/stable";
 import {
   fromLegacy,
   fromServerReview,
@@ -452,7 +455,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         "Live analysis supports Malaysia only. Set the region to Malaysia in Settings.",
       );
     if (!demo && !old.current.settings.token)
-      throw Error("This build isn’t connected to the analysis server yet. Add its access token in Developer settings.");
+      throw Error(notConnectedMessage);
     const generation = ++run.current;
     const j: Job = preparedRecording
       ? {
@@ -555,53 +558,56 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
           "Waiting stopped. Saved footage is kept; a server review already started may still finish.",
       });
   };
-  return (
-    <RoadContext.Provider
-      value={{
-        ready: ready && legacy.ready && motionReady,
-        error,
-        cases: cases.filter((c) =>
-          prefs.demo ? isSubmissionDemo(c) : !c.provenance.isDemo,
-        ),
-        allCases: cases,
-        prefs,
-        setPrefs,
-        selected,
-        select,
-        changeCase,
-        refreshEvidence,
-        syncCases,
-        syncingCases,
-        // Demo mode never syncs, so a live sync's failure must not linger over the sample cases.
-        historyError: prefs.demo ? "" : historyError,
-        prepareRecording,
-        recordingSaved,
-        failRecording,
-        job,
-        begin,
-        cancel,
-        dismissNotice: () => {
-          if (jr.current) updateJob({ ...jr.current, notice: false });
-        },
-        reduced: prefs.reduced || osReduced,
-        foreground,
-        seed,
-        undo,
-        confirmSent,
-        startUndo: (id) => {
-          // VoiceOver users hear the toast instead of seeing it, so give them longer to reach Undo.
-          const seconds = screenReader ? 20 : 8;
-          setUndo({ id, until: Date.now() + seconds * 1000 });
-          AccessibilityInfo.announceForAccessibility(
-            `Marked sent. Fat-fingered it? Undo is available for ${seconds} seconds.`,
-          );
-        },
-        undoSent,
-      }}
-    >
-      {children}
-    </RoadContext.Provider>
+  const actions = useLatestCallbacks({
+    setPrefs,
+    changeCase,
+    refreshEvidence,
+    syncCases,
+    prepareRecording,
+    recordingSaved,
+    failRecording,
+    begin,
+    cancel,
+    dismissNotice: () => {
+      if (jr.current) updateJob({ ...jr.current, notice: false });
+    },
+    seed,
+    confirmSent,
+    startUndo: (id: string) => {
+      // VoiceOver users hear the toast instead of seeing it, so give them longer to reach Undo.
+      const seconds = screenReader ? 20 : 8;
+      setUndo({ id, until: Date.now() + seconds * 1000 });
+      AccessibilityInfo.announceForAccessibility(
+        `Marked sent. Fat-fingered it? Undo is available for ${seconds} seconds.`,
+      );
+    },
+    undoSent,
+  });
+  const providerReady = ready && legacy.ready && motionReady;
+  // Every screen reads this context; it changes only with state, not with each provider render.
+  const value = useMemo<Context>(
+    () => ({
+      ...actions,
+      ready: providerReady,
+      error,
+      cases: cases.filter((c) =>
+        prefs.demo ? isSubmissionDemo(c) : !c.provenance.isDemo,
+      ),
+      allCases: cases,
+      prefs,
+      selected,
+      select,
+      syncingCases,
+      // Demo mode never syncs, so a live sync's failure must not linger over the sample cases.
+      historyError: prefs.demo ? "" : historyError,
+      job,
+      reduced: prefs.reduced || osReduced,
+      foreground,
+      undo,
+    }),
+    [actions, providerReady, error, cases, prefs, selected, syncingCases, historyError, job, osReduced, foreground, undo],
   );
+  return <RoadContext.Provider value={value}>{children}</RoadContext.Provider>;
 }
 export const useRoad = () => {
   const c = useContext(RoadContext);

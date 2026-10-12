@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, AppState, Linking, Platform, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, AppState, BackHandler, Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { StatusBar } from "expo-status-bar";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import * as Device from "expo-device";
 import Constants from "expo-constants";
@@ -14,7 +15,7 @@ import { MAX_VIDEO_SECONDS, MAX_CAPTURE_BYTES } from "../lib/video-policy";
 import { finishRecording } from "../lib/recording-finalization";
 import { useRoad } from "./context";
 import { duration } from "./model";
-import { T, go, notify, showError } from "./ui";
+import { C, T, go, notify, showError } from "./ui";
 export function Recording() {
   const params = useLocalSearchParams<{ cameraTest?: string; cameraTestSeconds?: string }>();
   const cameraTest = useRef(params.cameraTest === "1").current;
@@ -303,8 +304,18 @@ export function Recording() {
     }
   };
   endAction.current = () => void end();
+  useEffect(() => {
+    // Android Back saves the drive like End recording instead of tearing the camera down mid-file.
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      endAction.current();
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
   return (
-    <View style={{ flex: 1, backgroundColor: "#000" }}>
+    <View style={{ flex: 1, backgroundColor: C.dark }}>
+      {/* Mounted for as long as Recording is, so any way out restores the dark status bar. */}
+      <StatusBar style="light" />
 
       {!cameraReleased && !demo && Device.isDevice && permission?.granted && (
         <CameraView
@@ -312,6 +323,9 @@ export function Recording() {
           style={StyleSheet.absoluteFill}
           facing="back"
           mode="video"
+          // A phone on a landscape dash mount records landscape even with Portrait Orientation Lock on.
+          responsiveOrientationWhenOrientationLocked
+          onResponsiveOrientationChanged={(e) => logStep(`Camera orientation: ${e.orientation}`)}
           mute
           videoQuality="720p"
           videoBitrate={2000000}
@@ -328,7 +342,7 @@ export function Recording() {
         />
       )}
       <SafeAreaView
-        style={{ flex: 1, backgroundColor: "#000", paddingHorizontal: 26 }}
+        style={{ flex: 1, backgroundColor: C.dark, paddingHorizontal: 26 }}
       >
         <View style={{ alignItems: "center", paddingTop: 26, gap: 12 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
@@ -337,13 +351,14 @@ export function Recording() {
                 width: 8,
                 height: 8,
                 borderRadius: 4,
-                backgroundColor: error ? "#9A9EA5" : "#FF4B4B",
+                backgroundColor: error ? C.nightMuted : C.live,
               }}
             />
             <T
-              accessibilityLabel="Recording duration"
+              accessibilityRole="timer"
+              accessibilityLabel={`Recording duration ${duration(elapsed)}`}
               style={{
-                color: "#eeeae4",
+                color: C.nightText,
                 fontVariant: ["tabular-nums"],
                 fontSize: 22,
                 lineHeight: 28,
@@ -353,7 +368,7 @@ export function Recording() {
             </T>
           </View>
           {demo && (
-            <T style={{ color: "#a7a1aa", fontSize: 11 }}>
+            <T style={{ color: C.nightFaint, fontSize: 11 }}>
               Demo recording · no camera capture
             </T>
           )}
@@ -371,7 +386,7 @@ export function Recording() {
               fontSize: 32,
               lineHeight: 36,
               textAlign: "center",
-              color: "#eeeae4",
+              color: C.nightText,
               fontWeight: "800",
             }}
           >
@@ -379,16 +394,16 @@ export function Recording() {
           </T>
           {ending ? (
             <View style={{ alignItems: "center", gap: 16 }}>
-              <ActivityIndicator color="#eeeae4" />
-              <T accessibilityLiveRegion="polite" style={{ color: "#eeeae4", textAlign: "center" }}>{saveStage}</T>
-              <T style={{ color: "#9A9EA5", textAlign: "center" }}>{`${saveSeconds}s · ${savedCount.current} saved clips`}</T>
-              <T style={{ color: "#9A9EA5", textAlign: "center" }}>{cameraTest ? "Keep the app open. This camera check only saves on your device." : "Keep the app open. Upload starts after saving finishes."}</T>
+              <ActivityIndicator color={C.nightText} />
+              <T accessibilityLiveRegion="polite" style={{ color: C.nightText, textAlign: "center" }}>{saveStage}</T>
+              <T style={{ color: C.nightMuted, textAlign: "center" }}>{`${saveSeconds}s · ${savedCount.current} saved clips`}</T>
+              <T style={{ color: C.nightMuted, textAlign: "center" }}>{cameraTest ? "Keep the app open. This camera check only saves on your device." : "Keep the app open. Upload starts after saving finishes."}</T>
             </View>
           ) : (
-            <T style={{ color: "#9A9EA5", textAlign: "center" }}>{cameraTest ? `Records for ${cameraTestSeconds} seconds, then saves on this device. No upload or AI analysis.` : "Up to 30 minutes · one video · no audio. Gemini reads it after you stop."}</T>
+            <T style={{ color: C.nightMuted, textAlign: "center" }}>{cameraTest ? `Records for ${cameraTestSeconds} seconds, then saves on this device. No upload or AI analysis.` : "Up to 30 minutes · one video · no audio. Gemini reads it after you stop."}</T>
           )}
           {error && (
-            <T style={{ color: "#f2b3a0", fontSize: 14, lineHeight: 19, textAlign: "center" }}>
+            <T style={{ color: C.nightError, fontSize: 14, lineHeight: 19, textAlign: "center" }}>
               {error}
             </T>
           )}
@@ -402,17 +417,17 @@ export function Recording() {
                 paddingHorizontal: 18,
                 borderRadius: 999,
                 borderWidth: 1.5,
-                borderColor: "#eeeae4",
+                borderColor: C.nightText,
                 alignItems: "center",
                 justifyContent: "center",
                 opacity: pressed ? 0.6 : 1,
               })}
             >
-              <T style={{ color: "#eeeae4", fontWeight: "700" }}>Open Settings</T>
+              <T style={{ color: C.nightText, fontWeight: "700" }}>Open Settings</T>
             </Pressable>
           )}
           {!demo && !ready && !error && (
-            <T style={{ color: "#a7a1aa" }}>Starting camera…</T>
+            <T style={{ color: C.nightFaint }}>Starting camera…</T>
           )}
         </View>
         <Pressable
@@ -420,14 +435,15 @@ export function Recording() {
           accessibilityLabel="End recording"
           disabled={ending}
           onPress={() => void end()}
-          style={{
+          style={({ pressed }) => ({
             height: 62,
             borderRadius: 999,
-            backgroundColor: "#eeeae4",
+            backgroundColor: C.nightText,
             alignItems: "center",
             justifyContent: "center",
             marginBottom: 24,
-          }}
+            opacity: pressed || ending ? 0.7 : 1,
+          })}
         >
           <T style={{ fontWeight: "700" }}>
             {ending ? "Saving recording…" : "End recording"}

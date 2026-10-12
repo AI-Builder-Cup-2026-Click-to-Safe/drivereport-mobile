@@ -24,40 +24,17 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { useIsFocused } from "@react-navigation/native";
-import { setStatusBarStyle } from "expo-status-bar";
-import { router, usePathname } from "expo-router";
+import { router, usePathname, type useNavigationContainerRef } from "expo-router";
 import { SvgXml } from "react-native-svg";
 import icons from "./icons.json";
 import { BrandMark } from "./brand";
-import { Motion, DecorationViewport, FadeArrival } from "./motion";
+import { Motion, FadeArrival } from "./motion";
 import { useRoad } from "./context";
 import { SubmissionIcon, SlidingPill } from "./submission-navigation";
 import { Spark } from "./spark";
 import { pendingCases } from "./submission-model";
-export const C = {
-  bg: "#FFFFFF",
-  surface: "#F3F4F6",
-  ink: "#111318",
-  muted: "#5D6270",
-  line: "#E3E5E9",
-  mint: "#E8F6EC",
-  lilac: "#E9EBEF",
-  peach: "#FFF4E5",
-  accent: "#1A56DB",
-  warning: "#A84B0A",
-  warningBg: "#FFF4E5",
-  dark: "#000000",
-  // The submission's remaining roles: points and penalties, Sent green, the photo-blue on footage.
-  penalty: "#C81E1E",
-  penaltyLight: "#FF9B8F",
-  green: "#15803D",
-  lineHover: "#C9CDD4",
-  gemPhoto: "#4F8BFF",
-  paper: "#F5F5F0",
-  prompt: "#7B5B3F",
-  amberLine: "#F3B46B",
-  code: "#1E3A8A",
-};
+import { C } from "./tokens";
+export { C };
 /** Fire-and-forget haptics; iOS applies the user's System Haptics setting itself. */
 export const haptic = {
   select: () => void Haptics.selectionAsync().catch(() => {}),
@@ -72,6 +49,20 @@ export const showError = (e: unknown) =>
   Alert.alert("Click-to-Safe", e instanceof Error ? e.message : String(e));
 let currentDestination = "home";
 let navigationDirection = 1;
+let navigation: ReturnType<typeof useNavigationContainerRef> | null = null;
+/** The root layout hands over its navigation container so tab switches can read the stack. */
+export const attachNavigation = (ref: ReturnType<typeof useNavigationContainerRef>) => {
+  navigation = ref;
+};
+const TAB_SCREENS: Record<string, string> = { home: "index", review: "review", impact: "impact" };
+type StackState = { routeNames?: string[]; index?: number; routes: { name: string; state?: unknown }[] };
+/** The root layout's stack; Expo Router nests it under its own root route. */
+function stackRoutes() {
+  let state = navigation?.getRootState() as StackState | undefined;
+  while (state && !state.routeNames?.includes("impact"))
+    state = state.routes[state.index ?? 0]?.state as StackState | undefined;
+  return state?.routes ?? [];
+}
 export const go = (name: string, replace = false) => {
   const order = ["home", "review", "impact", "developer"];
   navigationDirection =
@@ -82,10 +73,19 @@ export const go = (name: string, replace = false) => {
       ? -1
       : 1;
   currentDestination = name;
-  setStatusBarStyle(name === "recording" ? "light" : "dark", false);
   const path = (name === "home" ? "/" : `/${name}`) as never;
-  if (replace) router.replace(path);
-  else if (["home", "review", "impact"].includes(name)) router.navigate(path);
+  const tab = TAB_SCREENS[name];
+  if (tab) {
+    // A tab is the one screen at the bottom of the stack. Switching returns to it or swaps it, so
+    // tab history never piles up mounted screens (and video players) behind the back gesture.
+    const routes = stackRoutes();
+    if (routes.at(-1)?.name === tab) return;
+    if (routes[0]?.name === tab) router.dismissTo(path);
+    else {
+      if (routes.length > 1) router.dismissAll();
+      router.replace(path);
+    }
+  } else if (replace) router.replace(path);
   else router.push(path);
 };
 export function T({ balance, ...p }: TextProps & { balance?: boolean }) {
@@ -358,6 +358,7 @@ export function Quiet({
   compact = false,
   disabled = false,
   onFocus,
+  controlRef,
 }: {
   title: string;
   onPress: () => void;
@@ -365,9 +366,12 @@ export function Quiet({
   compact?: boolean;
   disabled?: boolean;
   onFocus?: () => void;
+  controlRef?: React.Ref<View>;
 }) {
+  const { reduced } = useRoad();
   return (
     <Pressable
+      ref={controlRef}
       accessibilityRole="button"
       accessibilityLabel={title}
       onPress={onPress}
@@ -383,7 +387,7 @@ export function Quiet({
         gap: 6,
         opacity: disabled ? 0.28 : !compact && pressed ? 0.55 : 1,
         backgroundColor: compact && pressed ? C.surface : "transparent",
-        transform: [{ scale: compact && pressed ? 0.88 : 1 }],
+        transform: [{ scale: compact && pressed && !reduced ? 0.88 : 1 }],
       })}
     >
       {icon && <Icon name={icon} size={compact ? 22 : 20} />}
@@ -464,22 +468,26 @@ export function Field({
   hint = true,
   multiline = false,
   textColor = C.ink,
+  error,
   ...rest
 }: TextInputProps & {
   label: string;
   missing?: boolean;
   hint?: boolean;
   textColor?: string;
+  /** A validation problem shown under the input, where the reader is already looking. */
+  error?: string;
 }) {
   const [height, setHeight] = useState(84);
   const [focused, setFocused] = useState(false);
+  const flagged = missing || !!error;
   return (
     <View style={{ gap: 6, flex: 1, minWidth: 110 }}>
       <T
         style={{
           fontSize: 12,
           lineHeight: 14,
-          color: missing ? C.warning : C.muted,
+          color: flagged ? C.warning : C.muted,
           fontWeight: "700",
         }}
       >
@@ -488,6 +496,7 @@ export function Field({
       <TextInput
         maxFontSizeMultiplier={1.6}
         accessibilityLabel={label}
+        accessibilityHint={error}
         value={value}
         onChangeText={onChangeText}
         multiline={multiline}
@@ -504,7 +513,7 @@ export function Field({
           color: textColor,
           borderWidth: 1.5,
           borderStyle: missing && !focused ? "dashed" : "solid",
-          borderColor: focused ? C.accent : missing ? C.warning : C.line,
+          borderColor: focused ? C.accent : flagged ? C.warning : C.line,
           backgroundColor: C.bg,
           borderRadius: 12,
           paddingHorizontal: 14,
@@ -522,13 +531,28 @@ export function Field({
           rest.onBlur?.(e);
         }}
       />
-      {missing && hint && (
-        <T style={{ fontSize: 11, color: C.warning }}>
-          I need this before I snitch.
+      {error ? (
+        <T accessibilityLiveRegion="polite" style={{ fontSize: 13, lineHeight: 18, color: C.warning }}>
+          {error}
         </T>
+      ) : (
+        missing &&
+        hint && (
+          <T style={{ fontSize: 11, color: C.warning }}>
+            I need this before I snitch.
+          </T>
+        )
       )}
     </View>
   );
+}
+/**
+ * How much a text style has actually grown with the reader's text size (fontCap applied), for
+ * columns sized to their label so they widen with it instead of wrapping "0:12" onto two lines.
+ */
+export function useTextScale(size: number) {
+  const { fontScale } = useWindowDimensions();
+  return Math.min(fontScale, fontCap(size));
 }
 export const styles = StyleSheet.create({
   row: {
@@ -586,9 +610,6 @@ export function Page({
   const [path] = useState(openedOn);
   const rr = useRoad();
   const insets = useSafeAreaInsets();
-  const viewport = useRef<View>(null);
-  const [offset, setOffset] = useState(0);
-  const visibility = React.useMemo(() => ({ offset, viewport }), [offset]);
   const back = () =>
     router.canGoBack()
       ? router.back()
@@ -679,7 +700,7 @@ export function Page({
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
-        <View ref={viewport} collapsable={false} style={{ flex: 1 }}>
+        <View style={{ flex: 1 }}>
           <ScrollView
             refreshControl={
               onRefresh ? (
@@ -691,8 +712,6 @@ export function Page({
               ) : undefined
             }
             onScrollBeginDrag={onScrollStart}
-            onScroll={(event) => setOffset(event.nativeEvent.contentOffset.y)}
-            scrollEventThrottle={100}
             key={path}
             keyboardShouldPersistTaps="handled"
             // Scrolling away from a field puts the keyboard away instead of leaving it over the page.
@@ -706,18 +725,16 @@ export function Page({
               gap: 22,
             }}
           >
-            <DecorationViewport.Provider value={visibility}>
-              <Motion
-                identity={path}
-                direction={navigationDirection}
-                durationMs={animateContent ? undefined : 0}
-              >
-                <View style={{ gap }}>
-                  {rr.error && <Notice error>{rr.error}</Notice>}
-                  {children}
-                </View>
-              </Motion>
-            </DecorationViewport.Provider>
+            <Motion
+              identity={path}
+              direction={navigationDirection}
+              durationMs={animateContent ? undefined : 0}
+            >
+              <View style={{ gap }}>
+                {rr.error && <Notice error>{rr.error}</Notice>}
+                {children}
+              </View>
+            </Motion>
           </ScrollView>
         </View>
         {/* Notices and toasts take their own space above the footer or tab bar, as in the reference. */}
@@ -799,7 +816,8 @@ function CompletionNotice({
             accessibilityRole="button"
             accessibilityLabel="See the case"
             onPress={onOpen}
-            hitSlop={{ top: 8, bottom: 8 }}
+            // 20pt of text plus 12pt above and below: the 44pt target without moving the line.
+            hitSlop={{ top: 12, bottom: 12, right: 12 }}
           >
             <T style={{ fontSize: 14, lineHeight: 20, fontWeight: "700", color: C.accent }}>
               See the case
@@ -962,7 +980,7 @@ function ToastCard({
             borderRadius: 999,
             backgroundColor: "white",
             justifyContent: "center",
-            transform: [{ scale: pressed ? 0.94 : 1 }],
+            transform: [{ scale: pressed && !reduced ? 0.94 : 1 }],
           })}
         >
           <T style={{ fontSize: 15, lineHeight: 18, fontWeight: "800" }}>
@@ -990,13 +1008,14 @@ function ToastCard({
 
 /* ---------- the tab bar: one persistent bar under the tab routes ---------- */
 /**
- * The submission's bottom chrome is 78pt: a 64pt tab row over 14pt of padding, and footers end
- * 14pt above the edge. Only the part of the home-indicator inset beyond 20pt is added, so controls
- * clear the indicator without the extra band a full 34pt inset leaves under every screen.
+ * The submission's bottom chrome is a 64pt tab row over 14pt of padding, and footers end 14pt
+ * above the edge. On Face ID phones the tab labels and footer buttons stop at the safe area's
+ * edge: the row's own 6pt of space below its labels absorbs part of the 34pt inset, so the bar
+ * stays shorter than a full inset band under it.
  */
 export const TAB_BAR_HEIGHT = 64;
-const tabBarBottom = (inset: number) => Math.max(14, inset - 20);
-const footerBottom = (inset: number) => Math.max(0, inset - 28);
+const tabBarBottom = (inset: number) => Math.max(14, inset - 6);
+const footerBottom = (inset: number) => Math.max(0, inset - 14);
 const TAB_ROUTES = ["/", "/review", "/impact"];
 let lastPending = -1;
 export function Navigation() {
@@ -1049,6 +1068,7 @@ export function Navigation() {
       }}
     >
       <View
+        accessibilityRole="tablist"
         style={{
           height: TAB_BAR_HEIGHT,
           flexDirection: "row",
@@ -1290,11 +1310,14 @@ export function Segments({
             minHeight: 44,
             justifyContent: "center",
             alignItems: "center",
-            transform: [{ scale: pressed ? 0.94 : 1 }],
+            transform: [{ scale: pressed && !reduced ? 0.94 : 1 }],
           })}
         >
           <T
             numberOfLines={1}
+            // Like UISegmentedControl, a long label at large text sizes shrinks before it truncates.
+            adjustsFontSizeToFit
+            minimumFontScale={0.75}
             style={{
               fontSize: 14,
               lineHeight: 18,

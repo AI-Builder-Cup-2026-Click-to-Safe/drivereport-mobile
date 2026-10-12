@@ -1,12 +1,12 @@
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
 import { View } from "react-native";
-import { Stack, usePathname } from "expo-router";
+import { Stack, usePathname, useNavigationContainerRef } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import { StoreProvider } from "../lib/store";
 import { RoadProvider, useRoad } from "../road/context";
-import { Navigation } from "../road/ui";
+import { Navigation, attachNavigation } from "../road/ui";
 void SplashScreen.preventAutoHideAsync();
 function ReadySplash() {
   const { ready } = useRoad();
@@ -18,6 +18,8 @@ function ReadySplash() {
 }
 function Navigator() {
   const { reduced } = useRoad();
+  const navigation = useNavigationContainerRef();
+  useEffect(() => attachNavigation(navigation), [navigation]);
   return (
     <View style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
       <Stack
@@ -33,7 +35,8 @@ function Navigator() {
         <Stack.Screen name="review" options={{ animation: "fade", animationDuration: 280 }} />
         <Stack.Screen name="impact" options={{ animation: "fade", animationDuration: 280 }} />
         <Stack.Screen name="analysis" options={{ animation: "fade" }} />
-        <Stack.Screen name="recording" options={{ animation: "fade" }} />
+        {/* A stray edge swipe while mounting the phone must not tear down the camera mid-file. */}
+        <Stack.Screen name="recording" options={{ animation: "fade", gestureEnabled: false }} />
       </Stack>
       {/* One tab bar for Home, Cases and Impact: it stays put while their pages cross-fade. */}
       <Navigation />

@@ -282,11 +282,14 @@ export function Count({ value, size = 72 }: { value: number; size?: number }) {
 }
 
 export function CaseId({ c }: { c: RoadCase }) {
+  const id = c.id.replace("SUB-", "");
   return (
-    // A long live id truncates in its 56pt column instead of pushing the title off centre.
+    // A long live id truncates in its 56pt column instead of pushing the title off centre. Live ids
+    // share their "DR-" prefix, so the start is dropped and the distinguishing end stays visible.
     <T
       numberOfLines={1}
-      ellipsizeMode="tail"
+      ellipsizeMode="head"
+      accessibilityLabel={`Case ${id}`}
       maxFontSizeMultiplier={1.2}
       style={{
         fontSize: 13,
@@ -296,7 +299,7 @@ export function CaseId({ c }: { c: RoadCase }) {
         fontVariant: ["tabular-nums"],
       }}
     >
-      {c.id.replace("SUB-", "")}
+      {id}
     </T>
   );
 }

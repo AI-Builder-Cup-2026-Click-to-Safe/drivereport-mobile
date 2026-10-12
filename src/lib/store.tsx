@@ -2,6 +2,7 @@ import React, {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -30,6 +31,7 @@ import {
 import { inspectVideo } from "./video-preparation";
 import { MAX_VIDEO_BYTES, validateVideo } from "./video-policy";
 import { SAMPLE_VIDEO, sampleVideoUri } from "./sample";
+import { useLatestCallbacks } from "./stable";
 
 const RECORDS = "drivereport.records.v1";
 const SETTINGS = "drivereport.settings.v1";
@@ -261,7 +263,8 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
         settings,
         controller.signal,
         async (patch, fraction) => {
-          if (fraction !== undefined) setProgress(fraction);
+          // Whole percents: upload progress events arrive far faster than the bar can show them.
+          if (fraction !== undefined) setProgress(Math.round(fraction * 100) / 100);
           if (Object.keys(patch).length) await update(id, patch);
         },
         region,
@@ -369,33 +372,29 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
           : []),
       ]);
   };
+  const actions = useLatestCallbacks({
+    saveSettings,
+    importVideo,
+    importSample,
+    analyse,
+    refresh,
+    syncReporting,
+    listReviews,
+    getReview,
+    syncReviewReporting,
+    getImpact,
+    getRecords: () => recordsRef.current,
+    cancel: () => running.current?.abort(),
+    update,
+    remove,
+  });
+  // A new value only when state changes, not on every render of the provider.
+  const value = useMemo(
+    () => ({ ready, error, records, settings, active, progress, ...actions }),
+    [ready, error, records, settings, active, progress, actions],
+  );
   return (
-    <StoreContext.Provider
-      value={{
-        ready,
-        error,
-        records,
-        settings,
-        active,
-        progress,
-        saveSettings,
-        importVideo,
-        importSample,
-        analyse,
-        refresh,
-        syncReporting,
-        listReviews,
-        getReview,
-        syncReviewReporting,
-        getImpact,
-        getRecords: () => recordsRef.current,
-        cancel: () => running.current?.abort(),
-        update,
-        remove,
-      }}
-    >
-      {children}
-    </StoreContext.Provider>
+    <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
   );
 }
 export const useStore = () => {

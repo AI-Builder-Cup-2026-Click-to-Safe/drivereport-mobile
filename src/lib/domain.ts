@@ -4,6 +4,9 @@ export const DEFAULT_API =
 // extractable from the binary; EAS visibility does not make it a runtime secret.
 const judgingToken = process.env.EXPO_PUBLIC_JUDGING_API_TOKEN?.trim() || "";
 export const hasBuiltInConnection = Boolean(judgingToken);
+/** There is no token field in the app, so the recovery is the synthetic run, not a setting. */
+export const notConnectedMessage =
+  "This build isn’t connected to the analysis server. Turn on Demo dataset in Developer options to try the sample run.";
 export type Finding = {
   vehicle_id: string;
   appearance: string;

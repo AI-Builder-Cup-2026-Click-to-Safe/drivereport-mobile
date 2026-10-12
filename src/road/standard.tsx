@@ -21,6 +21,7 @@ import * as FS from "expo-file-system/legacy";
 import { useRoad } from "./context";
 import { demoFrameFor } from "./media";
 import { useStore } from "../lib/store";
+import { notConnectedMessage } from "../lib/domain";
 import {
   Action,
   Announce,
@@ -37,6 +38,7 @@ import {
   showError,
   styles as s,
   TextLink,
+  useTextScale,
 } from "./ui";
 import {
   Arrival,
@@ -268,9 +270,7 @@ export function Clip() {
         return;
       }
       if (!store.settings.token)
-        throw Error(
-          "This build isn’t connected to the analysis server yet. Add its access token in Developer settings.",
-        );
+        throw Error(notConnectedMessage);
       if (rr.prefs.region !== "MY")
         throw Error(
           "Live analysis supports Malaysia only. Set the region to Malaysia in Settings.",
@@ -1134,7 +1134,12 @@ export function StandardImpact() {
     ReturnType<typeof store.getImpact>
   > | null>(null);
   const [remoteError, setRemoteError] = useState(false);
+  // Pull to refresh asks the server for fresh totals as well as fresh cases.
+  const [refreshes, setRefreshes] = useState(0);
   const periodKey = (["all", "week", "today"] as const)[period];
+  // Keyed on the connection, not the store value: that changes with every upload progress tick.
+  const { getImpact } = store;
+  const { apiUrl, token } = store.settings;
   useEffect(() => {
     let alive = true;
     if (rr.prefs.demo) {
@@ -1143,8 +1148,7 @@ export function StandardImpact() {
       return;
     }
     setRemoteError(false);
-    void store
-      .getImpact(periodKey)
+    void getImpact(periodKey)
       .then((value) => {
         if (alive) setRemote(value);
       })
@@ -1154,7 +1158,7 @@ export function StandardImpact() {
     return () => {
       alive = false;
     };
-  }, [periodKey, rr.prefs.demo, store]);
+  }, [periodKey, rr.prefs.demo, getImpact, apiUrl, token, refreshes]);
   const data = impact(rr.cases, ["all", "week", "today"][period]);
   const scoped = data.scoped.filter(
     (c) =>
@@ -1183,25 +1187,24 @@ export function StandardImpact() {
       : rr.prefs.demo
         ? "Nobody yet. Report a red-light runner and they land here."
         : "Licence records are not available yet.";
-  const remoteOffenceCount = (code: string) => {
-    const values = remote?.offenceOccurrences || {};
-    if (code === "wrong_way")
-      return (values.wrong_way || 0) + (values.counter_flow || 0);
-    if (code === "dangerous")
-      return (
-        (values.dangerous || 0) +
-        (values.queue_cut || 0) +
-        (values.road_rage || 0) +
-        (values.emergency_lane || 0)
-      );
-    return values[code] || 0;
-  };
+  // The chart and the top offender filter the cases below, so they count those same cases; the
+  // server's totals stay on the two counters above.
+  const meterSpoken = top
+    ? ` ${top.record} points on record, ${top.pending} potential points from reports, out of 20.`
+    : "";
   const { width } = useWindowDimensions();
   return (
     <Page
       title="Impact"
       gap={0}
-      onRefresh={rr.prefs.demo ? undefined : () => void rr.syncCases(true).catch(showError)}
+      onRefresh={
+        rr.prefs.demo
+          ? undefined
+          : () => {
+              setRefreshes((n) => n + 1);
+              void rr.syncCases(true).catch(showError);
+            }
+      }
       refreshing={rr.syncingCases}
     >
       <View style={{ marginBottom: 18 }}>
@@ -1247,10 +1250,15 @@ export function StandardImpact() {
           accessibilityRole="button"
           accessibilityLabel={
             topPlate
-              ? `Filter cases for ${topPlate}`
-              : "Top offender: nobody yet"
+              ? `Top offender ${topPlate}. ${meterLine}${meterSpoken}`
+              : `Top offender: nobody yet. ${meterLine}`
           }
-          disabled={!topPlate}
+          accessibilityHint={
+            top ? (plate ? "Shows every plate again" : "Shows only this plate’s cases") : undefined
+          }
+          accessibilityState={{ selected: !!plate, disabled: !top }}
+          // Only a plate among these cases can filter them; a server-only plate is shown, not tapped.
+          disabled={!top}
           onPress={() => setPlate(plate ? "" : normalizePlate(topPlate))}
           style={({ pressed }) => ({
             paddingTop: 16,
@@ -1342,7 +1350,8 @@ export function StandardImpact() {
         <Pressable
           key={code}
           accessibilityRole="button"
-          accessibilityLabel={`Filter ${name}`}
+          accessibilityLabel={`${name}, ${data.counts[code]}`}
+          accessibilityHint="Shows the cases with this offence"
           accessibilityState={{ selected: offence === code }}
           onPress={() => setOffence(offence === code ? "" : code)}
           style={({ pressed }) => ({
@@ -1371,20 +1380,15 @@ export function StandardImpact() {
                 color: offence === code ? C.accent : C.ink,
               }}
             >
-              {remote ? remoteOffenceCount(code) : data.counts[code]}
+              {data.counts[code]}
             </T>
           </View>
           <ImpactBar
             selected={offence === code}
             index={i}
             ratio={
-              (remote ? remoteOffenceCount(code) : data.counts[code]) /
-              Math.max(
-                1,
-                ...categories.map(([key]) =>
-                  remote ? remoteOffenceCount(key) : data.counts[key],
-                ),
-              )
+              data.counts[code] /
+              Math.max(1, ...categories.map(([key]) => data.counts[key]))
             }
           />
         </Pressable>
@@ -1427,84 +1431,88 @@ export function StandardImpact() {
         </View>
       )}
       <View>
-        {list.slice(0, shown).map((c, i) => (
-          <Arrival key={c.id} delay={320 + Math.min(i, 5) * 45} distance={10}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Open case ${c.vehicle.plate || c.id}`}
-              onPress={() => {
-                rr.select(c.id);
-                go("review");
-              }}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 12,
-                paddingVertical: 10,
-                borderTopWidth: 1,
-                borderColor: C.line,
-              }}
-            >
-              <Image
-                source={
-                  c.provenance.isDemo
-                    ? demoFrameFor(c)
-                    : c.evidence.thumbnailUrl
-                      ? { uri: c.evidence.thumbnailUrl }
-                      : undefined
-                }
-                style={{
-                  width: 64,
-                  height: 48,
-                  borderRadius: 10,
-                  backgroundColor: C.lilac,
+        {list.slice(0, shown).map((c, i) => {
+          const title =
+            c.vehicle.plate ||
+            (c.offences.length ? "Plate unreadable" : "Suspiciously civil");
+          const meta = [
+            `${c.offences.length} offence${c.offences.length === 1 ? "" : "s"}`,
+            shortDate(c.incident.date, rr.prefs.language, {
+              timeZone: c.incident.timeZone,
+              relative: true,
+            }),
+            c.incident.time,
+          ].filter(Boolean);
+          return (
+            <Arrival key={c.id} delay={320 + Math.min(i, 5) * 45} distance={10}>
+              <Pressable
+                accessibilityRole="button"
+                // The row as VoiceOver hears it: what, when and where it stands.
+                accessibilityLabel={[title, ...meta, labels[c.reporting.status]].join(", ")}
+                accessibilityHint="Opens the case"
+                onPress={() => {
+                  rr.select(c.id);
+                  go("review");
                 }}
-              />
-              <View style={{ flex: 1, gap: 3 }}>
+                style={({ pressed }) => ({
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                  paddingVertical: 10,
+                  borderTopWidth: 1,
+                  borderColor: C.line,
+                  opacity: pressed ? 0.6 : 1,
+                })}
+              >
+                <Image
+                  source={
+                    c.provenance.isDemo
+                      ? demoFrameFor(c)
+                      : c.evidence.thumbnailUrl
+                        ? { uri: c.evidence.thumbnailUrl }
+                        : undefined
+                  }
+                  style={{
+                    width: 64,
+                    height: 48,
+                    borderRadius: 10,
+                    backgroundColor: C.lilac,
+                  }}
+                />
+                <View style={{ flex: 1, gap: 3 }}>
+                  <T
+                    style={{
+                      fontSize: 16,
+                      lineHeight: 20,
+                      fontWeight: "800",
+                      letterSpacing: 0.3,
+                    }}
+                  >
+                    {title}
+                  </T>
+                  <T style={{ fontSize: 13, lineHeight: 17, color: C.muted }}>
+                    {meta.join(" · ")}
+                  </T>
+                </View>
                 <T
                   style={{
-                    fontSize: 16,
-                    lineHeight: 20,
-                    fontWeight: "800",
-                    letterSpacing: 0.3,
+                    fontSize: 13,
+                    lineHeight: 16,
+                    fontWeight: "700",
+                    color:
+                      c.reporting.status === "sent"
+                        ? C.green
+                        : c.reporting.status === "needs_info"
+                          ? C.warning
+                          : C.ink,
                   }}
                 >
-                  {c.vehicle.plate ||
-                    (c.offences.length
-                      ? "Plate unreadable"
-                      : "Suspiciously civil")}
+                  {labels[c.reporting.status]}
                 </T>
-                <T style={{ fontSize: 13, lineHeight: 17, color: C.muted }}>
-                  {[
-                    `${c.offences.length} offence${c.offences.length === 1 ? "" : "s"}`,
-                    shortDate(c.incident.date, rr.prefs.language, {
-                      timeZone: c.incident.timeZone,
-                      relative: true,
-                    }),
-                    c.incident.time,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </T>
-              </View>
-              <T
-                style={{
-                  fontSize: 13,
-                  lineHeight: 16,
-                  fontWeight: "700",
-                  color:
-                    c.reporting.status === "sent"
-                      ? C.green
-                      : c.reporting.status === "needs_info"
-                        ? C.warning
-                        : C.ink,
-                }}
-              >
-                {labels[c.reporting.status]}
-              </T>
-            </Pressable>
-          </Arrival>
-        ))}
+              </Pressable>
+            </Arrival>
+          );
+        })}
         {list.length > shown && (
           <TextLink
             title={`Show ${Math.min(PAGE, list.length - shown)} more`}
@@ -1651,6 +1659,7 @@ function MeterEntrance({ children }: React.PropsWithChildren) {
 const PERIODS = ["All time", "Last 7 days", "Today"];
 /** Reference: a select pill beside "By offence"; iOS shows the choices as an action sheet. */
 function PeriodSelect({ value, onChange }: { value: number; onChange: (i: number) => void }) {
+  const { reduced } = useRoad();
   return (
     <Pressable
       accessibilityRole="button"
@@ -1672,7 +1681,7 @@ function PeriodSelect({ value, onChange }: { value: number; onChange: (i: number
         flexDirection: "row",
         alignItems: "center",
         gap: 8,
-        transform: [{ scale: pressed ? 0.96 : 1 }],
+        transform: [{ scale: pressed && !reduced ? 0.96 : 1 }],
       })}
     >
       <T style={{ fontSize: 14, lineHeight: 18, fontWeight: "600" }}>{PERIODS[value]}</T>
@@ -1683,6 +1692,7 @@ function PeriodSelect({ value, onChange }: { value: number; onChange: (i: number
   );
 }
 function FilterChip({ title, onPress }: { title: string; onPress: () => void }) {
+  const { reduced } = useRoad();
   return (
     <Pressable
       accessibilityRole="button"
@@ -1697,7 +1707,7 @@ function FilterChip({ title, onPress }: { title: string; onPress: () => void }) 
         flexDirection: "row",
         alignItems: "center",
         gap: 6,
-        transform: [{ scale: pressed ? 0.94 : 1 }],
+        transform: [{ scale: pressed && !reduced ? 0.94 : 1 }],
       })}
     >
       <T style={{ fontSize: 14, lineHeight: 18, fontWeight: "600" }}>{title}</T>
@@ -1709,6 +1719,10 @@ function FilterChip({ title, onPress }: { title: string; onPress: () => void }) 
 export function Work() {
   const rr = useRoad(),
     store = useStore();
+  // The key and timecode columns widen with the reader's text size instead of wrapping; at
+  // accessibility sizes a key sits above its value, as iOS lists reflow, so values keep the width.
+  const scale = useTextScale(13);
+  const stacked = scale > 1.4;
   const c = rr.cases.find((c) => c.id === rr.selected) || rr.cases[0];
   if (!c)
     return (
@@ -1824,7 +1838,7 @@ export function Work() {
               <View style={{ flexDirection: "row", gap: 10 }}>
                 <T
                   style={{
-                    width: 44,
+                    width: 44 * scale,
                     fontSize: 13,
                     lineHeight: 22,
                     fontWeight: "700",
@@ -1863,16 +1877,16 @@ export function Work() {
                 minHeight: 50,
                 paddingVertical: 10,
                 paddingHorizontal: 14,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 10,
+                flexDirection: stacked ? "column" : "row",
+                alignItems: stacked ? "stretch" : "center",
+                gap: stacked ? 4 : 10,
                 borderTopWidth: i ? 1 : 0,
                 borderColor: C.line,
               }}
             >
               <T
                 style={{
-                  width: 100,
+                  width: stacked ? undefined : 100 * scale,
                   fontSize: 13,
                   lineHeight: 16,
                   fontWeight: "700",
@@ -1882,17 +1896,19 @@ export function Work() {
               >
                 {stat.k}
               </T>
-              <View style={{ flex: 1 }}>
-                <T style={{ fontSize: 15, lineHeight: 20, fontWeight: "700", color: C.accent }}>
-                  {stat.v}
-                </T>
-                {!!stat.sub && (
-                  <T style={{ marginTop: 3, fontSize: 13, lineHeight: 17, color: C.muted }}>
-                    {stat.sub}
+              <View style={{ flex: stacked ? undefined : 1, flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <T style={{ fontSize: 15, lineHeight: 20, fontWeight: "700", color: C.accent }}>
+                    {stat.v}
                   </T>
-                )}
+                  {!!stat.sub && (
+                    <T style={{ marginTop: 3, fontSize: 13, lineHeight: 17, color: C.muted }}>
+                      {stat.sub}
+                    </T>
+                  )}
+                </View>
+                {stat.n}
               </View>
-              {stat.n}
             </View>
           </Arrival>
         ))}
@@ -1997,6 +2013,9 @@ function FindingRow({
   divider = false,
 }: Omit<Finding, "key"> & { divider?: boolean }) {
   const tone = need ? C.warning : C.accent;
+  const scale = useTextScale(13);
+  // At accessibility sizes the value moves under its label instead of being squeezed beside it.
+  const stacked = scale > 1.4;
   return (
     <Arrival distance={10} delay={delay}>
       <View
@@ -2004,73 +2023,85 @@ function FindingRow({
           minHeight: 48,
           paddingVertical: 9,
           paddingHorizontal: 14,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 10,
+          flexDirection: stacked ? "column" : "row",
+          alignItems: stacked ? "stretch" : "center",
+          gap: stacked ? 4 : 10,
           borderTopWidth: divider ? 1 : 0,
           borderColor: C.line,
         }}
       >
-        <View style={{ width: 24, alignItems: "center" }}>
-          {wait ? (
-            <Spinner />
-          ) : (
-            <View
-              style={{
-                width: 22,
-                height: 22,
-                borderRadius: 11,
-                backgroundColor: tone,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Icon
-                name={need ? "CircleAlert" : "Check"}
-                color="white"
-                size={14}
-                strokeWidth={3}
-              />
-            </View>
-          )}
-        </View>
-        <T
-          style={{
-            width: 66,
-            fontSize: 13,
-            lineHeight: 16,
-            fontWeight: "700",
-            color: need ? C.warning : C.muted,
-            fontVariant: ["tabular-nums"],
-          }}
-        >
-          {label}
-        </T>
-        <View style={{ flex: 1 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View style={{ width: 24, alignItems: "center" }}>
+            {wait ? (
+              <Spinner />
+            ) : (
+              <View
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: 11,
+                  backgroundColor: tone,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Icon
+                  name={need ? "CircleAlert" : "Check"}
+                  color="white"
+                  size={14}
+                  strokeWidth={3}
+                />
+              </View>
+            )}
+          </View>
           <T
             style={{
-              fontSize: 15,
-              lineHeight: 20,
-              fontWeight: "600",
-              color: wait ? C.muted : tone,
+              width: stacked ? undefined : 66 * scale,
+              fontSize: 13,
+              lineHeight: 16,
+              fontWeight: "700",
+              color: need ? C.warning : C.muted,
+              fontVariant: ["tabular-nums"],
             }}
           >
-            {value}
+            {label}
           </T>
-          {!!sub && (
+        </View>
+        <View
+          style={{
+            flex: stacked ? undefined : 1,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            paddingLeft: stacked ? 34 : 0,
+          }}
+        >
+          <View style={{ flex: 1 }}>
             <T
               style={{
-                marginTop: 3,
-                fontSize: 13,
-                lineHeight: 17,
-                color: tone,
+                fontSize: 15,
+                lineHeight: 20,
+                fontWeight: "600",
+                color: wait ? C.muted : tone,
               }}
             >
-              {sub}
+              {value}
             </T>
-          )}
+            {!!sub && (
+              <T
+                style={{
+                  marginTop: 3,
+                  fontSize: 13,
+                  lineHeight: 17,
+                  color: tone,
+                }}
+              >
+                {sub}
+              </T>
+            )}
+          </View>
+          {trailing}
         </View>
-        {trailing}
       </View>
     </Arrival>
   );

@@ -3,6 +3,7 @@ import { inspectVideo, prepareSilentVideo } from "./video-preparation";
 import * as FileSystem from "expo-file-system/legacy";
 import {
   Incident,
+  notConnectedMessage,
   parseReview,
   type Review,
   Settings,
@@ -167,7 +168,7 @@ export async function analyseVideo(
   region: "MY" | "SG" | "JP" = "MY",
 ) {
   if (!settings.token.trim())
-    throw new Error("This build isn’t connected to the analysis server yet. Add its access token in Developer settings.");
+    throw new Error(notConnectedMessage);
   let uri =
     i.remoteAudioRemoved === true && i.remoteApiUrl === validateApiUrl(settings.apiUrl)
       ? i.remoteUri

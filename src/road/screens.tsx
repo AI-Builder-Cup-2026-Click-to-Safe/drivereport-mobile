@@ -1,6 +1,7 @@
 import { MAX_VIDEO_BYTES } from "../lib/video-policy";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  AccessibilityInfo,
   ActionSheetIOS,
   Linking,
   Platform,
@@ -12,6 +13,7 @@ import * as DocumentPicker from "expo-document-picker";
 import Constants from "expo-constants";
 import * as FS from "expo-file-system/legacy";
 import { useStore } from "../lib/store";
+import { notConnectedMessage } from "../lib/domain";
 import { useRoad } from "./context";
 import { Turn, FadeArrival } from "./motion";
 import {
@@ -85,7 +87,7 @@ export function Developer() {
   const analyse = () => {
     if (!chosen) return;
     if (!store.settings.token) {
-      setMessage("Save your API access token first.");
+      setMessage(notConnectedMessage);
       return;
     }
     void rr
@@ -302,6 +304,7 @@ export function Settings() {
       : p.recipients[p.region];
   const shown = current ? `+${current}` : "";
   const [recipient, setRecipient] = useState(shown),
+    [recipientError, setRecipientError] = useState(""),
     [open, setOpen] = useState(""),
     [message, setMessage] = useState("");
   const recipientRef = useRef<View>(null),
@@ -379,9 +382,13 @@ export function Settings() {
                   <Field
                     label="Recipient number"
                     value={recipient}
-                    onChangeText={setRecipient}
+                    onChangeText={(v) => {
+                      setRecipient(v);
+                      setRecipientError("");
+                    }}
                     keyboardType="phone-pad"
                     placeholder="Country code + number"
+                    error={recipientError}
                   />
                   <Action
                     title="Save recipient"
@@ -391,9 +398,10 @@ export function Settings() {
                     onPress={() => {
                       const n = recipient.replace(/[\s()+-]/g, "");
                       if (!/^[1-9]\d{7,14}$/.test(n)) {
-                        setMessage(
-                          "Enter an international number including country code.",
-                        );
+                        const problem = "Enter an international number including country code.";
+                        setRecipientError(problem);
+                        // Live regions only speak on Android; VoiceOver needs the announcement.
+                        AccessibilityInfo.announceForAccessibility(problem);
                         return;
                       }
                       saveAndClose(
@@ -438,15 +446,17 @@ export function Settings() {
             <View style={{ gap: 12, paddingTop: 4, paddingBottom: 14 }}>
               {(
                 [
-                  ["name", "Full name", "Your full name"],
-                  ["identity", "Identity number", "ID or passport number"],
-                  ["address", "Postal address", "Your postal address"],
-                  ["phone", "Phone", "Your phone number"],
-                  ["email", "Email", "Your email address"],
+                  // Keyboards and AutoFill matched to each detail; an ID number is typed as printed.
+                  ["name", "Full name", "Your full name", { textContentType: "name", autoComplete: "name", autoCapitalize: "words" }],
+                  ["identity", "Identity number", "ID or passport number", { autoCapitalize: "characters", autoCorrect: false }],
+                  ["address", "Postal address", "Your postal address", { textContentType: "fullStreetAddress", autoComplete: "street-address" }],
+                  ["phone", "Phone", "Your phone number", { textContentType: "telephoneNumber", autoComplete: "tel", keyboardType: "phone-pad" }],
+                  ["email", "Email", "Your email address", { textContentType: "emailAddress", autoComplete: "email", keyboardType: "email-address", autoCapitalize: "none", autoCorrect: false }],
                 ] as const
-              ).map(([key, label, placeholder]) => (
+              ).map(([key, label, placeholder, input]) => (
                 <Field
                   key={key}
+                  {...input}
                   label={label}
                   placeholder={placeholder}
                   value={personal[key]}
@@ -491,6 +501,7 @@ export function Settings() {
         <SettingsRow
           icon="Globe"
           title="Region"
+          value={regionNames[p.region]}
           note={
             p.region === "MY"
               ? "Malaysian law · reports go to JPJ"
@@ -515,6 +526,7 @@ export function Settings() {
         <SettingsRow
           icon="Languages"
           title="English format"
+          value={p.language === "en-GB" ? "English (UK)" : "English (US)"}
           note={p.language === "en-GB" ? "Dates read as 3 Oct" : "Dates read as Oct 3"}
           onPress={() => {
             const options = ["English (UK)", "English (US)"];
@@ -621,6 +633,7 @@ function SettingsRow({
   onPress,
   controlRef,
   status,
+  value,
 }: {
   icon: React.ComponentProps<typeof Icon>["name"];
   title: string;
@@ -631,6 +644,8 @@ function SettingsRow({
   controlRef?: React.Ref<View>;
   /** A read-only row's state ("on", "unavailable"); VoiceOver reads the row as one item. */
   status?: string;
+  /** The current choice of a row that opens a picker, read as the row's value. */
+  value?: string;
 }) {
   const Row = onPress ? Pressable : View;
   return (
@@ -641,6 +656,9 @@ function SettingsRow({
             onPress,
             accessibilityRole: "button" as const,
             accessibilityLabel: title,
+            // VoiceOver hears what the row is set to (a region, a number), then what it means.
+            accessibilityValue: { text: value ?? note },
+            accessibilityHint: value ? note : undefined,
             accessibilityState: open === undefined ? undefined : { expanded: open },
           }
         : status

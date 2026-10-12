@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { URL } from "node:url";
 import { createRequire } from "node:module";
 import { reviewWindowMinutes } from "../src/lib/video-policy.ts";
-import { validateApiUrl, parseReview } from "../src/lib/domain.ts";
+import { validateApiUrl, parseReview, notConnectedMessage } from "../src/lib/domain.ts";
 import { parseReviewHistory } from "../src/lib/history.ts";
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
@@ -35,7 +35,7 @@ function client(options: { failPreparation?: boolean; fetch?: (url: string, opti
           return { uploadAsync: async () => ({ status: 200 }), cancelAsync: async () => {} };
         },
       };
-      if (name === "./domain") return { validateApiUrl, parseReview };
+      if (name === "./domain") return { validateApiUrl, parseReview, notConnectedMessage };
       if (name === "./history") return { parseReviewHistory };
       throw Error(name);
     },
@@ -109,4 +109,14 @@ test("a timed-out request explains the timeout instead of React Native's bare 'A
 test("network failures that were not aborted keep their own message", async () => {
   const c = client({ fetch: async () => { throw TypeError("Network request failed"); } });
   await assert.rejects(c.api.listReviewHistory(settings, new AbortController().signal), /Network request failed/);
+});
+
+test("a build without server access points to the demo run, not a token field the app lacks", async () => {
+  const c = client();
+  await assert.rejects(
+    c.run(incident, { ...settings, token: "" }, new AbortController().signal, async () => {}),
+    (e: Error) => e.message === notConnectedMessage && /Demo dataset/.test(e.message) && !/token/i.test(e.message),
+  );
+  assert.equal(c.requests.length, 0);
+  assert.equal(c.uploads.length, 0);
 });
