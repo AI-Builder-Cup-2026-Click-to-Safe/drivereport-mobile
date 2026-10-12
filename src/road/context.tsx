@@ -212,13 +212,19 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
             cr.current.map((c) => c.reviewId).filter(Boolean),
           );
           const missing = history.filter((item) => !known.has(item.reviewId));
-          const fetched = await Promise.allSettled(
-            missing.map(async (item) => {
-              const review = await old.current.getReview(item.reviewId);
-              if (!review.created_at) review.created_at = item.createdAt;
-              return fromServerReview(review, pr.current.region);
-            }),
-          );
+          // A few at a time: a first sync can need dozens, and all at once against a server that is
+          // still starting up they time out together.
+          const fetched: PromiseSettledResult<RoadCase[]>[] = [];
+          for (let i = 0; i < missing.length; i += 6)
+            fetched.push(
+              ...(await Promise.allSettled(
+                missing.slice(i, i + 6).map(async (item) => {
+                  const review = await old.current.getReview(item.reviewId);
+                  if (!review.created_at) review.created_at = item.createdAt;
+                  return fromServerReview(review, pr.current.region);
+                }),
+              )),
+            );
           const remote = fetched.flatMap((result) =>
             result.status === "fulfilled" ? result.value : [],
           );

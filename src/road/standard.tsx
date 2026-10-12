@@ -1173,6 +1173,9 @@ export function StandardImpact() {
   );
   const top = topOffender(data.scoped);
   const topPlate = top?.case.vehicle.plate || remote?.mostSpotted?.plate || "";
+  // The card filters the cases below, so it is tappable whenever some of them carry its plate.
+  const plateHere =
+    !!topPlate && data.scoped.some((c) => normalizePlate(c.vehicle.plate) === normalizePlate(topPlate));
   const remoteCount = remote?.mostSpotted?.count || 0;
   const meterLine = top
     ? 20 - top.record - top.pending > 0
@@ -1254,11 +1257,11 @@ export function StandardImpact() {
               : `Top offender: nobody yet. ${meterLine}`
           }
           accessibilityHint={
-            top ? (plate ? "Shows every plate again" : "Shows only this plate’s cases") : undefined
+            plateHere ? (plate ? "Shows every plate again" : "Shows only this plate’s cases") : undefined
           }
-          accessibilityState={{ selected: !!plate, disabled: !top }}
-          // Only a plate among these cases can filter them; a server-only plate is shown, not tapped.
-          disabled={!top}
+          accessibilityState={{ selected: !!plate, disabled: !plateHere }}
+          // A plate known only to the server is shown, not tapped: there is nothing here to filter.
+          disabled={!plateHere}
           onPress={() => setPlate(plate ? "" : normalizePlate(topPlate))}
           style={({ pressed }) => ({
             paddingTop: 16,
