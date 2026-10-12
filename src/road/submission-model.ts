@@ -4,9 +4,19 @@ export const isSubmissionDemo = (c: RoadCase) =>
   c.provenance.isDemo && c.provenance.factsSource === submissionSource;
 export const pendingCases = (cases: RoadCase[]) => {
   const plates = new Set<string>();
-  return cases.filter((c) => {
-    if (c.dismissed || !["ready", "needs_info", "opened"].includes(c.reporting.status))
-      return false;
+  const pending = cases.filter((c) =>
+    !c.dismissed && ["ready", "needs_info", "opened"].includes(c.reporting.status),
+  );
+  const savedTime = (c: RoadCase) => {
+    const value = Date.parse(c.createdAt || "");
+    return Number.isFinite(value) ? value : -Infinity;
+  };
+  // Sort live cases before deduplication so the newest review of a plate wins.
+  // Stable ties/unknown dates retain input order; authored demo positions stay put.
+  const live = pending.filter((c) => !c.provenance.isDemo)
+    .sort((a, b) => savedTime(b) - savedTime(a) || 0);
+  let liveIndex = 0;
+  return pending.map((c) => c.provenance.isDemo ? c : live[liveIndex++]).filter((c) => {
     // One case per plate: analysing the same clip again must not queue it twice.
     const plate = normalizePlate(c.vehicle.plate);
     if (!plate) return true;

@@ -46,6 +46,8 @@ export type DecisionTrail = {
 };
 export type RoadCase = {
   id: string;
+  /** Backend save time; local completion time until history supplies it. */
+  createdAt?: string;
   version: number;
   region: Region;
   vehicle: { plate: string | null; type: string | null; model: string | null };
@@ -85,6 +87,8 @@ export type RoadCase = {
     timeline: { start_seconds: number; end_seconds: number; event: string }[];
   };
   edited?: string[];
+  /** Device suggestions, distinct from the original analysis and user edits. */
+  defaulted?: ("date" | "location")[];
 };
 export type Preferences = {
   region: Region;
@@ -303,10 +307,12 @@ export function impact(cases: RoadCase[], period = "all", now = new Date()) {
     recurring: [...sightings.entries()].sort((a, b) => b[1] - a[1])[0],
   };
 }
-export function fromLegacy(i: LegacyIncident, region: Region): RoadCase[] {
+export function fromLegacy(i: LegacyIncident, region: Region, completedAt?: string): RoadCase[] {
   if (!i.result) return [];
+  // Recording import/capture time is not the time its review was saved.
+  const createdAt = i.result.created_at || completedAt;
   const server = fromServerCase(i, region);
-  if (server) return [server];
+  if (server) return [{ ...server, createdAt }];
   const ids = [...new Set(i.result.reportable.map((o) => o.vehicle_id))];
   if (!ids.length) ids.push("clean");
   return ids.map((vehicleId, index) => {
@@ -315,6 +321,7 @@ export function fromLegacy(i: LegacyIncident, region: Region): RoadCase[] {
     );
     const c: RoadCase = {
       id: `${i.id}-${index + 1}`,
+      createdAt,
       sourceId: i.id,
       version: 1,
       region,
@@ -420,6 +427,7 @@ export function mergeServerCase(
   return {
     ...local,
     reviewId: remote.reviewId || local.reviewId,
+    createdAt: remote.createdAt || local.createdAt,
     decisionTrail: remote.decisionTrail || local.decisionTrail,
     authorityOutcome: remote.authorityOutcome,
     evidence: {

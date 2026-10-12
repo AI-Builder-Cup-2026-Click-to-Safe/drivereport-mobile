@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
+  AppState,
   Animated,
   Easing,
   Image,
@@ -17,6 +18,9 @@ import { useVideoPlayer, VideoView } from "expo-video";
 import Svg, { Path } from "react-native-svg";
 import * as Sharing from "expo-sharing";
 import * as Clipboard from "expo-clipboard";
+import * as Location from "expo-location";
+import { useFocusEffect } from "expo-router";
+import { currentLocationDefault, localDate, needsReportDefault } from "./report-defaults";
 import { useRoad } from "./context";
 import { demoFrameFor } from "./media";
 import {
@@ -397,7 +401,7 @@ function DateField({
   const [draft, setDraft] = useState(new Date());
   const date = () =>
     new Date(
-      `${c.incident.date || "2026-01-01"}T${c.incident.time || "12:00"}:00`,
+      `${c.incident.date || localDate()}T${c.incident.time || "12:00"}:00`,
     );
   const apply = (d: Date) => {
     onChange(
@@ -501,6 +505,8 @@ const factValue = {
 function factSource(c: RoadCase, key: string, value: string | null | undefined) {
   if (!value?.trim()) return undefined;
   if (c.edited?.includes(key)) return "you" as const;
+  if (key === "date" && c.defaulted?.includes("date")) return "deviceDate" as const;
+  if (key === "location" && c.defaulted?.includes("location")) return "deviceLocation" as const;
   return c.analysis || c.provenance.isDemo ? ("ai" as const) : undefined;
 }
 function valueColor(c: RoadCase, key: string, value: string | null | undefined) {
@@ -518,7 +524,7 @@ function FactBox({
   children,
 }: React.PropsWithChildren<{
   label: string;
-  source?: "ai" | "you";
+  source?: "ai" | "you" | "deviceDate" | "deviceLocation";
   missing?: boolean;
   focused?: boolean;
   wide?: boolean;
@@ -560,9 +566,9 @@ function FactBox({
           {label}
         </T>
         {source === "ai" && <Spark size={11} tint={C.accent} />}
-        {source === "you" && (
+        {source && source !== "ai" && (
           <T style={{ fontSize: 12, lineHeight: 14, fontWeight: "700" }}>
-            · you
+            · {source === "deviceDate" ? "Device date" : source === "deviceLocation" ? "GPS location" : "you"}
           </T>
         )}
       </View>
@@ -583,7 +589,7 @@ function FactInput({
 }: Omit<TextInputProps, "value" | "onChangeText"> & {
   label: string;
   value: string;
-  source?: "ai" | "you";
+  source?: "ai" | "you" | "deviceDate" | "deviceLocation";
   missing: boolean;
   wide?: boolean;
   inAsk?: boolean;
@@ -681,6 +687,31 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
   // Keep fields mounted while typing, even after the first character resolves a missing fact.
   const [askKeys] = useState(() => missing(c));
   const changing = useRef(false);
+  const currentCase = useRef(c);
+  currentCase.current = c;
+  const fillReportDefaults = rr.fillReportDefaults;
+  useFocusEffect(useCallback(() => {
+    const expected = currentCase.current;
+    let focused = true;
+    // Permission alerts may briefly make iOS inactive without leaving this screen.
+    const active = () => focused && AppState.currentState !== "background";
+    if (active() && needsReportDefault(expected, "date"))
+      void fillReportDefaults(expected, { date: localDate() }).catch(() => {});
+    if (Platform.OS !== "web" && active() && needsReportDefault(expected, "location")) {
+      void currentLocationDefault({
+        servicesEnabled: Location.hasServicesEnabledAsync,
+        requestPermission: Location.requestForegroundPermissionsAsync,
+        currentPosition: () => Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+          mayShowUserSettingsDialog: false,
+        }),
+        reverseGeocode: Location.reverseGeocodeAsync,
+      }, active).then((location) => {
+        if (location && active()) return fillReportDefaults(expected, { location });
+      }).catch(() => {});
+    }
+    return () => { focused = false; };
+  }, [fillReportDefaults]));
   // Signed evidence links last six hours; a case opened later fetches new ones
   // rather than showing "could not be opened".
   const stale = [
@@ -894,6 +925,11 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
             </>
           ) : (
             <>
+              {!!c.defaulted?.some((key) => !c.edited?.includes(key)) && (
+                <T style={[s.muted, { textAlign: "center" }]}>
+                  Device defaults may differ from the incident. Check the date and location before sharing.
+                </T>
+              )}
               <Action
                 title="Report via WhatsApp"
                 icon="MessageCircle"

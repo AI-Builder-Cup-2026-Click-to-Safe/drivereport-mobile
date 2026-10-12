@@ -39,6 +39,14 @@
       "expo-video",
       "expo-secure-store",
       [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Use your location to prefill the incident location. You can edit it before sharing.",
+          "locationAlwaysPermission": false,
+          "locationAlwaysAndWhenInUsePermission": false
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "Allow Click-to-Safe to record road incidents.",
