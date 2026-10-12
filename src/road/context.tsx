@@ -25,6 +25,7 @@ import {
   type Preferences,
   type Region,
 } from "./model";
+import { applyReportDefaults, type ReportDefaults } from "./report-defaults";
 import fixtures from "./submission-fixtures.json";
 import { isSubmissionDemo } from "./submission-model";
 import { DEMO_STAGE_MS } from "./analysis-timing";
@@ -65,6 +66,7 @@ type Context = {
   selected: string;
   select: (id: string) => void;
   changeCase: (id: string, patch: Partial<RoadCase>) => Promise<void>;
+  fillReportDefaults: (expected: RoadCase, defaults: ReportDefaults) => Promise<void>;
   refreshEvidence: (id: string) => Promise<RoadCase>;
   syncCases: (force?: boolean) => Promise<void>;
   syncingCases: boolean;
@@ -391,6 +393,13 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
       }),
     );
   };
+  const fillReportDefaults = useCallback(async (expected: RoadCase, defaults: ReportDefaults) => {
+    const current = cr.current.find((c) => c.id === expected.id);
+    if (!current) return;
+    const next = applyReportDefaults(current, expected, defaults);
+    if (next !== current)
+      await persistCases(cr.current.map((c) => c === current ? next : c));
+  }, [persistCases]);
   const refreshEvidence = async (id: string) => {
     const current = cr.current.find((c) => c.id === id);
     if (!current) throw Error("Case not found.");
@@ -411,8 +420,13 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
       serverCases.find((serverCase) => serverCase.id === current.id) ||
       serverCases[0];
     if (!refreshed) return current;
-    const next = mergeServerCase(current, refreshed);
-    await persistCases(cr.current.map((c) => (c.id === id ? next : c)));
+    // GPS defaults and edits can finish while signed evidence links refresh.
+    const latest = cr.current.find((c) => c.id === id);
+    if (!latest) throw Error("Case not found.");
+    if (latest.sourceId !== current.sourceId || latest.reviewId !== current.reviewId ||
+        latest.analysis !== current.analysis) return latest;
+    const next = mergeServerCase(latest, refreshed);
+    await persistCases(cr.current.map((c) => (c === latest ? next : c)));
     return next;
   };
   const confirmSent = async (id: string, deferUndo = false) => {
@@ -570,6 +584,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         selected,
         select,
         changeCase,
+        fillReportDefaults,
         refreshEvidence,
         syncCases,
         syncingCases,

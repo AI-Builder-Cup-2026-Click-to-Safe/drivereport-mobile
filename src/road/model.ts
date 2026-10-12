@@ -85,6 +85,8 @@ export type RoadCase = {
     timeline: { start_seconds: number; end_seconds: number; event: string }[];
   };
   edited?: string[];
+  /** Device suggestions, distinct from the original analysis and user edits. */
+  defaulted?: ("date" | "location")[];
 };
 export type Preferences = {
   region: Region;
