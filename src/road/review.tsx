@@ -89,14 +89,20 @@ function RealVideo({
   revision,
   onTime,
   caption,
+  onFailed,
 }: {
   uri: string;
   seek: number;
   revision: number;
   onTime: (time: number) => void;
   caption?: string;
+  /** Called instead of showing the error when another copy can be tried. */
+  onFailed?: () => void;
 }) {
   const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (failed && onFailed) onFailed();
+  }, [failed, onFailed]);
   const player = useVideoPlayer(uri, (p) => {
     p.loop = false;
     p.timeUpdateEventInterval = 0.25;
@@ -119,7 +125,7 @@ function RealVideo({
     );
     return () => sub.remove();
   }, [player]);
-  return failed ? (
+  return failed && !onFailed ? (
     <Notice error>
       Evidence could not be opened. Check that the original video is still
       available.
@@ -176,13 +182,15 @@ function Evidence({
 }) {
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(Math.max(0, seek));
-  // Default to the annotated copy, which is the point of the review; it only
-  // exists once the server has rendered it, so fall back until it arrives.
+  // The annotated copy is the point of the review; it only exists once the
+  // server has rendered it, and a copy that will not play falls back to the
+  // recording rather than an error.
   const [annotated, setAnnotated] = useState(true);
   const played = playableEvidence(c.evidence, annotated);
-  // Offer the switch only when the two sides really are different recordings.
-  const switchable =
+  const hasFallback =
+    annotated &&
     playableEvidence(c.evidence, true) !== playableEvidence(c.evidence, false);
+  const fallBack = useCallback(() => setAnnotated(false), []);
   useEffect(() => {
     setTime(Math.max(0, seek));
     setPlaying(false);
@@ -318,68 +326,11 @@ function Evidence({
         revision={revision}
         onTime={onTime}
         caption={subtitle}
+        onFailed={hasFallback ? fallBack : undefined}
       />
-      {/* The boxes are the reasoning made visible, so the annotated copy leads;
-          the untouched recording stays one tap away for anyone checking it. */}
-      {switchable && <Lens annotated={annotated} onChange={setAnnotated} />}
     </View>
   ) : (
     <Notice error>Original evidence is unavailable.</Notice>
-  );
-}
-/** Switches the player between the annotated copy and the untouched recording. */
-function Lens({
-  annotated,
-  onChange,
-}: {
-  annotated: boolean;
-  onChange: (next: boolean) => void;
-}) {
-  return (
-    <View
-      style={{
-        flexDirection: "row",
-        marginTop: 8,
-        padding: 3,
-        borderRadius: 10,
-        backgroundColor: C.surface,
-      }}
-    >
-      {[
-        { on: true, label: "AI analysis", hint: "Play the video with Gemini's boxes" },
-        { on: false, label: "Original", hint: "Play the untouched recording" },
-      ].map((tab) => (
-        <Pressable
-          key={tab.label}
-          accessibilityRole="button"
-          accessibilityState={{ selected: annotated === tab.on }}
-          accessibilityLabel={tab.hint}
-          onPress={() => {
-            if (annotated === tab.on) return;
-            haptic.select();
-            onChange(tab.on);
-          }}
-          style={{
-            flex: 1,
-            minHeight: 36,
-            alignItems: "center",
-            justifyContent: "center",
-            borderRadius: 8,
-            backgroundColor: annotated === tab.on ? C.bg : "transparent",
-          }}
-        >
-          <T
-            style={{
-              fontSize: 13,
-              fontWeight: "600",
-              color: annotated === tab.on ? C.ink : C.muted,
-            }}
-          >
-            {tab.label}
-          </T>
-        </Pressable>
-      ))}
-    </View>
   );
 }
 function DateField({
@@ -506,6 +457,7 @@ function factSource(c: RoadCase, key: string, value: string | null | undefined) 
   if (!value?.trim()) return undefined;
   if (c.edited?.includes(key)) return "you" as const;
   if (key === "date" && c.defaulted?.includes("date")) return "deviceDate" as const;
+  if (key === "time" && c.defaulted?.includes("time")) return "deviceTime" as const;
   if (key === "location" && c.defaulted?.includes("location")) return "deviceLocation" as const;
   return c.analysis || c.provenance.isDemo ? ("ai" as const) : undefined;
 }
@@ -524,7 +476,7 @@ function FactBox({
   children,
 }: React.PropsWithChildren<{
   label: string;
-  source?: "ai" | "you" | "deviceDate" | "deviceLocation";
+  source?: "ai" | "you" | "deviceDate" | "deviceTime" | "deviceLocation";
   missing?: boolean;
   focused?: boolean;
   wide?: boolean;
@@ -568,7 +520,7 @@ function FactBox({
         {source === "ai" && <Spark size={11} tint={C.accent} />}
         {source && source !== "ai" && (
           <T style={{ fontSize: 12, lineHeight: 14, fontWeight: "700" }}>
-            · {source === "deviceDate" ? "Device date" : source === "deviceLocation" ? "GPS location" : "you"}
+            · {source === "deviceDate" ? "Device date" : source === "deviceTime" ? "Device time" : source === "deviceLocation" ? "GPS location" : "you"}
           </T>
         )}
       </View>
@@ -589,7 +541,7 @@ function FactInput({
 }: Omit<TextInputProps, "value" | "onChangeText"> & {
   label: string;
   value: string;
-  source?: "ai" | "you" | "deviceDate" | "deviceLocation";
+  source?: "ai" | "you" | "deviceDate" | "deviceTime" | "deviceLocation";
   missing: boolean;
   wide?: boolean;
   inAsk?: boolean;
@@ -936,28 +888,23 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
                 disabled={!!error || busy}
                 onPress={() => void send()}
               />
-              <View style={{ flexDirection: "row", justifyContent: "center", gap: 16 }}>
-                <Quiet title="Dismiss case" onPress={() => dismiss([c.id])} />
-                {queue.length > 1 && (
-                  <Quiet
-                    title={`Clear all ${queue.length}`}
-                    onPress={() => dismiss(queue.map((q) => q.id))}
-                  />
-                )}
-              </View>
-              {!!error && (
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => dismiss([c.id])}
+                hitSlop={8}
+                style={{ alignSelf: "center", paddingVertical: 6 }}
+              >
                 <T
                   style={{
-                    textAlign: "center",
-                    fontSize: 14,
-                    lineHeight: 19,
+                    fontSize: 15,
+                    fontWeight: "600",
                     color: C.muted,
-                    textDecorationLine: missing(c).length ? "underline" : "none",
+                    textDecorationLine: "underline",
                   }}
                 >
-                  {error}
+                  Dismiss case
                 </T>
-              )}
+              </Pressable>
             </>
           )
         ) : (

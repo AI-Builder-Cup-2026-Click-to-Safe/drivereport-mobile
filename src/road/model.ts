@@ -88,7 +88,7 @@ export type RoadCase = {
   };
   edited?: string[];
   /** Device suggestions, distinct from the original analysis and user edits. */
-  defaulted?: ("date" | "location")[];
+  defaulted?: ("date" | "time" | "location")[];
 };
 export type Preferences = {
   region: Region;
@@ -308,6 +308,33 @@ export function impact(cases: RoadCase[], period = "all", now = new Date()) {
   };
 }
 export function fromLegacy(i: LegacyIncident, region: Region, completedAt?: string): RoadCase[] {
+  return legacyCases(i, region, completedAt).map((c) => withRecordingFacts(c, i));
+}
+
+/** A drive recorded in the app knows when and where it was filmed; use that
+ * where the footage itself (its dashcam stamp) did not say. */
+function withRecordingFacts(c: RoadCase, i: LegacyIncident): RoadCase {
+  if (!i.dashcamSession || c.reporting.status === "sent") return c;
+  const incident = { ...c.incident };
+  const defaulted = new Set(c.defaulted || []);
+  const first = c.offences.find((o) => o.included) || c.offences[0];
+  const when = recordedAt(i.occurredAt, first?.atSeconds ?? 0, incident.timeZone);
+  if (when && !incident.date && !incident.time) {
+    Object.assign(incident, when);
+    defaulted.add("date");
+    defaulted.add("time");
+  }
+  if (i.location?.trim() && !incident.location) {
+    incident.location = i.location.trim();
+    defaulted.add("location");
+  }
+  if (!defaulted.size) return c;
+  const next = { ...c, incident, defaulted: [...defaulted] };
+  next.reporting = { ...c.reporting, status: correctStatus(next) };
+  return next;
+}
+
+function legacyCases(i: LegacyIncident, region: Region, completedAt?: string): RoadCase[] {
   if (!i.result) return [];
   // Recording import/capture time is not the time its review was saved.
   const createdAt = i.result.created_at || completedAt;
@@ -384,8 +411,9 @@ export function fromLegacy(i: LegacyIncident, region: Region, completedAt?: stri
     // Only carry user facts to the explicitly selected vehicle; never duplicate a plate across vehicles.
     if (ids.length === 1 || vehicleId === i.selectedVehicleId) {
       c.vehicle.plate = i.plate || null;
-      c.incident.location = i.location || null;
-      c.edited = [i.plate ? "plate" : "", i.location ? "location" : ""].filter(
+      const typedLocation = i.dashcamSession ? "" : i.location;
+      c.incident.location = typedLocation || null;
+      c.edited = [i.plate ? "plate" : "", typedLocation ? "location" : ""].filter(
         Boolean,
       );
     }
@@ -739,4 +767,28 @@ export function signedLinkExpired(url: string | null | undefined, now = Date.now
   if (!match || !Number.isFinite(seconds)) return false;
   const [, y, mo, d, h, mi, se] = match.map(Number);
   return Date.UTC(y, mo - 1, d, h, mi, se) + seconds * 1000 - 60000 <= now;
+}
+
+/** Date and time an offence happened, from when its recording started. */
+export function recordedAt(
+  startedAt: string | undefined,
+  offsetSeconds: number,
+  timeZone: string,
+): { date: string; time: string } | null {
+  const start = startedAt ? Date.parse(startedAt) : NaN;
+  if (!Number.isFinite(start)) return null;
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(new Date(start + Math.max(0, offsetSeconds) * 1000))
+      .map((p) => [p.type, p.value]),
+  );
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}` };
 }

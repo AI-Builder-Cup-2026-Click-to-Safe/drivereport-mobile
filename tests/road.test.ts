@@ -508,3 +508,46 @@ test("signed evidence links are refetched once they lapse", () => {
   for (const other of [null, "file:///clip.mp4", "https://example.com/a.mp4"])
     assert.equal(signedLinkExpired(other, signedAt + 7 * 60 * 60 * 1000), false);
 });
+
+test("a drive recorded in the app reports when and where it was filmed", () => {
+  const drive = (extra: Partial<Incident>) =>
+    ({
+      id: "DR-drive",
+      file: "file:///drive.mov",
+      createdAt: "2026-10-12",
+      plate: "",
+      location: "Jalan Tun Razak, Kuala Lumpur",
+      occurredAt: "2026-10-12T23:59:30.000Z",
+      dashcamSession: "road-1",
+      result: {
+        verdict: "review",
+        reportable: [
+          {
+            vehicle_id: "a",
+            appearance: "Sedan",
+            conduct: "Ran a red light",
+            start_seconds: 45,
+            end_seconds: 50,
+            confidence: 0.9,
+            legal_basis: "s.79(2)",
+            penalty: "",
+            reasoning: "",
+          },
+        ],
+        evidence: { timeline: [] },
+        follow_up_exhausted: false,
+      },
+      ...extra,
+    }) as unknown as Incident;
+  const [c] = fromLegacy(drive({}), "MY");
+  // 23:59:30 UTC plus 45 s is 08:00 the next morning in Kuala Lumpur.
+  assert.equal(c.incident.date, "2026-10-13");
+  assert.equal(c.incident.time, "08:00");
+  assert.equal(c.incident.location, "Jalan Tun Razak, Kuala Lumpur");
+  assert.deepEqual(c.defaulted?.sort(), ["date", "location", "time"]);
+  // The GPS place is not something the user typed.
+  assert.ok(!c.edited?.includes("location"));
+  // An imported file, not a recording, keeps leaving these for the user.
+  const [imported] = fromLegacy(drive({ dashcamSession: undefined, location: "" }), "MY");
+  assert.equal(imported.incident.date, null);
+});

@@ -401,9 +401,6 @@ export function Clip() {
               alignItems: "center",
               gap: 12,
               paddingVertical: 12,
-              borderTopWidth: 1,
-              borderBottomWidth: icon === "Clock" ? 1 : 0,
-              borderColor: C.line,
             }}
           >
             <View
@@ -437,15 +434,13 @@ export function Clip() {
         ))}
       </View>
       {saved.length > 0 && (
-        <Disclosure title="Saved recordings" note={String(saved.length)}>
+        <Disclosure title="Saved recordings" note={String(saved.length)} divider={false}>
           {saved.map((r) => (
             <View
               key={r.id}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                borderBottomWidth: 1,
-                borderColor: C.line,
               }}
             >
               <Pressable

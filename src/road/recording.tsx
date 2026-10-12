@@ -6,6 +6,7 @@ import * as Device from "expo-device";
 import Constants from "expo-constants";
 import { useLocalSearchParams } from "expo-router";
 import * as FS from "expo-file-system/legacy";
+import * as Location from "expo-location";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { useStore } from "../lib/store";
 import { recordDrive, MIN_FREE_BYTES } from "../lib/dashcam";
@@ -13,6 +14,7 @@ import { inspectVideo, prepareSilentVideo } from "../lib/video-preparation";
 import { MAX_VIDEO_SECONDS, MAX_CAPTURE_BYTES } from "../lib/video-policy";
 import { finishRecording } from "../lib/recording-finalization";
 import { useRoad } from "./context";
+import { currentLocationDefault } from "./report-defaults";
 import { duration } from "./model";
 import { T, go, notify, showError } from "./ui";
 export function Recording() {
@@ -129,6 +131,24 @@ export function Recording() {
           return;
         }
         const session = `road-${Date.now()}`;
+        // When and where the drive happened, for the report. The fix is looked
+        // up alongside the camera and never holds recording up.
+        const startedAt = new Date(startTime.current).toISOString();
+        const place = currentLocationDefault(
+          {
+            servicesEnabled: Location.hasServicesEnabledAsync,
+            requestPermission: Location.requestForegroundPermissionsAsync,
+            currentPosition: () =>
+              Location.getCurrentPositionAsync({
+                accuracy: Location.Accuracy.Balanced,
+                mayShowUserSettingsDialog: false,
+              }),
+            reverseGeocode: Location.reverseGeocodeAsync,
+          },
+          () => true,
+          20_000,
+          true,
+        );
         const fail = (e: unknown) => {
           stop();
           failure.current = e instanceof Error ? e.message : "Recording stopped. Saved clips are kept.";
@@ -166,12 +186,29 @@ export function Recording() {
             if (mounted.current && !capturing.current)
               setSaveStage("Saving the video on this device…");
             const ext = Platform.OS === "ios" ? "mov" : "mp4";
+            // Wait briefly for the GPS fix; a late one is added after saving.
+            const location = await Promise.race([
+              place,
+              new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+            ]);
             const id = await current.current.importVideo(
               uri,
               `Drive ${createdAt}.${ext}`,
               ext === "mov" ? "video/quicktime" : "video/mp4",
-              { dashcamSession: session, createdAt, protected: true },
+              {
+                dashcamSession: session,
+                createdAt,
+                protected: true,
+                occurredAt: startedAt,
+                location: location || "",
+              },
             );
+            if (!location)
+              void place
+                .then((late) => {
+                  if (late) return current.current.update(id, { location: late });
+                })
+                .catch(() => {});
             ids.current.push(id);
             savedCount.current = ids.current.length;
             logStep(`Original video saved; ${savedCount.current} clip(s)`);

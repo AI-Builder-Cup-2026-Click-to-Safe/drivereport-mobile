@@ -48,7 +48,14 @@ type Context = {
     uri: string,
     name: string,
     mime?: string,
-    capture?: { dashcamSession: string; createdAt: string; protected: boolean },
+    capture?: {
+      dashcamSession: string;
+      createdAt: string;
+      protected: boolean;
+      /** When recording started and where the phone was, for the report. */
+      occurredAt?: string;
+      location?: string;
+    },
     thumbnailAtMs?: number,
   ) => Promise<string>;
   importSample: (options?: { fresh?: boolean }) => Promise<string>;
@@ -156,7 +163,14 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
     uri: string,
     name: string,
     suppliedMime?: string,
-    capture?: { dashcamSession: string; createdAt: string; protected: boolean },
+    capture?: {
+      dashcamSession: string;
+      createdAt: string;
+      protected: boolean;
+      /** When recording started and where the phone was, for the report. */
+      occurredAt?: string;
+      location?: string;
+    },
     thumbnailAtMs = 0,
   ) => {
     if (error) throw new Error(error);

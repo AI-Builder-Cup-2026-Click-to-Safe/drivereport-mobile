@@ -54,8 +54,9 @@ export { Spark } from "./spark";
 export function Disclosure({
   title,
   note,
+  divider = true,
   children,
-}: React.PropsWithChildren<{ title: string; note?: string }>) {
+}: React.PropsWithChildren<{ title: string; note?: string; divider?: boolean }>) {
   const { reduced, foreground } = useRoad();
   const [open, setOpen] = useState(false);
   const turn = useRef(new Animated.Value(0)).current;
@@ -70,7 +71,7 @@ export function Disclosure({
     return () => a.stop();
   }, [open, reduced, foreground, turn]);
   return (
-    <View style={{ borderTopWidth: 1, borderColor: C.line }}>
+    <View style={divider ? { borderTopWidth: 1, borderColor: C.line } : undefined}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={title}

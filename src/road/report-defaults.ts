@@ -67,6 +67,8 @@ export async function currentLocationDefault(
   lookup: LocationLookup,
   isActive: () => boolean,
   timeoutMs = 15_000,
+  /** Keep the GPS fix as "lat, lon" when no address can be found for it. */
+  coordinatesFallback = false,
 ): Promise<string | null> {
   let finished = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -79,7 +81,11 @@ export async function currentLocationDefault(
     if (!active()) return null;
     const addresses = await lookup.reverseGeocode(position.coords);
     if (!active()) return null;
-    return addresses.map(locationAddress).find(Boolean) || null;
+    const { latitude, longitude } = position.coords;
+    return (
+      addresses.map(locationAddress).find(Boolean) ||
+      (coordinatesFallback ? `${latitude.toFixed(5)}, ${longitude.toFixed(5)}` : null)
+    );
   };
   try {
     return await Promise.race([
@@ -96,3 +102,4 @@ export async function currentLocationDefault(
     clearTimeout(timer);
   }
 }
+
