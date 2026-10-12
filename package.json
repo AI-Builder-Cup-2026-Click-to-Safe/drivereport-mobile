@@ -13,8 +13,7 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "provision:ios": "node scripts/provision-ios.mjs",
     "provision:android": "node scripts/provision-android.mjs",
-    "provision:iphone": "node scripts/provision-iphone.mjs",
-    "build:motion": "node scripts/build-motion.mjs"
+    "provision:iphone": "node scripts/provision-iphone.mjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

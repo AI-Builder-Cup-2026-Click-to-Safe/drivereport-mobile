@@ -108,13 +108,7 @@ Wait for the final result, open Review, and check that the original footage and 
 
 Most UI is native React Native. Tab icons interpolate the new supplied 72-point SVG geometry over 540 ms, accompanied by a stretching active pill. Deeper routes slide over the previous screen; tabs fade. Home digits roll and country names wipe every 3.4 seconds; receipts reveal over 900 ms, points/Reported stamps land over 460 ms, and the licence meter fills over 900 ms. Case switches and analysis rows use native-driver transitions. Reduced motion respects both the app preference and the system setting.
 
-Only the 230-point Living intelligence illustration uses a local WebView, to retain the authored Canvas renderer exactly: a bounded 72-particle field, at most 96 connections, a steady Gemini mark, and a settling receipt/check composition. Fonts, image, CSS and JavaScript are embedded locally; the view blocks external navigation and has a restrictive content security policy. Motion pauses outside the measured scroll viewport, in the background and in reduced-motion mode, and the illustration is destroyed when leaving the screen.
-
-After changing its source assets, regenerate the embedded module:
-
-```sh
-npm run build:motion
-```
+All motion is native; the app has no WebView. Decorative loops pause in the background and in reduced-motion mode.
 
 ## Structure and checks
 
@@ -122,10 +116,10 @@ npm run build:motion
 src/app/        Explicit Expo Router routes; Home entry point
 src/road/       Click-to-Safe native screens, case model, state and motion
 src/lib/        Retained GCP API adapter and original evidence storage
-assets/road/    Supplied fonts, SVG geometry, demo image and Canvas renderer
+assets/road/    Supplied fonts, brand mark and demo images
 design/         Pinned handover copy, motion, screens, acceptance and tokens
 licenses/       Asset notices and attribution
-scripts/        Motion bundler and local credential provisioning
+scripts/        Local credential provisioning
 tests/          Backend/domain, recording utilities and Road Receipts rules
 ```
 
