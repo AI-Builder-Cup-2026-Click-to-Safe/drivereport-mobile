@@ -70,6 +70,7 @@ type Context = {
   syncReviewReporting: (
     reviewId: string,
     status: "opened" | "sent",
+    plate?: string | null,
   ) => Promise<void>;
   getImpact: (period: "all" | "week" | "today") => Promise<ImpactSummary>;
   getRecords: () => Incident[];
@@ -352,11 +353,12 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
   const syncReviewReporting = async (
     reviewId: string,
     status: "opened" | "sent",
+    plate?: string | null,
   ) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
     try {
-      await updateReporting(reviewId, status, settings, controller.signal);
+      await updateReporting(reviewId, status, settings, controller.signal, plate);
     } finally {
       clearTimeout(timer);
     }

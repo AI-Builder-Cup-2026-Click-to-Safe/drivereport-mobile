@@ -345,7 +345,11 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     const current = cr.current.find((c) => c.id === id);
     const status = patch.reporting?.status;
     if (current?.reviewId && (status === "opened" || status === "sent"))
-      await old.current.syncReviewReporting(current.reviewId, status);
+      await old.current.syncReviewReporting(
+        current.reviewId,
+        status,
+        patch.vehicle?.plate ?? current.vehicle.plate,
+      );
     await persistCases(
       cr.current.map((c) => {
         if (c.id !== id) return c;

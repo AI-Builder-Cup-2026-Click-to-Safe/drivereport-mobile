@@ -877,11 +877,6 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
             </>
           ) : (
             <>
-              {!!c.defaulted?.some((key) => !c.edited?.includes(key)) && (
-                <T style={[s.muted, { textAlign: "center" }]}>
-                  Device defaults may differ from the incident. Check the date and location before sharing.
-                </T>
-              )}
               <Action
                 title="Report via WhatsApp"
                 icon="MessageCircle"

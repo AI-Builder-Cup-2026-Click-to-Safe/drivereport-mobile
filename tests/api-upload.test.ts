@@ -110,3 +110,14 @@ test("network failures that were not aborted keep their own message", async () =
   const c = client({ fetch: async () => { throw TypeError("Network request failed"); } });
   await assert.rejects(c.api.listReviewHistory(settings, new AbortController().signal), /Network request failed/);
 });
+
+test("marking a report sent carries the plate the reporter confirmed", async () => {
+  const c = client();
+  const id = "a".repeat(32);
+  await c.api.updateReporting(id, "sent", settings, new AbortController().signal, " WXY 2048 ");
+  await c.api.updateReporting(id, "opened", settings, new AbortController().signal, null);
+  assert.deepEqual(c.requests.map((r) => r.body), [
+    { reporting_status: "sent", plate: "WXY 2048" },
+    { reporting_status: "opened" },
+  ]);
+});

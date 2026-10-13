@@ -110,6 +110,8 @@ export async function updateReporting(
   status: "opened" | "sent",
   settings: Settings,
   signal: AbortSignal,
+  /** The plate the reporter confirmed, so the server can count the report. */
+  plate?: string | null,
 ) {
   if (!/^[a-f0-9]{32}$/i.test(reviewId))
     throw new Error("This review has no valid server reference.");
@@ -117,7 +119,7 @@ export async function updateReporting(
     settings,
     `/v1/reviews/${reviewId}/reporting`,
     signal,
-    { reporting_status: status },
+    { reporting_status: status, ...(plate?.trim() ? { plate: plate.trim() } : {}) },
     "PATCH",
   );
 }
