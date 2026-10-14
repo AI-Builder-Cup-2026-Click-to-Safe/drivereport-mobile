@@ -1,3 +1,36 @@
+# Footage loading, tab motion and incident place names — 2026-10-15
+
+Release source: `405d0f70f6242746e9e22d6eea550960ffb4d941`, version **1.0.0 (12)**. This pass is limited to the changed features, as requested. No WhatsApp draft/report, reporting-state mutation, new AI analysis, backend edit or backend deployment was performed.
+
+## Automated and native build checks
+
+- All **112 automated tests** passed, along with TypeScript and ESLint. Expo Doctor passed **18/18** checks.
+- Independent review checked loading/error races, source replacement and cleanup, seek bounds, rapid tab changes, geocoding fallback and manual-edit preservation; no remaining actionable defect was identified.
+- Final iOS Release Simulator build succeeded. Installed and cold-launched with Metro stopped on **iPhone 16 Pro / iOS 18.5**. Settings displayed **1.0.0 (12)**.
+- The existing Debug scene-lifecycle / Expo dev-launcher conflict prevented that runtime from starting before JavaScript. Verification therefore used the actual bundled Release runtime; the unrelated Debug plugin was not changed.
+
+## Observed changed-feature behavior
+
+- Delayed local video responses displayed the three road-dash loading indicator and then the first video frame. Playback and pause controls worked.
+- Forced HTTP 503 produced the error and **Try again** action. Restoring the local server and retrying displayed the video successfully.
+- A 40-second server delay triggered the 30-second load timeout. Removing the delay and retrying recovered the video.
+- A 3-second clip with a requested 12-second offence seek displayed a valid frame near its end instead of seeking past the stream.
+- Rapid Home / Cases / Impact changes ended on the correct tab. Reduce motion kept the loader static and tab states settled.
+- Native reverse geocoding resolved `3.11030, 101.65390` to Federal Highway Motorcycle Lane / Seksyen 5 / Petaling Jaya, with the **Map address** provenance label. Platform locale translated some administrative names.
+- Replacing that address with **TEST ONLY Manual Road** changed provenance to **you**; the exact edit remained after tab changes and app restart. Automated tests additionally cover unresolved lookup fallback, complete coordinate pairs, raw-coordinate retention, stale results and sent-case preservation.
+
+The local QA fixtures were clearly labelled synthetic, had no remote review/source IDs, and used a loopback video server. Test data and app preferences were restored afterwards, and both local video servers were stopped. Screenshots and harness logs are in the adjacent workspace directory `validation-2026-10-15/` (not shipped in the app).
+
+This is native iOS Simulator verification, not a physical-device or Android certification. Network delay tests use controlled local responses; no production video-latency improvement is claimed.
+
+## TestFlight distribution
+
+- Production EAS build **bf0f55b4-fc33-4957-92bf-536fdd10c8ab** finished successfully from the release source above.
+- EAS upload submission **742316d8-4c31-4ecc-a928-0a82f176edca** finished at **2026-10-14 15:38:18 UTC**. Apple processed the build successfully. Test notes were saved and **Submit for Review** was completed for the existing **Click-to-Safe Beta** external group (3 testers), with its default automatic notification enabled. App Store Connect then displayed build 12 as **Testing / 테스트 중**, available for external testing. This records the observed availability, not a claim about a manual Apple review process.
+- External TestFlight link: https://testflight.apple.com/join/79YfwNXM . Proof: `validation-2026-10-15/09-testflight-build12-testing.png` in the adjacent workspace. App Store Connect build ID: `567020e3-b05b-4e86-b7cd-0a2f6de5e878`.
+
+---
+
 # Backend contract sync — 2026-10-08
 
 Backend reference: `Lorem-Ipsum-AI-Builder-Cup-2026/prototype` **5ff78ce**, deployed by GitHub Actions as Cloud Run revision `prototype-video-api-00020-fqx`.
