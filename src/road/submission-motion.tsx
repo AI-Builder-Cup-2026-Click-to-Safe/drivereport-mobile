@@ -10,6 +10,7 @@ import {
 } from "./submission-model";
 import type { RoadCase } from "./model";
 import { shortDate } from "./format";
+import { shortIncidentLocation } from "./incident-location";
 import { T, C, styles as s } from "./ui";
 import { Plate } from "./standard-ui";
 
@@ -489,7 +490,7 @@ const receiptHead = {
   color: C.muted,
   fontVariant: ["tabular-nums" as const],
 };
-const roadOf = (c: RoadCase) => String(c.incident.location || "").split(",")[0].trim();
+const roadOf = (c: RoadCase) => shortIncidentLocation(c.incident.location);
 const offenderName: Record<string, string> = {
   red_light: "red‑light runner",
   double_line: "double‑line overtaker",

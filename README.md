@@ -60,6 +60,10 @@ JPJ's [official social-channel announcement](https://t.me/s/JPJ_Malaysia?before=
 
 The report location default uses `expo-location` with foreground permission only. Its native module and permission configuration require a new development or release build; a JavaScript-only update does not add them.
 
+When an unsent case contains a complete latitude/longitude pair, opening its review resolves that incident coordinate to a place name with the existing native geocoder. The field is labelled **Map address**; the original coordinate pair remains in the case and WhatsApp draft. This lookup does not read the phone's current GPS location. Manual edits and already-sent cases are preserved. Offline, denied, empty or timed-out lookups retain both coordinates and can retry when the review is reopened. No Google Maps API key is required.
+
+Real footage opens asynchronously. Loads taking longer than 180 ms show the reference's three-dash **Loading the footage** animation until a decoded first frame is available. Errors and a 30-second load timeout expose **Try again**, refreshing expiring evidence links when possible. The existing annotated-to-original fallback remains available. Playback pauses when leaving the screen or backgrounding the app, and reduced motion uses static loading marks.
+
 ## Recording and storage
 
 A drive is one silent 720p video, up to **30 minutes**. Capture never restarts at a one-minute boundary. End recording, the 30-minute limit, or the 490 MiB capture ceiling finishes that one file, then starts upload and review. The 2 Mbps video bitrate targets roughly 450 MB for 30 minutes; device encoders and available storage can cause an earlier stop.
@@ -108,7 +112,7 @@ Wait for the final result, open Review, and check that the original footage and 
 
 ## Motion implementation
 
-Most UI is native React Native. Tab icons interpolate the new supplied 72-point SVG geometry over 540 ms, accompanied by a stretching active pill. Deeper routes slide over the previous screen; tabs fade. Home digits roll and country names wipe every 3.4 seconds; receipts reveal over 900 ms, points/Reported stamps land over 460 ms, and the licence meter fills over 900 ms. Case switches and analysis rows use native-driver transitions. Reduced motion respects both the app preference and the system setting.
+Most UI is native React Native. Tab icons interpolate the supplied 72-point SVG geometry while the selected icon and active pill share the reference's 620 ms bounce. Rapid tab changes resume from the current pose; labels and the Cases badge stay fixed. Deeper routes slide over the previous screen; tabs fade. Home digits roll and country names wipe every 3.4 seconds; receipts reveal over 900 ms, points/Reported stamps land over 460 ms, and the licence meter fills over 900 ms. Case switches and analysis rows use native-driver transitions. Reduced motion respects both the app preference and the system setting.
 
 Only the 230-point Living intelligence illustration uses a local WebView, to retain the authored Canvas renderer exactly: a bounded 72-particle field, at most 96 connections, a steady Gemini mark, and a settling receipt/check composition. Fonts, image, CSS and JavaScript are embedded locally; the view blocks external navigation and has a restrictive content security policy. Motion pauses outside the measured scroll viewport, in the background and in reduced-motion mode, and the illustration is destroyed when leaving the screen.
 

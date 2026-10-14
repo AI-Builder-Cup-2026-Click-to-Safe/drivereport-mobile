@@ -6,7 +6,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { AccessibilityInfo, AppState } from "react-native";
+import { AccessibilityInfo, AppState, Platform } from "react-native";
+import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
 import * as Device from "expo-device";
@@ -26,6 +27,7 @@ import {
   type Region,
 } from "./model";
 import { applyReportDefaults, type ReportDefaults } from "./report-defaults";
+import { applyIncidentLocation, createIncidentLocationResolver, needsIncidentLocation } from "./incident-location";
 import fixtures from "./submission-fixtures.json";
 import { isSubmissionDemo, pendingCases } from "./submission-model";
 import { mergeCaseHistory } from "./case-history";
@@ -68,6 +70,7 @@ type Context = {
   select: (id: string) => void;
   changeCase: (id: string, patch: Partial<RoadCase>) => Promise<void>;
   fillReportDefaults: (expected: RoadCase, defaults: ReportDefaults) => Promise<void>;
+  resolveIncidentLocation: (expected: RoadCase, isActive: () => boolean) => Promise<void>;
   refreshEvidence: (id: string) => Promise<RoadCase>;
   syncCases: (force?: boolean) => Promise<void>;
   syncingCases: boolean;
@@ -88,6 +91,16 @@ type Context = {
   startUndo: (id: string) => void;
   undoSent: () => Promise<void>;
 };
+const resolveIncidentAddress = createIncidentLocationResolver(async (coordinates) => {
+  const active = () => AppState.currentState !== "background";
+  if (Platform.OS === "web" || !active()) return [];
+  // iOS can resolve coordinates without reading the device position. Android
+  // requires foreground location permission for its native geocoder.
+  if (Platform.OS === "android" && !(await Location.requestForegroundPermissionsAsync()).granted)
+    return [];
+  if (!active()) return [];
+  return Location.reverseGeocodeAsync(coordinates);
+});
 const RoadContext = createContext<Context | null>(null);
 export function RoadProvider({ children }: React.PropsWithChildren) {
   const legacy = useStore(),
@@ -370,6 +383,16 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     if (next !== current)
       await persistCases(cr.current.map((c) => c === current ? next : c));
   }, [persistCases]);
+  const resolveIncidentLocation = useCallback(async (expected: RoadCase, isActive: () => boolean) => {
+    if (!isActive() || !needsIncidentLocation(expected)) return;
+    const address = await resolveIncidentAddress(expected.incident.location!);
+    if (!alive.current || !isActive()) return;
+    const current = cr.current.find((c) => c.id === expected.id);
+    if (!current) return;
+    const next = applyIncidentLocation(current, expected, address);
+    if (next !== current)
+      await persistCases(cr.current.map((c) => c === current ? next : c));
+  }, [persistCases]);
   const refreshEvidence = async (id: string) => {
     const current = cr.current.find((c) => c.id === id);
     if (!current) throw Error("Case not found.");
@@ -555,6 +578,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         select,
         changeCase,
         fillReportDefaults,
+        resolveIncidentLocation,
         refreshEvidence,
         syncCases,
         syncingCases,

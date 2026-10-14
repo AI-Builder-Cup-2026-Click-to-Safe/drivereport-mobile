@@ -56,6 +56,8 @@ export type RoadCase = {
     time: string | null;
     timeZone: string;
     location: string | null;
+    /** Original incident coordinates retained when a map supplies the place name. */
+    locationCoordinates?: string;
     description: string | null;
   };
   offences: Offence[];
@@ -211,6 +213,9 @@ export function reportText(c: RoadCase, p: Preferences) {
     `Date / Tarikh: ${c.incident.date}`,
     `Time / Masa: ${c.incident.time} (${c.incident.timeZone})`,
     `Location / Lokasi: ${c.incident.location}`,
+    ...(c.incident.locationCoordinates
+      ? [`Recorded coordinates / Koordinat: ${c.incident.locationCoordinates}`]
+      : []),
     `Vehicle plate / No. pendaftaran: ${c.vehicle.plate}`,
     `Vehicle / Kenderaan: ${[c.vehicle.type, c.vehicle.model].filter(Boolean).join(" / ")}`,
     `Description / Keterangan: ${c.incident.description}`,
