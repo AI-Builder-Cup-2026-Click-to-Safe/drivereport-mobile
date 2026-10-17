@@ -123,6 +123,19 @@ export async function updateReporting(
     "PATCH",
   );
 }
+export async function updateDismissal(
+  reviewId: string,
+  dismissed: boolean,
+  settings: Settings,
+  signal: AbortSignal,
+) {
+  if (!/^[a-f0-9]{32}$/i.test(reviewId))
+    throw new Error("This review has no valid server reference.");
+  const response = await request(settings, `/v1/reviews/${reviewId}/dismissal`, signal, { dismissed }, "PATCH");
+  if (response.review_id !== reviewId || response.dismissed !== dismissed)
+    throw new Error("The server did not confirm the case dismissal. Retry.");
+}
+
 export async function fetchImpact(
   period: "all" | "week" | "today",
   settings: Settings,

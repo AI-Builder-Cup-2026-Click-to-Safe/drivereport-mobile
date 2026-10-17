@@ -601,7 +601,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
     if (stale) void rr.refreshEvidence(c.id).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [c.id, stale]);
-  // Old or repeated cases leave the queue; they stay in Impact and are never sent.
+  // Dismissed cases leave both Cases and Impact without being reported.
   const dismiss = (shown: string[]) => {
     // The queue shows one case per plate, so its hidden repeats go with it.
     const plates = new Set(
@@ -619,7 +619,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
       .map((q) => q.id);
     Alert.alert(
       shown.length > 1 ? `Clear all ${shown.length} waiting cases?` : "Dismiss this case?",
-      `${shown.length > 1 ? "They leave" : "It leaves"} the queue and ${shown.length > 1 ? "are" : "is"} not reported. Sent reports are unaffected.`,
+      `${shown.length > 1 ? "They leave" : "It leaves"} Cases and Impact without being reported. Sent reports are unaffected.`,
       [
         { text: "Cancel", style: "cancel" },
         {

@@ -355,6 +355,8 @@ function legacyCases(i: LegacyIncident, region: Region, completedAt?: string): R
       id: `${i.id}-${index + 1}`,
       createdAt,
       sourceId: i.id,
+      reviewId: i.result!.review_id,
+      dismissed: i.result!.dismissed === true,
       version: 1,
       region,
       vehicle: {
@@ -389,7 +391,7 @@ function legacyCases(i: LegacyIncident, region: Region, completedAt?: string): R
         durationSeconds: 0,
         originalVideoUrl: i.file,
         annotatedVideoUrl: null,
-        thumbnailUrl: i.thumbnail || null,
+        thumbnailUrl: i.result!.thumbnail_url || null,
         tracks: [],
         isSynthetic: false,
       },
@@ -456,10 +458,10 @@ export function mergeServerCase(
   remote: RoadCase,
 ): RoadCase {
   const localOriginal = local.evidence.originalVideoUrl;
-  const localThumbnail = local.evidence.thumbnailUrl;
   return {
     ...local,
     reviewId: remote.reviewId || local.reviewId,
+    dismissed: remote.dismissed,
     createdAt: remote.createdAt || local.createdAt,
     decisionTrail: remote.decisionTrail || local.decisionTrail,
     authorityOutcome: remote.authorityOutcome,
@@ -476,10 +478,7 @@ export function mergeServerCase(
         local.evidence.annotatedVideoUrl,
       excerptVideoUrl:
         remote.evidence.excerptVideoUrl || local.evidence.excerptVideoUrl,
-      thumbnailUrl:
-        localThumbnail?.startsWith("file:")
-          ? localThumbnail
-          : remote.evidence.thumbnailUrl || localThumbnail,
+      thumbnailUrl: remote.evidence.thumbnailUrl,
       tracks: remote.evidence.tracks.length
         ? remote.evidence.tracks
         : local.evidence.tracks,
@@ -657,7 +656,7 @@ function fromServerCase(i: LegacyIncident, fallbackRegion: Region) {
         https(evidence.annotatedVideoUrl) || result.annotated_video_url || null,
       excerptVideoUrl:
         trail?.excerptVideoUrl || result.excerpt_video_url || null,
-      thumbnailUrl: i.thumbnail || https(evidence.thumbnailUrl),
+      thumbnailUrl: https(evidence.thumbnailUrl) || result.thumbnail_url || null,
       tracks: Array.isArray(evidence.tracks)
         ? evidence.tracks
         : result.tracks || [],
@@ -685,6 +684,7 @@ function fromServerCase(i: LegacyIncident, fallbackRegion: Region) {
     },
     sourceId: i.id,
     reviewId: result.review_id,
+    dismissed: typeof raw.dismissed === "boolean" ? raw.dismissed : result.dismissed === true,
     decisionTrail: trail,
   };
   c.analysis = {
