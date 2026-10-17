@@ -1,3 +1,32 @@
+# API case history, thumbnails and external TestFlight — 2026-10-18
+
+Release source: `45f1906c660fb02962577b0f45642ce2a045e4bf`, version **1.0.0 (13)**. Backend source: `24bc214a51248c2c549afb706912fe06aa12c645`, deployed successfully by GitHub Actions run `39044575308`.
+
+## Behavior and verification
+
+- Live case history, analysis results, reporting state and Impact statistics now come from the API instead of persisted case/result caches. Preferences, captured footage and job recovery metadata can remain local. Fresh analyses create new uploads and requests; only an explicit retry of the same job reuses its upload. Automated provider tests cover repeated analysis, retry, resume and concurrent updates; no new paid AI inference was performed in this pass.
+- Impact Needs you uses the same queue as Cases. Sent requires the server's sent state. Dismissed/clean cases and older deduplicated pending cases stay out of these lists, including after applying filters. Dismissal writes to the server. Explicit server dismissal state wins over legacy device state.
+- Existing server records and summaries have thumbnails for **89/89** reviews, using **82 distinct JPEG objects**. All objects exist with valid image metadata/content, and all 89 live API records/details return usable image URLs. Native lists visibly render the server thumbnails, including older cases. Signed thumbnail URLs are refreshed by API reads.
+- Measured 64 unique original videos. Restored `dismissed=false` for **65 unsent records with originals under 300 seconds**. Preserved all **8 Sent records**, **18 records with originals at least 300 seconds**, and all duplicate records. The before/after audit found no changes outside thumbnail fields and the authorized dismissal fields; record and summary counts remained 89.
+- **137 mobile tests** and **209 backend tests** passed, plus TypeScript, ESLint, backend Ruff lint/format and independent review. The native iOS Release build completed with **zero errors and zero warnings**.
+
+## Native and live API evidence
+
+- Installed the Release binary on iPhone 16 Pro / iOS 18.5 Simulator. The upgraded installation displayed real API data and removed the old local case cache.
+- A separate fresh Simulator installation displayed **1.0.0 (13)**, with **Demo dataset off** without toggling it. It fetched the production case history immediately. The AsyncStorage directory contained no persisted case/result data after loading or after restart.
+- The live API's 89 reviews, after the app's normal history mapping and queue rules, produced **Cases 23**, **Impact Needs you 23**, **Sent 8**, and **All 31**. The native screens matched these counts. Sent and temporary plate/offence filters were exercised; filters were cleared afterwards.
+- Terminated and cold-launched the fresh installation with no Metro server. It fetched and displayed the same **23 / 23 / 8 / 31** counts. Case evidence video and multiple server thumbnails were visibly rendered.
+- Native screenshots, accessibility captures, live API results and private data-migration audit files are in the adjacent workspace directory `validation-2026-10-18/` and are not shipped in the app. This is Simulator verification; no physical-iPhone or Android certification is claimed.
+
+## TestFlight distribution
+
+- Production EAS build `15e59676-e4e2-40d4-8eca-f3bb951f8c49` finished from release source `45f1906`.
+- External workflow `01a14a7a-f745-70e1-88fc-7a1bcf3064e0` and submission `733ebd57-4df4-4361-811e-ac73757b5933` succeeded for the existing Click-to-Safe Beta group.
+- App Store Connect confirmed build 13 as **VALID**, **READY_FOR_BETA_TESTING** internally and **IN_BETA_TESTING** externally. It is available for external testing, not merely queued for upload/review.
+- External TestFlight link: https://testflight.apple.com/join/79YfwNXM
+
+---
+
 # Footage loading, tab motion and incident place names — 2026-10-15
 
 Release source: `405d0f70f6242746e9e22d6eea550960ffb4d941`, version **1.0.0 (12)**. This pass is limited to the changed features, as requested. No WhatsApp draft/report, reporting-state mutation, new AI analysis, backend edit or backend deployment was performed.
