@@ -1,6 +1,24 @@
 import type { ReviewHistoryItem } from "../lib/history.ts";
 import type { Incident } from "../lib/domain.ts";
-import { mergeServerCase, type RoadCase } from "./model.ts";
+import { correctStatus, mergeServerCase, type RoadCase } from "./model.ts";
+import { isPendingStatus, latestByPlate } from "./submission-model.ts";
+
+/** Download only the Cases queue and actual Sent records when summaries suffice. */
+export function visibleHistoryDetails(history: readonly ReviewHistoryItem[]): ReviewHistoryItem[] {
+  const eligible = history.filter((item) => !item.dismissed &&
+    item.reportingStatus !== "clean" &&
+    (item.reportingStatus === "sent" || isPendingStatus(item.reportingStatus) || item.reportableCount !== 0),
+  );
+  const pending = eligible.filter((item) => item.reportingStatus !== "sent" &&
+    (isPendingStatus(item.reportingStatus) || (item.reportableCount ?? 0) > 0),
+  );
+  const pendingIds = new Set(pending.map((item) => item.reviewId));
+  const selected = new Set(latestByPlate(pending, (item) => item.plate ?? null)
+    .map((item) => item.reviewId));
+  // Unknown legacy metadata must be fetched to establish whether it is visible.
+  // It cannot reserve a plate or suppress an explicitly pending case yet.
+  return eligible.filter((item) => !pendingIds.has(item.reviewId) || selected.has(item.reviewId));
+}
 
 /** Limit cold-start detail requests while retaining successful partial results. */
 export async function loadHistoryDetails<T>(
@@ -60,7 +78,7 @@ export function mergeCaseHistory(
   return next.map((c) => {
     const item = c.reviewId ? byReview.get(c.reviewId) : undefined;
     if (!item || c.provenance.isDemo) return c;
-    return {
+    const updated: RoadCase = {
       ...c,
       // Also backfill already-known cases, which do not need another detail fetch.
       createdAt: Number.isFinite(Date.parse(item.createdAt)) ? item.createdAt : c.createdAt,
@@ -72,5 +90,10 @@ export function mergeCaseHistory(
         ? { status: item.reportingStatus, confirmedByUser: item.reportingStatus === "sent" }
         : c.reporting,
     };
+    // The summary selects queue membership; detailed facts determine whether a
+    // pending report still needs its plate, location or other required fields.
+    if (item.reportingStatus === "ready" || item.reportingStatus === "needs_info")
+      updated.reporting.status = correctStatus(updated);
+    return updated;
   });
 }

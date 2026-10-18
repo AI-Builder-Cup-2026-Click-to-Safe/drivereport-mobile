@@ -28,7 +28,7 @@ import { applyReportDefaults, type ReportDefaults } from "./report-defaults";
 import { applyIncidentLocation, createIncidentLocationResolver, needsIncidentLocation } from "./incident-location";
 import fixtures from "./submission-fixtures.json";
 import { isSubmissionDemo, pendingCases } from "./submission-model";
-import { mergeCaseHistory, linkLocalEvidence, loadHistoryDetails } from "./case-history";
+import { mergeCaseHistory, linkLocalEvidence, loadHistoryDetails, visibleHistoryDetails } from "./case-history";
 import { DEMO_STAGE_MS } from "./analysis-timing";
 export type Job = {
   id: string;
@@ -254,9 +254,10 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
             !pendingDismissals.current.includes(item.reviewId),
           );
           const known = new Set(
-            cr.current.map((c) => c.reviewId).filter(Boolean),
+            cr.current.filter((c) => !c.dismissed && c.reporting.status !== "clean")
+              .map((c) => c.reviewId).filter(Boolean),
           );
-          const missing = history.filter((item) => !known.has(item.reviewId));
+          const missing = visibleHistoryDetails(history).filter((item) => !known.has(item.reviewId));
           const fetched = await loadHistoryDetails(
             missing, async (item) => {
               const review = await old.current.getReview(item.reviewId);

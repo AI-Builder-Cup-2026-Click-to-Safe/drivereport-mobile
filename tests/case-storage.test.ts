@@ -9,6 +9,8 @@ import * as history from "../src/road/case-history.ts";
 import * as submission from "../src/road/submission-model.ts";
 import * as defaults from "../src/road/report-defaults.ts";
 import * as location from "../src/road/incident-location.ts";
+import { impactCases } from "../src/road/impact-cases.ts";
+import type { ReviewHistoryItem } from "../src/lib/history.ts";
 import { DEMO_STAGE_MS } from "../src/road/analysis-timing.ts";
 
 const ts = createRequire(import.meta.url)("typescript");
@@ -180,7 +182,7 @@ test("failed startup history never reconstructs cases from legacy footage respon
   assert.equal(disk.data.has("road.cases.v1"), false);
 });
 
-test("cold-start history loads all 93 reviews without exceeding four concurrent detail requests", async () => {
+test("legacy history without eligibility metadata remains loadable with at most four concurrent detail requests", async () => {
   const items = Array.from({ length: 93 }, (_, index) => ({
     reviewId: `server-${index}`, createdAt: "2026-10-18T00:00:00Z",
   }));
@@ -213,6 +215,100 @@ test("cold-start history loads all 93 reviews without exceeding four concurrent 
   assert.equal(value.historyError, "");
   assert.equal(value.syncingCases, false);
   assert.equal(disk.writes.includes("road.cases.v1"), false);
+});
+
+test("93 summaries request only 11 visible Needs you and 8 Sent details, then restore a newly visible duplicate", async () => {
+  let items: ReviewHistoryItem[] = [
+    ...Array.from({ length: 11 }, (_, index): ReviewHistoryItem => ({
+      reviewId: `pending-${index}`, createdAt: "2026-10-18T00:00:00Z",
+      reportingStatus: index % 2 ? "needs_info" : "ready", reportableCount: 1, plate: `ABC ${index}`,
+    })),
+    ...Array.from({ length: 8 }, (_, index): ReviewHistoryItem => ({
+      reviewId: `sent-${index}`, createdAt: "2026-10-18T00:00:00Z",
+      reportingStatus: "sent", reportableCount: 0, plate: "ABC 0",
+    })),
+    ...Array.from({ length: 5 }, (_, index): ReviewHistoryItem => ({
+      reviewId: `duplicate-${index}`, createdAt: "2026-10-17T00:00:00Z",
+      reportingStatus: "opened", reportableCount: 1, plate: `abc${index}`,
+    })),
+    ...Array.from({ length: 30 }, (_, index): ReviewHistoryItem => ({
+      reviewId: `dismissed-${index}`, createdAt: "2026-10-18T00:00:00Z",
+      reportingStatus: "ready", reportableCount: 1, dismissed: true,
+    })),
+    ...Array.from({ length: 39 }, (_, index): ReviewHistoryItem => ({
+      reviewId: `clean-${index}`, createdAt: "2026-10-18T00:00:00Z",
+      reportingStatus: index % 2 ? "clean" : undefined, reportableCount: 0,
+    })),
+  ];
+  const requests: string[] = [];
+  let peak = 0;
+  let active = 0;
+  const app = roadStore(storage(), {
+    listReviews: async () => items,
+    getReview: async (id: string) => {
+      requests.push(id);
+      peak = Math.max(peak, ++active);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      active--;
+      const result = review(id);
+      const c = result.case as model.RoadCase;
+      c.vehicle.plate = items.find((item) => item.reviewId === id)?.plate ?? null;
+      return result;
+    },
+  });
+  let value = await app.flush();
+  assert.equal(items.length, 93);
+  assert.equal(peak, 4);
+  assert.deepEqual(requests, items.slice(0, 19).map((item) => item.reviewId));
+  assert.equal(value.allCases.length, 19);
+  assert.equal(submission.pendingCases(value.cases).length, 11);
+  assert.equal(impactCases(value.cases).all.length, 19);
+  assert.equal(impactCases(value.cases).sent.length, 8);
+
+  items = items.map((item) => item.reviewId === "pending-0" ? { ...item, dismissed: true } : item);
+  requests.length = 0;
+  await value.syncCases(true);
+  value = app.render();
+  assert.deepEqual(requests, ["duplicate-0"]);
+  assert.equal(submission.pendingCases(value.cases).length, 11);
+  assert.equal(impactCases(value.cases).all.length, 19);
+  assert.equal(value.allCases.find((c: model.RoadCase) => c.reviewId === "pending-0").dismissed, true);
+});
+
+test("summary clean/dismissed states hide known cases and restoring either state fetches fresh details", async () => {
+  let item: ReviewHistoryItem = {
+    reviewId: "server", createdAt: "2026-10-18T00:00:00Z",
+    reportingStatus: "ready", reportableCount: 1, dismissed: true,
+  };
+  const requests: string[] = [];
+  const app = roadStore(storage(), {
+    listReviews: async () => [item],
+    getReview: async (id: string) => { requests.push(id); return review(id); },
+  });
+  let value = await app.flush();
+  assert.deepEqual(requests, []);
+  assert.equal(value.allCases.length, 0);
+
+  item = { ...item, dismissed: false };
+  await value.syncCases(true);
+  value = app.render();
+  assert.deepEqual(requests, ["server"]);
+  assert.equal(submission.pendingCases(value.cases).length, 1);
+
+  for (const hidden of [{ reportingStatus: "clean" as const }, { dismissed: true }]) {
+    item = { ...item, ...hidden };
+    requests.length = 0;
+    await value.syncCases(true);
+    value = app.render();
+    assert.deepEqual(requests, []);
+    assert.equal(impactCases(value.cases).all.length, 0);
+
+    item = { ...item, reportingStatus: "ready", dismissed: false };
+    await value.syncCases(true);
+    value = app.render();
+    assert.deepEqual(requests, ["server"]);
+    assert.equal(submission.pendingCases(value.cases).length, 1);
+  }
 });
 
 test("a failed detail does not stop queued history requests and retry only downloads the missing case", async () => {
@@ -412,7 +508,7 @@ test("legacy dismissals migrate only review IDs, stay hidden offline, and resume
   });
   const restored = await restarted.flush();
   assert.deepEqual(calls, [id]);
-  assert.equal(restored.allCases[0].dismissed, true);
+  assert.equal(restored.allCases.length, 0, "a migrated dismissal stays outside the displayed detail queue");
   assert.equal(disk.data.has("road.dismissed-reviews.v1"), false);
 });
 

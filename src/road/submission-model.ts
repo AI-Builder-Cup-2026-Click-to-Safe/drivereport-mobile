@@ -2,29 +2,39 @@ import { normalizePlate, type RoadCase } from "./model.ts";
 export const submissionSource = "submission_fixture_v1";
 export const isSubmissionDemo = (c: RoadCase) =>
   c.provenance.isDemo && c.provenance.factsSource === submissionSource;
-export const pendingCases = (cases: RoadCase[]) => {
+export const isPendingStatus = (status: string | undefined) =>
+  status === "ready" || status === "needs_info" || status === "opened";
+
+/** Shared queue ordering for API summaries and loaded cases. */
+export function latestByPlate<T extends { createdAt?: string }>(
+  items: readonly T[],
+  plateOf: (item: T) => string | null,
+  isDemo: (item: T) => boolean = () => false,
+): T[] {
   const plates = new Set<string>();
-  const pending = cases.filter((c) =>
-    !c.dismissed && ["ready", "needs_info", "opened"].includes(c.reporting.status),
-  );
-  const savedTime = (c: RoadCase) => {
+  const savedTime = (c: T) => {
     const value = Date.parse(c.createdAt || "");
     return Number.isFinite(value) ? value : -Infinity;
   };
   // Sort live cases before deduplication so the newest review of a plate wins.
   // Stable ties/unknown dates retain input order; authored demo positions stay put.
-  const live = pending.filter((c) => !c.provenance.isDemo)
+  const live = items.filter((c) => !isDemo(c))
     .sort((a, b) => savedTime(b) - savedTime(a) || 0);
   let liveIndex = 0;
-  return pending.map((c) => c.provenance.isDemo ? c : live[liveIndex++]).filter((c) => {
+  return items.map((c) => isDemo(c) ? c : live[liveIndex++]).filter((c) => {
     // One case per plate: analysing the same clip again must not queue it twice.
-    const plate = normalizePlate(c.vehicle.plate);
+    const plate = normalizePlate(plateOf(c));
     if (!plate) return true;
     if (plates.has(plate)) return false;
     plates.add(plate);
     return true;
   });
-};
+}
+export const pendingCases = (cases: RoadCase[]) => latestByPlate(
+  cases.filter((c) => !c.dismissed && isPendingStatus(c.reporting.status)),
+  (c) => c.vehicle.plate,
+  (c) => c.provenance.isDemo,
+);
 export const casePoints = (c: RoadCase) =>
   c.offences
     .filter((o) => o.included)

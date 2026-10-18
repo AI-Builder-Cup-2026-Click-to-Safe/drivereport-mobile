@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { URL } from "node:url";
 import type { Incident, Review } from "../src/lib/domain.ts";
-import { mergeCaseHistory, linkLocalEvidence } from "../src/road/case-history.ts";
+import { mergeCaseHistory, linkLocalEvidence, visibleHistoryDetails } from "../src/road/case-history.ts";
+import type { ReviewHistoryItem } from "../src/lib/history.ts";
 import { editCase, fromLegacy, fromServerReview, mergeServerCase, type RoadCase } from "../src/road/model.ts";
 import { pendingCases } from "../src/road/submission-model.ts";
 
@@ -135,6 +136,50 @@ test("server reporting updates replace session status and ignore invalid timesta
   assert.equal(merged[1].createdAt, newer);
 });
 
+test("pending summary status preserves detail-derived readiness for missing plate and location", () => {
+  for (const field of ["plate", "location"] as const) {
+    const result = review(field, newer);
+    const supplied = result.case as RoadCase;
+    if (field === "plate") supplied.vehicle.plate = null;
+    else supplied.incident.location = null;
+    supplied.reporting.status = "ready";
+    const [mapped] = fromServerReview(result, "MY");
+    assert.equal(mapped.reporting.status, "needs_info");
+    const [updated] = mergeCaseHistory([], [mapped], [{
+      reviewId: field, createdAt: newer, reportingStatus: "ready",
+    }]);
+    assert.equal(updated.reporting.status, "needs_info", `missing ${field} must remain Needs details`);
+    assert.equal(updated.reporting.confirmedByUser, false);
+  }
+});
+
+test("summary transitions recompute pending readiness without changing explicit Sent/opened/clean semantics", () => {
+  const complete = live("complete", newer);
+  complete.vehicle = { plate: "ABC 123", type: "Car", model: null };
+  complete.incident = {
+    date: "2026-10-18", time: "12:00", timeZone: "Asia/Kuala_Lumpur",
+    location: "Jalan test", description: "Observed offence",
+  };
+  complete.reporting = { status: "sent", confirmedByUser: true };
+  const [ready] = mergeCaseHistory([complete], [], [{
+    reviewId: "complete", createdAt: newer, reportingStatus: "needs_info",
+  }]);
+  assert.equal(ready.reporting.status, "ready");
+  assert.equal(ready.reporting.confirmedByUser, false);
+  const incomplete = { ...complete, vehicle: { ...complete.vehicle, plate: null } };
+  const [needsInfo] = mergeCaseHistory([incomplete], [], [{
+    reviewId: "complete", createdAt: newer, reportingStatus: "ready",
+  }]);
+  assert.equal(needsInfo.reporting.status, "needs_info");
+  for (const status of ["sent", "opened", "clean"] as const) {
+    const [updated] = mergeCaseHistory([{ ...incomplete, offences: [] }], [], [{
+      reviewId: "complete", createdAt: newer, reportingStatus: status,
+    }]);
+    assert.equal(updated.reporting.status, status);
+    assert.equal(updated.reporting.confirmedByUser, status === "sent");
+  }
+});
+
 test("API cases reconnect to the retained upload after restart without cached analysis data", () => {
   const c = live("review");
   c.evidence.originalVideoUrl = "https://storage.googleapis.com/bucket/path%20with%20spaces.mp4?X-Goog-Signature=fresh";
@@ -164,4 +209,32 @@ test("history renews signed thumbnails and authoritative dismissal without downl
   }]);
   assert.equal(cleared.dismissed, false);
   assert.equal(cleared.evidence.thumbnailUrl, null);
+});
+
+test("summary eligibility matches the pending queue while preserving every Sent and unknown legacy review", () => {
+  const items: ReviewHistoryItem[] = [
+    { reviewId: "old", createdAt: older, reportingStatus: "ready", plate: "ABC 123" },
+    { reviewId: "sent-one", createdAt: older, reportingStatus: "sent", reportableCount: 0, plate: "abc123" },
+    { reviewId: "new", createdAt: newer, reportingStatus: "needs_info", plate: "aBc\t123" },
+    { reviewId: "sent-two", createdAt: newer, reportingStatus: "sent", reportableCount: 0, plate: "ABC123" },
+    { reviewId: "opened", createdAt: newer, reportingStatus: "opened", reportableCount: 0, plate: null },
+    { reviewId: "clean", createdAt: newer, reportingStatus: "clean", reportableCount: 1 },
+    { reviewId: "legacy-clean", createdAt: newer, reportableCount: 0 },
+    { reviewId: "dismissed", createdAt: newer, reportingStatus: "sent", dismissed: true },
+    { reviewId: "legacy-positive", createdAt: newer, reportableCount: 1 },
+    { reviewId: "unknown", createdAt: newer, plate: "ABC123" },
+    { reviewId: "unknown-no-plate", createdAt: newer },
+  ];
+  assert.deepEqual(visibleHistoryDetails(items).map((item) => item.reviewId), [
+    "sent-one", "new", "sent-two", "opened", "legacy-positive", "unknown", "unknown-no-plate",
+  ]);
+  assert.deepEqual(visibleHistoryDetails([]), []);
+  const pending = items.filter((item) => ["old", "new", "opened"].includes(item.reviewId));
+  const detailed = pending.map((item) => ({
+    ...live(item.reviewId, item.createdAt),
+    vehicle: { plate: item.plate ?? null, type: null, model: null },
+    reporting: { status: item.reportingStatus!, confirmedByUser: false },
+  }));
+  assert.deepEqual(new Set(visibleHistoryDetails(pending).map((item) => item.reviewId)),
+    new Set(pendingCases(detailed).map((c) => c.reviewId)));
 });
