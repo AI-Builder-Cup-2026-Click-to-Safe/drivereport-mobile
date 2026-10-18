@@ -2,6 +2,26 @@ import type { ReviewHistoryItem } from "../lib/history.ts";
 import type { Incident } from "../lib/domain.ts";
 import { mergeServerCase, type RoadCase } from "./model.ts";
 
+/** Limit cold-start detail requests while retaining successful partial results. */
+export async function loadHistoryDetails<T>(
+  history: readonly ReviewHistoryItem[],
+  load: (item: ReviewHistoryItem) => Promise<T>,
+): Promise<PromiseSettledResult<T>[]> {
+  const results = new Array<PromiseSettledResult<T>>(history.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(4, history.length) }, async () => {
+    while (next < history.length) {
+      const index = next++;
+      try {
+        results[index] = { status: "fulfilled", value: await load(history[index]) };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  }));
+  return results;
+}
+
 /** Link an API case to retained footage without restoring a cached review. */
 export function linkLocalEvidence(c: RoadCase, records: Incident[]): RoadCase {
   if (c.provenance.isDemo || !c.evidence.originalVideoUrl) return c;

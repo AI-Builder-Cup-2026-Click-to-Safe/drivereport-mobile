@@ -180,6 +180,74 @@ test("failed startup history never reconstructs cases from legacy footage respon
   assert.equal(disk.data.has("road.cases.v1"), false);
 });
 
+test("cold-start history loads all 93 reviews without exceeding four concurrent detail requests", async () => {
+  const items = Array.from({ length: 93 }, (_, index) => ({
+    reviewId: `server-${index}`, createdAt: "2026-10-18T00:00:00Z",
+  }));
+  const requests: string[] = [];
+  let active = 0;
+  let peak = 0;
+  const disk = storage();
+  const app = roadStore(disk, {
+    listReviews: async () => items,
+    getReview: async (id: string) => {
+      requests.push(id);
+      active++;
+      peak = Math.max(peak, active);
+      try {
+        if (active > 4) throw Error("Detail request capacity exceeded");
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        return review(id);
+      } finally {
+        active--;
+      }
+    },
+  });
+  const started = await app.flush();
+  await started.syncCases(true);
+  const value = app.render();
+  assert.equal(peak, 4);
+  assert.equal(active, 0);
+  assert.deepEqual(requests, items.map((item) => item.reviewId));
+  assert.deepEqual(value.allCases.map((c: model.RoadCase) => c.reviewId), requests);
+  assert.equal(value.historyError, "");
+  assert.equal(value.syncingCases, false);
+  assert.equal(disk.writes.includes("road.cases.v1"), false);
+});
+
+test("a failed detail does not stop queued history requests and retry only downloads the missing case", async () => {
+  const items = Array.from({ length: 11 }, (_, index) => ({
+    reviewId: `server-${index}`, createdAt: "2026-10-18T00:00:00Z",
+  }));
+  const requests: string[] = [];
+  let fail = true;
+  const disk = storage();
+  const app = roadStore(disk, {
+    listReviews: async () => items,
+    getReview: async (id: string) => {
+      requests.push(id);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      if (id === "server-1" && fail) throw Error("Detail timed out");
+      return review(id);
+    },
+  });
+  let value = await app.flush();
+  assert.deepEqual(requests, items.map((item) => item.reviewId));
+  assert.deepEqual(value.allCases.map((c: model.RoadCase) => c.reviewId),
+    requests.filter((id) => id !== "server-1"));
+  assert.equal(value.historyError, "Some server cases could not be downloaded. Retry.");
+  assert.equal(value.syncingCases, false);
+
+  fail = false;
+  requests.length = 0;
+  await value.syncCases(true);
+  value = app.render();
+  assert.deepEqual(requests, ["server-1"]);
+  assert.equal(value.allCases.length, items.length);
+  assert.equal(value.historyError, "");
+  assert.equal(disk.writes.includes("road.cases.v1"), false);
+});
+
 test("normal Analyse twice calls the API twice and retains both server reviews without writing cases", async () => {
   const disk = storage();
   const app = roadStore(disk);

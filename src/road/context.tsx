@@ -28,7 +28,7 @@ import { applyReportDefaults, type ReportDefaults } from "./report-defaults";
 import { applyIncidentLocation, createIncidentLocationResolver, needsIncidentLocation } from "./incident-location";
 import fixtures from "./submission-fixtures.json";
 import { isSubmissionDemo, pendingCases } from "./submission-model";
-import { mergeCaseHistory, linkLocalEvidence } from "./case-history";
+import { mergeCaseHistory, linkLocalEvidence, loadHistoryDetails } from "./case-history";
 import { DEMO_STAGE_MS } from "./analysis-timing";
 export type Job = {
   id: string;
@@ -257,14 +257,14 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
             cr.current.map((c) => c.reviewId).filter(Boolean),
           );
           const missing = history.filter((item) => !known.has(item.reviewId));
-          const fetched = await Promise.allSettled(
-            missing.map(async (item) => {
+          const fetched = await loadHistoryDetails(
+            missing, async (item) => {
               const review = await old.current.getReview(item.reviewId);
               if (!review.created_at) review.created_at = item.createdAt;
               return fromServerReview(review, pr.current.region).map((c) =>
                 linkLocalEvidence(c, old.current.records),
               );
-            }),
+            },
           );
           const remote = fetched.flatMap((result) =>
             result.status === "fulfilled" ? result.value : [],
