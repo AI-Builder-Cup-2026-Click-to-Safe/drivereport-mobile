@@ -1,3 +1,36 @@
+# Visible case loading and external TestFlight build 14 — 2026-10-18
+
+Release source: `ebe4d4e8efe40ae31433f8b2392b638c4292774e`, version **1.0.0 (14)**. Backend source: `e62b258dd74433cb4b51ba18fd34e4ad77c4d6df`, deployed successfully by [GitHub Actions run `39106685602`](https://github.com/AI-Builder-Cup-2026-Click-to-Safe/click-to-safe-backend/actions/runs/39106685602).
+
+## Behavior and verification
+
+- History summaries now select the visible pending queue and actual Sent records before downloading case details. The app excludes dismissed/clean records and older pending plate duplicates, retains a detail-fetch fallback for incomplete legacy summaries, and limits concurrent detail requests to four.
+- All **145 mobile tests**, TypeScript and ESLint passed against this release source. Fresh check logs are saved in the adjacent workspace directory `validation-2026-10-18/reprocess/release-build14-checks/`.
+- The native iOS Release build succeeded and was installed on the iPhone 16 Pro Simulator. At **2026-10-18 06:58:28 UTC**, the observed app session made **19 API GET requests**: one history request, **17 case-detail requests**, and one Impact request. All returned **HTTP 200**.
+- This initial **pre-prune snapshot** displayed **Cases 9**, **Impact Needs you 9**, **Sent 8**, and **All 17**, with **8 reported / 0 billed** under the existing Impact card titles. A case evidence video loaded successfully.
+
+## Final data and native verification
+
+- Reprocessed the frozen **11 visible Needs you reviews in place**, preserving review IDs, case IDs and creation times. Eight fresh analyses completed successfully. Three reviews whose original bytes exactly matched the validated 247-second source reused that source's reviewed analysis and media after their own strict tracking checks failed. Each retained its own upload, identity and explicit reuse provenance; no duplicate review documents were added. The complete pre-prune audit verified all 11 replacements while both Firestore collections still contained 93 documents.
+- Corrected the portrait-video rotation in review `0a23e353…`. For the shared 247-second source, independent visual review checked **92 sampled observations across all seven vehicle tracks**: **76 boxes accepted**, **7 incorrect boxes rejected**, and 9 observations already had no box. The rerendered overlay, clipped excerpt and thumbnail passed verification. This covers the reviewed samples, not continuous pixel-perfect tracking. Removed the two AI appearance clauses that incorrectly described camera reflections as illuminated vehicle accessories.
+- The final narrative audit found **zero remaining eligible Ego values**. All eight original Sent records and all 82 records outside the regeneration target set were unchanged before cleanup. Original video generations and checksums were preserved.
+- Respected a concurrent Dismiss of `04f04dba…` from a real build-14 device. Its older same-plate review `94d05517…` became visible and was preserved. The refreshed cleanup plan removed **76 hidden review/summary pairs: 31 dismissed and 45 clean**. Both collections changed **93 → 17**; every retained document, including **all eight Sent records**, remained unchanged. **No GCS object was deleted.** Private full backups and the committed deletion receipt were retained.
+- Post-prune API verification confirmed **Cases 9 / Needs you 9 / Sent 8 / All 17**, with **8 reported / 0 billed**. All 76 deleted IDs were absent from history and returned detail HTTP 404. All 17 retained reviews passed identity/state/media checks; **81 media requests** passed. The nine retained regeneration targets plus two intentionally deleted targets account for the original 11.
+- Cold-restarted the native app at **2026-10-18 07:21:31 UTC**. It made exactly **19 GET requests: one history, 17 details, one Impact; all HTTP 200**. The deleted `04f04dba…` review was not requested, and preserved `94d05517…` was requested and displayed first in the nine-case queue. Its evidence video loaded. Native Cases, Needs you, Sent, All and the top cards matched the API; Sent and Needs you filters were exercised and restored to All.
+
+Evidence and private backup paths are indexed in the adjacent workspace's `validation-2026-10-18/reprocess/RESULTS.md`. Final native evidence includes `native14-final-verification.json`, `native14-final-get-requests.json`, the `native14-final-*.png` captures and `mobile-native-build14-live.log`. This records Simulator QA; the observed real-device Dismiss is server activity, not a physical-iPhone test certification. Android behavior was not verified in this pass.
+
+## TestFlight distribution
+
+- Production iOS [EAS build `47ab99d8-3b3a-4a42-bbbb-bc482695a53a`](https://expo.dev/accounts/yuyu-corp/projects/click-to-safe/builds/47ab99d8-3b3a-4a42-bbbb-bc482695a53a) finished successfully at **2026-10-18 06:55:35 UTC** from the release source above.
+- The [external TestFlight workflow `01a14dce-df21-7238-b6d8-e99ca09a846f`](https://expo.dev/accounts/yuyu-corp/projects/click-to-safe/workflows/01a14dce-df21-7238-b6d8-e99ca09a846f) completed successfully for the existing **Click-to-Safe Beta** group. It created submission `42fc6fee-089f-4320-9284-3c7d5911ec1f`.
+- App Store Connect directly confirmed build 14 as **VALID**, **READY_FOR_BETA_TESTING** internally and **IN_BETA_TESTING** externally. External testing availability is established by this Apple status, in addition to the successful upload/workflow result.
+- [Join the external TestFlight](https://testflight.apple.com/join/79YfwNXM).
+
+Distribution evidence is retained in the adjacent workspace's `validation-2026-10-18/reprocess/eas-build14-status.json`, `testflight14-apple-status.json`, `testflight14-workflow.json`, `testflight14-status.json`, and `testflight14-logs.json`.
+
+---
+
 # API case history, thumbnails and external TestFlight — 2026-10-18
 
 Release source: `45f1906c660fb02962577b0f45642ce2a045e4bf`, version **1.0.0 (13)**. Backend source: `24bc214a51248c2c549afb706912fe06aa12c645`, deployed successfully by GitHub Actions run `39044575308`.
