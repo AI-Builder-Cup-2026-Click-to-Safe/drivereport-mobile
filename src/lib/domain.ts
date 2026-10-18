@@ -27,6 +27,8 @@ export type Review = {
   original_video_url?: string;
   annotated_video_url?: string;
   excerpt_video_url?: string;
+  thumbnail_url?: string;
+  dismissed?: boolean;
   tracks: unknown[];
   evidence: {
     timeline: { start_seconds: number; end_seconds: number; event: string }[];
@@ -54,6 +56,7 @@ export type Incident = {
   remoteApiUrl?: string;
   remoteAudioRemoved?: boolean;
   remoteMime?: string;
+  uploadJobId?: string;
   durationSeconds?: number;
   selectedVehicleId?: string;
   result?: Review;
@@ -172,6 +175,10 @@ export function parseReview(input: unknown): Review {
     ...(httpsUrl(r.excerpt_video_url)
       ? { excerpt_video_url: httpsUrl(r.excerpt_video_url) }
       : {}),
+    ...(httpsUrl(r.thumbnail_url)
+      ? { thumbnail_url: httpsUrl(r.thumbnail_url) }
+      : {}),
+    ...(typeof r.dismissed === "boolean" ? { dismissed: r.dismissed } : {}),
     tracks: Array.isArray(r.tracks) ? r.tracks : [],
     evidence: { timeline },
   };

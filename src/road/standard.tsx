@@ -19,7 +19,8 @@ import * as ImagePicker from "expo-image-picker";
 import * as Clipboard from "expo-clipboard";
 import * as FS from "expo-file-system/legacy";
 import { useRoad } from "./context";
-import { demoFrameFor } from "./media";
+import { CaseThumbnail } from "./case-thumbnail";
+import { impactCases } from "./impact-cases";
 import { useStore } from "../lib/store";
 import {
   Action,
@@ -275,17 +276,7 @@ export function Clip() {
         throw Error(
           "Live analysis supports Malaysia only. Set the region to Malaysia in Settings.",
         );
-      let id = file?.id;
-      if (!id) {
-        id = await store.importSample();
-        // Analysing a sample that was already reported starts a new review instead of reopening it.
-        const earlier = rr.allCases.filter((c) => c.sourceId === id);
-        if (
-          earlier.length &&
-          earlier.every((c) => c.reporting.status === "sent")
-        )
-          id = await store.importSample({ fresh: true });
-      }
+      const id = file?.id || await store.importSample();
       await rr.setPrefs({ demo: false });
       void rr.begin([id]).catch(showError);
       go("analysis");
@@ -886,7 +877,7 @@ export function StandardAnalysis() {
               if (!j.sourceIds.length && j.mode === "live") go("recording");
               else
                 void rr
-                  .begin(j.sourceIds, j.mode === "demo")
+                  .begin(j.sourceIds, j.mode === "demo", j.id)
                   .catch(showError);
             }}
           />
@@ -1125,44 +1116,45 @@ export function StandardImpact() {
     [offence, setOffence] = useState(""),
     // Live history can grow without bound; rows render a page at a time inside the scroll view.
     [shown, setShown] = useState(PAGE);
-  const [remote, setRemote] = useState<Awaited<
-    ReturnType<typeof store.getImpact>
-  > | null>(null);
-  const [remoteError, setRemoteError] = useState(false);
+  const [impactRequest, setImpactRequest] = useState<{
+    period: string;
+    value?: Awaited<ReturnType<typeof store.getImpact>>;
+    failed?: boolean;
+  } | null>(null);
+  const [impactRefresh, setImpactRefresh] = useState(0);
+  const impactStore = React.useRef(store);
+  impactStore.current = store;
   const periodKey = (["all", "week", "today"] as const)[period];
+  const currentImpact = !rr.prefs.demo && impactRequest?.period === periodKey
+    ? impactRequest
+    : null;
+  const remote = currentImpact?.value;
+  const remoteError = currentImpact?.failed === true;
+  const remoteLoading = !rr.prefs.demo && !remote && !remoteError;
+  const refreshImpact = () => {
+    setImpactRequest(null);
+    setImpactRefresh((value) => value + 1);
+  };
   useEffect(() => {
     let alive = true;
-    if (rr.prefs.demo) {
-      setRemote(null);
-      setRemoteError(false);
-      return;
-    }
-    setRemoteError(false);
-    void store
+    setImpactRequest(null);
+    if (rr.prefs.demo || !store.ready) return;
+    void impactStore.current
       .getImpact(periodKey)
       .then((value) => {
-        if (alive) setRemote(value);
+        if (alive) setImpactRequest({ period: periodKey, value });
       })
       .catch(() => {
-        if (alive) setRemoteError(true);
+        if (alive) setImpactRequest({ period: periodKey, failed: true });
       });
     return () => {
       alive = false;
     };
-  }, [periodKey, rr.prefs.demo, store]);
-  const data = impact(rr.cases, ["all", "week", "today"][period]);
-  const scoped = data.scoped.filter(
-    (c) =>
-      (!plate || normalizePlate(c.vehicle.plate) === plate) &&
-      (!offence || c.offences.some((o) => o.code === offence)),
-  );
-  const needs = (c: RoadCase) =>
-    ["ready", "needs_info", "opened"].includes(c.reporting.status);
-  const list = scoped.filter(
-    (c) =>
-      status === 0 || (status === 1 ? needs(c) : c.reporting.status === "sent"),
-  );
-  const top = topOffender(data.scoped);
+  }, [periodKey, rr.prefs.demo, store.ready, store.settings, impactRefresh]);
+  const data = impact(impactCases(rr.cases).all, periodKey);
+  const groups = impactCases(rr.cases, { period: periodKey, plate, offence });
+  const list = [groups.all, groups.needsYou, groups.sent][status];
+  const top = rr.prefs.demo ? topOffender(data.scoped) : undefined;
   const topPlate = top?.case.vehicle.plate || remote?.mostSpotted?.plate || "";
   const remoteCount = remote?.mostSpotted?.count || 0;
   const meterLine = top
@@ -1173,11 +1165,15 @@ export function StandardImpact() {
           ? "Your reports could take their licence."
           : "Your report could take their licence."
         : "Licence suspended. Enjoy the bus."
-    : remoteCount
-      ? `${remoteCount} server case${remoteCount === 1 ? "" : "s"}. Licence records are not available.`
-      : rr.prefs.demo
-        ? "Nobody yet. Report a red-light runner and they land here."
-        : "Licence records are not available yet.";
+    : remoteLoading
+      ? "Loading the most spotted vehicle…"
+      : remoteError
+        ? "Top offender is unavailable. Retry impact above."
+        : remoteCount
+          ? `${remoteCount} case${remoteCount === 1 ? "" : "s"}. Licence records are not available.`
+          : rr.prefs.demo
+            ? "Nobody yet. Report a red-light runner and they land here."
+            : "Licence records are not available yet.";
   const remoteOffenceCount = (code: string) => {
     const values = remote?.offenceOccurrences || {};
     if (code === "wrong_way")
@@ -1191,13 +1187,19 @@ export function StandardImpact() {
       );
     return values[code] || 0;
   };
+  const offenceCount = (code: string) => rr.prefs.demo
+    ? data.counts[code]
+    : remote ? remoteOffenceCount(code) : null;
   const { width } = useWindowDimensions();
   return (
     <Page
       title="Impact"
       gap={0}
-      onRefresh={rr.prefs.demo ? undefined : () => void rr.syncCases(true).catch(showError)}
-      refreshing={rr.syncingCases}
+      onRefresh={rr.prefs.demo ? undefined : () => {
+        refreshImpact();
+        void rr.syncCases(true).catch(showError);
+      }}
+      refreshing={rr.syncingCases || remoteLoading}
     >
       <View style={{ marginBottom: 18 }}>
         <Intro
@@ -1210,11 +1212,25 @@ export function StandardImpact() {
           <Notice error>{rr.historyError}</Notice>
         </View>
       )}
+      {!rr.prefs.demo && !remote && (
+        <View style={{ marginBottom: 12 }}>
+          {remoteError ? (
+            <>
+              <Notice error>
+                Impact could not be loaded. Check your connection and try again.
+              </Notice>
+              <Quiet title="Retry impact" onPress={refreshImpact} />
+            </>
+          ) : (
+            <T style={s.muted}>Loading impact…</T>
+          )}
+        </View>
+      )}
       <View style={{ flexDirection: "row", gap: 10, marginBottom: 10 }}>
         {(
           [
-            [remote?.snitchedCount ?? data.sent, "Assholes\nreported", "reported"],
-            [remote?.billedCount ?? data.billed, "Got billed", "billed"],
+            [rr.prefs.demo ? data.sent : remote?.snitchedCount ?? null, "Assholes\nreported", "reported"],
+            [rr.prefs.demo ? data.billed : remote?.billedCount ?? null, "Got billed", "billed"],
           ] as const
         ).map(([value, label, kind], i) => (
           <View
@@ -1230,7 +1246,13 @@ export function StandardImpact() {
           >
             {/* Prototype's receipt outline, drawn in on arrival behind the count. */}
             <ReceiptArt kind={kind} index={i} />
-            <Count value={Number(value)} size={width < 350 ? 54 : 72} />
+            {value === null ? (
+              <T style={{ fontSize: width < 350 ? 54 : 72, lineHeight: width < 350 ? 54 : 72, fontWeight: "800" }}>
+                —
+              </T>
+            ) : (
+              <Count value={value} size={width < 350 ? 54 : 72} />
+            )}
             <T style={{ marginTop: 10, fontSize: 15, lineHeight: 18, fontWeight: "700" }}>
               {label}
             </T>
@@ -1243,7 +1265,9 @@ export function StandardImpact() {
           accessibilityLabel={
             topPlate
               ? `Filter cases for ${topPlate}`
-              : "Top offender: nobody yet"
+              : remoteLoading || remoteError
+                ? "Top offender unavailable"
+                : "Top offender: nobody yet"
           }
           disabled={!topPlate}
           onPress={() => setPlate(plate ? "" : normalizePlate(topPlate))}
@@ -1314,11 +1338,11 @@ export function StandardImpact() {
             />
           ) : rr.prefs.demo ? (
             <MeterBar record={0} pending={0} />
-          ) : (
+          ) : remote ? (
             <T style={{ color: "#B6BAC2", fontSize: 12 }}>
-              The backend does not return licence points for live cases.
+              Licence points are not available for live cases.
             </T>
-          )}
+          ) : null}
           {top && (
             <MeterKey record={top.record} pending={top.pending} reports={top.reports} />
           )}
@@ -1366,30 +1390,27 @@ export function StandardImpact() {
                 color: offence === code ? C.accent : C.ink,
               }}
             >
-              {remote ? remoteOffenceCount(code) : data.counts[code]}
+              {offenceCount(code) ?? "—"}
             </T>
           </View>
-          <ImpactBar
-            selected={offence === code}
-            index={i}
-            ratio={
-              (remote ? remoteOffenceCount(code) : data.counts[code]) /
-              Math.max(
-                1,
-                ...categories.map(([key]) =>
-                  remote ? remoteOffenceCount(key) : data.counts[key],
-                ),
-              )
-            }
-          />
+          {(rr.prefs.demo || remote) && (
+            <ImpactBar
+              selected={offence === code}
+              index={i}
+              ratio={
+                (offenceCount(code) ?? 0) /
+                Math.max(1, ...categories.map(([key]) => offenceCount(key) ?? 0))
+              }
+            />
+          )}
         </Pressable>
       ))}
       <View style={{ marginTop: 18, marginBottom: 12 }}>
         <Segments
           items={[
-            ["All", scoped.length],
-            ["Needs you", scoped.filter(needs).length],
-            ["Sent", scoped.filter((c) => c.reporting.status === "sent").length],
+            ["All", groups.all.length],
+            ["Needs you", groups.needsYou.length],
+            ["Sent", groups.sent.length],
           ]}
           value={status}
           onChange={setStatus}
@@ -1405,7 +1426,7 @@ export function StandardImpact() {
             gap: 8,
           }}
         >
-          {!!plate && <FilterChip title={`Plate ${topPlate}`} onPress={() => setPlate("")} />}
+          {!!plate && <FilterChip title={`Plate ${plate}`} onPress={() => setPlate("")} />}
           {!!offence && (
             <FilterChip
               title={categories.find(([code]) => code === offence)?.[1] || offence}
@@ -1440,21 +1461,7 @@ export function StandardImpact() {
                 borderColor: C.line,
               }}
             >
-              <Image
-                source={
-                  c.provenance.isDemo
-                    ? demoFrameFor(c)
-                    : c.evidence.thumbnailUrl
-                      ? { uri: c.evidence.thumbnailUrl }
-                      : undefined
-                }
-                style={{
-                  width: 64,
-                  height: 48,
-                  borderRadius: 10,
-                  backgroundColor: C.lilac,
-                }}
-              />
+              <CaseThumbnail c={c} />
               <View style={{ flex: 1, gap: 3 }}>
                 <T
                   style={{
@@ -1527,11 +1534,6 @@ export function StandardImpact() {
             </View>
           ))}
       </View>
-      {remoteError && (
-        <T style={s.muted}>
-          Cloud impact is unavailable, so these counters use this device.
-        </T>
-      )}
     </Page>
   );
 }
@@ -1715,7 +1717,9 @@ export function Work() {
   const demo = isSubmissionDemo(c);
   const original = c.analysis;
   const trail = c.decisionTrail;
-  const storedResult = store.records.find((r) => r.id === c.sourceId)?.result;
+  const storedResult = store.records.find((r) =>
+    r.id === c.sourceId && r.result?.review_id === c.reviewId,
+  )?.result;
   const timeline = original?.timeline || storedResult?.evidence.timeline || [];
   const offences =
     original?.offences ||

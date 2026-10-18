@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { URL } from "node:url";
 import type { Incident, Review } from "../src/lib/domain.ts";
-import { mergeCaseHistory } from "../src/road/case-history.ts";
+import { mergeCaseHistory, linkLocalEvidence } from "../src/road/case-history.ts";
 import { editCase, fromLegacy, fromServerReview, mergeServerCase, type RoadCase } from "../src/road/model.ts";
 import { pendingCases } from "../src/road/submission-model.ts";
 
@@ -121,7 +121,7 @@ test("legacy split reviews also retain the backend saved timestamp", () => {
   assert.equal(c.createdAt, older);
 });
 
-test("history reporting updates retain locally sent reports and ignore invalid timestamp replacements", () => {
+test("server reporting updates replace session status and ignore invalid timestamp replacements", () => {
   const opened = live("opened", older);
   const sent = live("sent", newer);
   sent.reporting = { status: "sent", confirmedByUser: true };
@@ -130,6 +130,38 @@ test("history reporting updates retain locally sent reports and ignore invalid t
     { reviewId: "sent", createdAt: "invalid", reportingStatus: "opened" },
   ]);
   assert.equal(merged[0].reporting.status, "opened");
-  assert.equal(merged[1].reporting.status, "sent");
+  assert.equal(merged[1].reporting.status, "opened");
+  assert.equal(merged[1].reporting.confirmedByUser, false);
   assert.equal(merged[1].createdAt, newer);
+});
+
+test("API cases reconnect to the retained upload after restart without cached analysis data", () => {
+  const c = live("review");
+  c.evidence.originalVideoUrl = "https://storage.googleapis.com/bucket/path%20with%20spaces.mp4?X-Goog-Signature=fresh";
+  const record: Incident = {
+    id: "local-recording", name: "drive.mp4", file: "file:///documents/drive.mp4", mime: "video/mp4", size: 1,
+    createdAt: older, stage: "ready", plate: "", location: "", occurredAt: "",
+    remoteUri: "gs://bucket/path with spaces.mp4",
+  };
+  const linked = linkLocalEvidence(c, [record]);
+  assert.equal(linked.sourceId, record.id);
+  assert.equal(linked.evidence.originalVideoUrl, record.file);
+  assert.equal(linkLocalEvidence(c, [{ ...record, remoteUri: "gs://bucket/different-upload.mp4" }]), c);
+  assert.equal(linkLocalEvidence(c, [{ ...record, result: review("different-review") }]), c);
+});
+
+test("history renews signed thumbnails and authoritative dismissal without downloading known details", () => {
+  const c = live("known", older);
+  c.evidence.thumbnailUrl = "https://example.com/old-expired.jpg";
+  const [updated] = mergeCaseHistory([c], [], [{
+    reviewId: "known", createdAt: older, dismissed: true,
+    thumbnailUrl: "https://example.com/frame.jpg?signature=fresh",
+  }]);
+  assert.equal(updated.dismissed, true);
+  assert.equal(updated.evidence.thumbnailUrl, "https://example.com/frame.jpg?signature=fresh");
+  const [cleared] = mergeCaseHistory([updated], [], [{
+    reviewId: "known", createdAt: older, dismissed: false, thumbnailUrl: null,
+  }]);
+  assert.equal(cleared.dismissed, false);
+  assert.equal(cleared.evidence.thumbnailUrl, null);
 });

@@ -17,6 +17,7 @@ import {
   readReview,
   refreshReview,
   updateReporting,
+  updateDismissal,
   type ReviewHistoryItem,
 } from "./api";
 import {
@@ -62,6 +63,7 @@ type Context = {
   analyse: (
     id: string,
     region?: "MY" | "SG" | "JP",
+    options?: { jobId: string; reuseUpload: boolean },
   ) => Promise<Incident | undefined>;
   refresh: (id: string) => Promise<Incident | undefined>;
   syncReporting: (id: string, status: "opened" | "sent") => Promise<void>;
@@ -72,6 +74,7 @@ type Context = {
     status: "opened" | "sent",
     plate?: string | null,
   ) => Promise<void>;
+  syncReviewDismissal: (reviewId: string, dismissed: boolean) => Promise<void>;
   getImpact: (period: "all" | "week" | "today") => Promise<ImpactSummary>;
   getRecords: () => Incident[];
   cancel: () => void;
@@ -94,6 +97,12 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
     setRecords(next);
     const serializable = next.map((i) => ({
       ...i,
+      // Reviews live on the server; keep only footage and upload metadata on disk.
+      result: undefined,
+      draft: undefined,
+      selectedVehicleId: undefined,
+      openedAt: undefined,
+      reportedAt: undefined,
       file: i.file.split("/").pop(),
       thumbnail: i.thumbnail?.split("/").pop(),
     }));
@@ -119,6 +128,11 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
           const restored: Incident[] = JSON.parse(raw);
           const next = restored.map((i) => ({
             ...i,
+            result: undefined,
+            draft: undefined,
+            selectedVehicleId: undefined,
+            openedAt: undefined,
+            reportedAt: undefined,
             file: localUri(i.file),
             thumbnail: i.thumbnail ? localUri(i.thumbnail) : undefined,
             ...(["preparing", "uploading", "reviewing"].includes(i.stage)
@@ -129,8 +143,9 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
                 }
               : {}),
           }));
-          recordsRef.current = next;
-          setRecords(next);
+          // Rewrite legacy records before exposing them so old results cannot
+          // recreate device-only cases after an upgrade or restart.
+          await persist(next);
         }
         let config = secure
           ? { ...initialSettings, ...JSON.parse(secure) }
@@ -243,7 +258,7 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
     return id;
   };
   const importSample = async ({ fresh = false } = {}) => {
-    // Reuse the copy from an earlier run so its upload and review can be reused too.
+    // Reuse the saved file; each new analysis creates a separate cloud upload.
     const existing = recordsRef.current.find(
       (i) => i.name === SAMPLE_VIDEO.name && !i.dashcamSession,
     );
@@ -257,7 +272,11 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
       SAMPLE_VIDEO.posterMs,
     );
   };
-  const analyse = async (id: string, region: "MY" | "SG" | "JP" = "MY") => {
+  const analyse = async (
+    id: string,
+    region: "MY" | "SG" | "JP" = "MY",
+    options?: { jobId: string; reuseUpload: boolean },
+  ) => {
     if (running.current)
       throw new Error(
         "Another video is being analysed. Wait for it to finish.",
@@ -271,8 +290,22 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
     const timer = setTimeout(() => controller.abort(), 51 * 60 * 1000);
     await activateKeepAwakeAsync("analysis").catch(() => {});
     try {
+      const reuseUpload = options?.reuseUpload && incident.uploadJobId === options.jobId;
+      const reset: Partial<Incident> = {
+        result: undefined,
+        uploadJobId: options?.jobId,
+        ...(!reuseUpload ? {
+          remoteUri: undefined,
+          remoteApiUrl: undefined,
+          remoteAudioRemoved: undefined,
+          remoteMime: undefined,
+        } : {}),
+      };
+      // A new review needs its own GCS object: the server derives rendered
+      // evidence paths from that object. Persist the reset before any request.
+      await update(id, reset);
       const result = await analyseVideo(
-        incident,
+        { ...incident, ...reset },
         settings,
         controller.signal,
         async (patch, fraction) => {
@@ -363,6 +396,15 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
       clearTimeout(timer);
     }
   };
+  const syncReviewDismissal = async (reviewId: string, dismissed: boolean) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      await updateDismissal(reviewId, dismissed, settings, controller.signal);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
   const getImpact = async (period: "all" | "week" | "today") => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
@@ -403,6 +445,7 @@ export function StoreProvider({ children }: React.PropsWithChildren) {
         listReviews,
         getReview,
         syncReviewReporting,
+        syncReviewDismissal,
         getImpact,
         getRecords: () => recordsRef.current,
         cancel: () => running.current?.abort(),

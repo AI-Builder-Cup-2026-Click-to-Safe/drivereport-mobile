@@ -2,6 +2,8 @@ export type ReviewHistoryItem = {
   reviewId: string;
   createdAt: string;
   reportingStatus?: "opened" | "sent";
+  dismissed?: boolean;
+  thumbnailUrl?: string | null;
 };
 
 export function parseReviewHistory(input: unknown): {
@@ -27,7 +29,11 @@ export function parseReviewHistory(input: unknown): {
       item.reporting_status === "opened" || item.reporting_status === "sent"
         ? item.reporting_status
         : undefined;
-    return { reviewId, createdAt, reportingStatus };
+    return { reviewId, createdAt, reportingStatus,
+      ...(typeof item.dismissed === "boolean" ? { dismissed: item.dismissed } : {}),
+      ...(item.thumbnail_url === null || (typeof item.thumbnail_url === "string" && item.thumbnail_url.startsWith("https://"))
+        ? { thumbnailUrl: item.thumbnail_url } : {}),
+    };
   });
   return {
     reviews,

@@ -14,7 +14,8 @@ import {
   type TextInputProps,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { useVideoPlayer, VideoView } from "expo-video";
+import { RealVideo } from "./footage";
+import { initialReviewSeek } from "./footage-state";
 import Svg, { Path } from "react-native-svg";
 import * as Sharing from "expo-sharing";
 import * as Clipboard from "expo-clipboard";
@@ -83,90 +84,6 @@ async function shareOriginal(c: RoadCase) {
     UTI: "public.movie",
   });
 }
-function RealVideo({
-  uri,
-  seek,
-  revision,
-  onTime,
-  caption,
-  onFailed,
-}: {
-  uri: string;
-  seek: number;
-  revision: number;
-  onTime: (time: number) => void;
-  caption?: string;
-  /** Called instead of showing the error when another copy can be tried. */
-  onFailed?: () => void;
-}) {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    if (failed && onFailed) onFailed();
-  }, [failed, onFailed]);
-  const player = useVideoPlayer(uri, (p) => {
-    p.loop = false;
-    p.timeUpdateEventInterval = 0.25;
-  });
-  useEffect(() => {
-    if (seek >= 0) {
-      player.currentTime = seek;
-      player.pause();
-    }
-  }, [seek, revision, player]);
-  useEffect(() => {
-    const sub = player.addListener("timeUpdate", ({ currentTime }) =>
-      onTime(currentTime),
-    );
-    return () => sub.remove();
-  }, [player, onTime]);
-  useEffect(() => {
-    const sub = player.addListener("statusChange", (e) =>
-      setFailed(e.status === "error"),
-    );
-    return () => sub.remove();
-  }, [player]);
-  return failed && !onFailed ? (
-    <Notice error>
-      Evidence could not be opened. Check that the original video is still
-      available.
-    </Notice>
-  ) : (
-    <View style={{ borderRadius: 10, overflow: "hidden", backgroundColor: C.dark }}>
-      <VideoView
-        player={player}
-        nativeControls
-        contentFit="contain"
-        style={{ width: "100%", height: 220, backgroundColor: C.dark }}
-      />
-      {/* What Gemini saw at this moment, as a subtitle under the picture so it
-          never covers the player's controls. The strip keeps its height
-          between lines, so the page does not jump as the video plays. */}
-      {caption !== undefined && (
-        <View
-          style={{
-            minHeight: 46,
-            paddingHorizontal: 12,
-            paddingVertical: 8,
-            justifyContent: "center",
-          }}
-        >
-          <T
-            numberOfLines={2}
-            style={{
-              fontSize: 13,
-              lineHeight: 18,
-              color: "white",
-              fontWeight: "600",
-              textAlign: "center",
-            }}
-          >
-            {caption}
-          </T>
-        </View>
-      )}
-    </View>
-  );
-}
 function Evidence({
   c,
   seek,
@@ -180,6 +97,7 @@ function Evidence({
   onTime: (time: number) => void;
   subtitle?: string;
 }) {
+  const rr = useRoad();
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(Math.max(0, seek));
   // The annotated copy is the point of the review; it only exists once the
@@ -319,14 +237,19 @@ function Evidence({
   ) : played ? (
     <View>
       <RealVideo
-        // Keyed on the link too, so a refreshed link gets a fresh player.
-        key={`${c.id}-${annotated ? "annotated" : "original"}-${played}`}
+        // The player itself keys each source; keep retry focus through a link refresh.
+        key={`${c.id}-${annotated ? "annotated" : "original"}`}
         uri={played}
         seek={seek}
         revision={revision}
         onTime={onTime}
         caption={subtitle}
         onFailed={hasFallback ? fallBack : undefined}
+        onRetry={async () => {
+          if (played.startsWith("file:")) return played;
+          const refreshed = await rr.refreshEvidence(c.id);
+          return playableEvidence(refreshed.evidence, annotated) || played;
+        }}
       />
     </View>
   ) : (
@@ -456,6 +379,7 @@ const factValue = {
 function factSource(c: RoadCase, key: string, value: string | null | undefined) {
   if (!value?.trim()) return undefined;
   if (c.edited?.includes(key)) return "you" as const;
+  if (key === "location" && c.incident.locationCoordinates) return "mapAddress" as const;
   if (key === "date" && c.defaulted?.includes("date")) return "deviceDate" as const;
   if (key === "time" && c.defaulted?.includes("time")) return "deviceTime" as const;
   if (key === "location" && c.defaulted?.includes("location")) return "deviceLocation" as const;
@@ -476,7 +400,7 @@ function FactBox({
   children,
 }: React.PropsWithChildren<{
   label: string;
-  source?: "ai" | "you" | "deviceDate" | "deviceTime" | "deviceLocation";
+  source?: "ai" | "you" | "deviceDate" | "deviceTime" | "deviceLocation" | "mapAddress";
   missing?: boolean;
   focused?: boolean;
   wide?: boolean;
@@ -520,7 +444,7 @@ function FactBox({
         {source === "ai" && <Spark size={11} tint={C.accent} />}
         {source && source !== "ai" && (
           <T style={{ fontSize: 12, lineHeight: 14, fontWeight: "700" }}>
-            · {source === "deviceDate" ? "Device date" : source === "deviceTime" ? "Device time" : source === "deviceLocation" ? "GPS location" : "you"}
+            · {source === "deviceDate" ? "Device date" : source === "deviceTime" ? "Device time" : source === "deviceLocation" ? "GPS location" : source === "mapAddress" ? "Map address" : "you"}
           </T>
         )}
       </View>
@@ -541,7 +465,7 @@ function FactInput({
 }: Omit<TextInputProps, "value" | "onChangeText"> & {
   label: string;
   value: string;
-  source?: "ai" | "you" | "deviceDate" | "deviceTime" | "deviceLocation";
+  source?: "ai" | "you" | "deviceDate" | "deviceTime" | "deviceLocation" | "mapAddress";
   missing: boolean;
   wide?: boolean;
   inAsk?: boolean;
@@ -631,9 +555,9 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
   const queue = pendingCases(rr.cases);
   const record = licenceRecord(c);
   const points = casePoints(c);
-  const [seek, setSeek] = useState(!c.vehicle.plate ? 20 : 12),
+  const [seek, setSeek] = useState(() => initialReviewSeek(c)),
     [revision, setRevision] = useState(0),
-    [playhead, setPlayhead] = useState(!c.vehicle.plate ? 20 : 12);
+    [playhead, setPlayhead] = useState(() => initialReviewSeek(c));
   const [busy, setBusy] = useState(false),
     [descriptionNote, setDescriptionNote] = useState(false);
   // Keep fields mounted while typing, even after the first character resolves a missing fact.
@@ -642,11 +566,13 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
   const currentCase = useRef(c);
   currentCase.current = c;
   const fillReportDefaults = rr.fillReportDefaults;
+  const resolveIncidentLocation = rr.resolveIncidentLocation;
   useFocusEffect(useCallback(() => {
     const expected = currentCase.current;
     let focused = true;
     // Permission alerts may briefly make iOS inactive without leaving this screen.
     const active = () => focused && AppState.currentState !== "background";
+    if (active()) void resolveIncidentLocation(expected, active).catch(() => {});
     if (active() && needsReportDefault(expected, "date"))
       void fillReportDefaults(expected, { date: localDate() }).catch(() => {});
     if (Platform.OS !== "web" && active() && needsReportDefault(expected, "location")) {
@@ -663,7 +589,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
       }).catch(() => {});
     }
     return () => { focused = false; };
-  }, [fillReportDefaults]));
+  }, [fillReportDefaults, resolveIncidentLocation]));
   // Signed evidence links last six hours; a case opened later fetches new ones
   // rather than showing "could not be opened".
   const stale = [
@@ -675,7 +601,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
     if (stale) void rr.refreshEvidence(c.id).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [c.id, stale]);
-  // Old or repeated cases leave the queue; they stay in Impact and are never sent.
+  // Dismissed cases leave both Cases and Impact without being reported.
   const dismiss = (shown: string[]) => {
     // The queue shows one case per plate, so its hidden repeats go with it.
     const plates = new Set(
@@ -693,7 +619,7 @@ function CaseReview({ c, index }: { c: RoadCase; index: number }) {
       .map((q) => q.id);
     Alert.alert(
       shown.length > 1 ? `Clear all ${shown.length} waiting cases?` : "Dismiss this case?",
-      `${shown.length > 1 ? "They leave" : "It leaves"} the queue and ${shown.length > 1 ? "are" : "is"} not reported. Sent reports are unaffected.`,
+      `${shown.length > 1 ? "They leave" : "It leaves"} Cases and Impact without being reported. Sent reports are unaffected.`,
       [
         { text: "Cancel", style: "cancel" },
         {

@@ -31,7 +31,7 @@ import icons from "./icons.json";
 import { BrandMark } from "./brand";
 import { Motion, DecorationViewport, FadeArrival } from "./motion";
 import { useRoad } from "./context";
-import { SubmissionIcon, SlidingPill } from "./submission-navigation";
+import { SubmissionIcon, SlidingPill, useTabMotion } from "./submission-navigation";
 import { Spark } from "./spark";
 import { pendingCases } from "./submission-model";
 export const C = {
@@ -1011,9 +1011,14 @@ export function Navigation() {
   const tabIndex = ["home", "review", "history"].indexOf(active);
   const [lastIndex, setLastIndex] = useState(tabIndex);
   if (shown && tabIndex !== lastIndex) setLastIndex(tabIndex);
+  const tabs = useTabMotion(Math.max(0, shown ? tabIndex : lastIndex), width, shown);
   // Leaving the tab routes, the bar sinks; coming back, it rises on the travel curve.
   const travel = useRef(new Animated.Value(shown ? 0 : 1)).current;
   React.useEffect(() => {
+    if (rr.reduced || !rr.foreground) {
+      travel.setValue(shown ? 0 : 1);
+      return;
+    }
     const a = Animated.timing(travel, {
       toValue: shown ? 0 : 1,
       duration: rr.reduced ? 0 : shown ? 420 : 240,
@@ -1023,7 +1028,7 @@ export function Navigation() {
     });
     a.start();
     return () => a.stop();
-  }, [shown, rr.reduced, travel]);
+  }, [shown, rr.reduced, rr.foreground, travel]);
   const height = TAB_BAR_HEIGHT + tabBarBottom(insets.bottom);
   return (
     <Animated.View
@@ -1055,15 +1060,17 @@ export function Navigation() {
           paddingHorizontal: 14,
         }}
       >
-        <SlidingPill index={Math.max(0, shown ? tabIndex : lastIndex)} width={width} />
+        <SlidingPill pose={tabs.pose.pill} width={width} />
         {(["home", "review", "history"] as const).map((key, i) => (
           <TabButton
             key={key}
             label={["Home", "Cases", "Impact"][i]}
             count={key === "review" ? pending : 0}
             selected={shown && active === key}
+            bouncing={tabs.running}
             onPress={() => {
               if (active !== key || !shown) {
+                haptic.select();
                 if (key === "review")
                   rr.select(pendingCases(rr.cases)[0]?.id || "");
                 go(key === "history" ? "impact" : key);
@@ -1072,7 +1079,7 @@ export function Navigation() {
           >
             <SubmissionIcon
               name={key}
-              active={shown ? active === key : lastIndex === i}
+              pose={tabs.pose.icons[i]}
             />
             {key === "review" && pending > 0 && <CountBadge value={pending} />}
           </TabButton>
@@ -1085,6 +1092,7 @@ function TabButton({
   label,
   count = 0,
   selected,
+  bouncing,
   onPress,
   children,
 }: React.PropsWithChildren<{
@@ -1092,33 +1100,20 @@ function TabButton({
   /** Cases waiting for the user; the badge is visual, so VoiceOver hears it in the label. */
   count?: number;
   selected: boolean;
+  bouncing: boolean;
   onPress: () => void;
 }>) {
-  const { reduced } = useRoad();
-  // The icon presses in to 86% and springs back, like the reference's .tab:active .nav-ico.
-  const scale = useRef(new Animated.Value(1)).current;
-  const press = (to: number) =>
-    reduced
-      ? undefined
-      : to < 1
-        ? Animated.timing(scale, {
-            toValue: to,
-            duration: 80,
-            useNativeDriver: true,
-          }).start()
-        : Animated.spring(scale, {
-            toValue: 1,
-            speed: 18,
-            bounciness: 12,
-            useNativeDriver: true,
-          }).start();
+  const { reduced, foreground } = useRoad();
+  const [pressed, setPressed] = useState(false);
+  React.useEffect(() => { if (!foreground || reduced) setPressed(false); }, [foreground, reduced]);
   return (
     <Pressable
+      testID={`tab-${label.toLowerCase()}`}
       accessibilityRole="tab"
       accessibilityLabel={count ? `${label}, ${count} ${count === 1 ? "needs" : "need"} you` : label}
       accessibilityState={{ selected }}
-      onPressIn={() => press(0.86)}
-      onPressOut={() => press(1)}
+      onPressIn={() => setPressed(true)}
+      onPressOut={() => setPressed(false)}
       onPress={onPress}
       style={{
         flex: 1,
@@ -1127,17 +1122,17 @@ function TabButton({
         gap: 3,
       }}
     >
-      <Animated.View
+      <View
         style={{
           height: 33,
           width: 56,
           alignItems: "center",
           justifyContent: "center",
-          transform: [{ scale }],
+          transform: [{ scale: pressed && !bouncing && !reduced ? 0.86 : 1 }],
         }}
       >
         {React.Children.toArray(children)[0]}
-      </Animated.View>
+      </View>
       {/* Tab labels stay put in their fixed bar, as UITabBar's do. */}
       <T
         maxFontSizeMultiplier={1.15}

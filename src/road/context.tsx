@@ -6,17 +6,16 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { AccessibilityInfo, AppState } from "react-native";
+import { AccessibilityInfo, AppState, Platform } from "react-native";
+import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SecureStore from "expo-secure-store";
-import * as Device from "expo-device";
 import { useStore } from "../lib/store";
 import {
   fromLegacy,
   fromServerReview,
   mergeServerCase,
   editCase,
-  restoreEvidence,
   correctStatus,
   validation,
   defaultWhatsAppTestMessage,
@@ -26,9 +25,10 @@ import {
   type Region,
 } from "./model";
 import { applyReportDefaults, type ReportDefaults } from "./report-defaults";
+import { applyIncidentLocation, createIncidentLocationResolver, needsIncidentLocation } from "./incident-location";
 import fixtures from "./submission-fixtures.json";
 import { isSubmissionDemo, pendingCases } from "./submission-model";
-import { mergeCaseHistory } from "./case-history";
+import { mergeCaseHistory, linkLocalEvidence } from "./case-history";
 import { DEMO_STAGE_MS } from "./analysis-timing";
 export type Job = {
   id: string;
@@ -38,6 +38,7 @@ export type Job = {
   progress: number | null;
   sourceIds: string[];
   caseIds: string[];
+  completedReviews?: { sourceId: string; reviewId: string; caseIds: string[] }[];
   region: Region;
   error?: string;
   recordingDiagnostics?: string;
@@ -54,7 +55,7 @@ const defaults: Preferences = {
   address: "",
   phone: "",
   email: "",
-  demo: !Device.isDevice,
+  demo: false,
   testMessage: defaultWhatsAppTestMessage,
 };
 type Context = {
@@ -68,6 +69,7 @@ type Context = {
   select: (id: string) => void;
   changeCase: (id: string, patch: Partial<RoadCase>) => Promise<void>;
   fillReportDefaults: (expected: RoadCase, defaults: ReportDefaults) => Promise<void>;
+  resolveIncidentLocation: (expected: RoadCase, isActive: () => boolean) => Promise<void>;
   refreshEvidence: (id: string) => Promise<RoadCase>;
   syncCases: (force?: boolean) => Promise<void>;
   syncingCases: boolean;
@@ -76,7 +78,7 @@ type Context = {
   recordingSaved: (sourceId: string) => void;
   failRecording: (message: string, diagnostics?: string) => void;
   job: Job | null;
-  begin: (ids: string[], demo?: boolean) => Promise<void>;
+  begin: (ids: string[], demo?: boolean, retryJobId?: string) => Promise<void>;
   cancel: () => void;
   dismissNotice: () => void;
   dismissCases: (ids: string[]) => Promise<void>;
@@ -88,7 +90,18 @@ type Context = {
   startUndo: (id: string) => void;
   undoSent: () => Promise<void>;
 };
+const resolveIncidentAddress = createIncidentLocationResolver(async (coordinates) => {
+  const active = () => AppState.currentState !== "background";
+  if (Platform.OS === "web" || !active()) return [];
+  // iOS can resolve coordinates without reading the device position. Android
+  // requires foreground location permission for its native geocoder.
+  if (Platform.OS === "android" && !(await Location.requestForegroundPermissionsAsync()).granted)
+    return [];
+  if (!active()) return [];
+  return Location.reverseGeocodeAsync(coordinates);
+});
 const RoadContext = createContext<Context | null>(null);
+const dismissedMigrationKey = "road.dismissed-reviews.v1";
 export function RoadProvider({ children }: React.PropsWithChildren) {
   const legacy = useStore(),
     old = useRef(legacy);
@@ -122,15 +135,10 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     alive = useRef(true),
     lastHistorySync = useRef(0),
     historySync = useRef<Promise<void> | null>(null);
-  const persistCases = useCallback((next: RoadCase[]) => {
+  const pendingDismissals = useRef<string[]>([]);
+  const replaceCases = useCallback(async (next: RoadCase[]) => {
     cr.current = next;
     setCases(next);
-    const text = JSON.stringify(next);
-    const work = writes.current
-      .catch(() => {})
-      .then(() => AsyncStorage.setItem("road.cases.v1", text));
-    writes.current = work;
-    return work;
   }, []);
   const updateJob = (next: Job | null) => {
     jr.current = next;
@@ -143,6 +151,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     void work.catch(() =>
       setError("Could not save analysis state. Keep the app open."),
     );
+    return work;
   };
   const prepareRecording = (sourceIds: string[] = []) => {
     updateJob({
@@ -208,7 +217,42 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         setSyncingCases(true);
         setHistoryError("");
         try {
-          const history = await old.current.listReviews();
+          const before = new Map(cr.current.map((c) => [c.id, c]));
+          let history = await old.current.listReviews();
+          if (pendingDismissals.current.length) {
+            const pending = pendingDismissals.current;
+            const results = await Promise.allSettled(pending.map(async (id) => {
+              const summary = history.find((item) => item.reviewId === id);
+              if (typeof summary?.dismissed === "boolean")
+                return { id, dismissed: summary.dismissed };
+              const review = await old.current.getReview(id);
+              const serverCase = review.case && typeof review.case === "object"
+                ? review.case as Record<string, unknown>
+                : undefined;
+              const dismissed = typeof review.dismissed === "boolean"
+                ? review.dismissed
+                : serverCase?.dismissed;
+              // Explicit server state, including false, supersedes the old
+              // device-only flag. Migrate only records with no server field.
+              if (typeof dismissed === "boolean") return { id, dismissed };
+              await old.current.syncReviewDismissal(id, true);
+              return { id, dismissed: true };
+            }));
+            const resolved = new Map(results.flatMap((result) =>
+              result.status === "fulfilled" ? [[result.value.id, result.value.dismissed] as const] : [],
+            ));
+            history = history.map((item) => resolved.has(item.reviewId)
+              ? { ...item, dismissed: resolved.get(item.reviewId)! }
+              : item,
+            );
+            pendingDismissals.current = pending.filter((_, index) => results[index].status === "rejected");
+            if (pendingDismissals.current.length)
+              await AsyncStorage.setItem(dismissedMigrationKey, JSON.stringify(pendingDismissals.current));
+            else await AsyncStorage.removeItem(dismissedMigrationKey);
+          }
+          history = history.filter((item) =>
+            !pendingDismissals.current.includes(item.reviewId),
+          );
           const known = new Set(
             cr.current.map((c) => c.reviewId).filter(Boolean),
           );
@@ -217,16 +261,38 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
             missing.map(async (item) => {
               const review = await old.current.getReview(item.reviewId);
               if (!review.created_at) review.created_at = item.createdAt;
-              return fromServerReview(review, pr.current.region);
+              return fromServerReview(review, pr.current.region).map((c) =>
+                linkLocalEvidence(c, old.current.records),
+              );
             }),
           );
           const remote = fetched.flatMap((result) =>
             result.status === "fulfilled" ? result.value : [],
           );
-          await persistCases(mergeCaseHistory(cr.current, remote, history));
+          const present = new Set(history.map((item) => item.reviewId));
+          const retained = cr.current.filter((c) =>
+            c.provenance.isDemo || !before.has(c.id) ||
+            (c.reviewId && present.has(c.reviewId)),
+          );
+          // Keep edits completed during the request, but otherwise the latest
+          // server history owns membership and reporting state on every device.
+          const changedReporting = new Set(retained.filter((c) =>
+            before.has(c.id) && before.get(c.id)!.reporting !== c.reporting,
+          ).map((c) => c.reviewId));
+          const changedDismissals = new Set(retained.filter((c) =>
+            before.has(c.id) && before.get(c.id)!.dismissed !== c.dismissed,
+          ).map((c) => c.reviewId));
+          const latestHistory = history.map((item) => ({
+            ...item,
+            ...(changedReporting.has(item.reviewId) ? { reportingStatus: undefined } : {}),
+            ...(changedDismissals.has(item.reviewId) ? { dismissed: undefined } : {}),
+          }));
+          await replaceCases(mergeCaseHistory(retained, remote, latestHistory));
           lastHistorySync.current = Date.now();
           if (fetched.some((result) => result.status === "rejected"))
             setHistoryError("Some server cases could not be downloaded. Retry.");
+          if (pendingDismissals.current.length)
+            setHistoryError("Some previous dismissals could not be synced. Retry when connected.");
         } catch (e) {
           setHistoryError(
             e instanceof Error
@@ -244,41 +310,50 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         historySync.current = null;
       }
     },
-    [persistCases],
+    [replaceCases],
   );
   useEffect(() => {
     if (!legacy.ready) return;
     let disposed = false;
     void (async () => {
       try {
-        const [data, settings, savedJob] = await Promise.all([
+        const [legacyCases, settings, savedJob, pending] = await Promise.all([
           AsyncStorage.getItem("road.cases.v1"),
           SecureStore.getItemAsync("road.preferences.v1"),
           AsyncStorage.getItem("road.job.v1"),
+          AsyncStorage.getItem(dismissedMigrationKey),
         ]);
         if (disposed) return;
+        // Preserve only pending dismissal commands, never cached case data.
+        const reviewIds = new Set<string>();
+        try {
+          const previous = pending ? JSON.parse(pending) : [];
+          if (Array.isArray(previous))
+            for (const id of previous)
+              if (typeof id === "string" && /^[a-f0-9]{32}$/i.test(id)) reviewIds.add(id);
+        } catch { /* Ignore malformed legacy migration metadata. */ }
+        try {
+          const previous = legacyCases ? JSON.parse(legacyCases) : [];
+          if (Array.isArray(previous))
+            for (const c of previous)
+              if (c?.dismissed && !c.provenance?.isDemo && typeof c.reviewId === "string" && /^[a-f0-9]{32}$/i.test(c.reviewId))
+                reviewIds.add(c.reviewId);
+        } catch { /* Old case contents are never restored. */ }
+        pendingDismissals.current = [...reviewIds];
+        if (reviewIds.size)
+          await AsyncStorage.setItem(dismissedMigrationKey, JSON.stringify([...reviewIds]));
+        await AsyncStorage.removeItem("road.cases.v1");
         const p: Preferences = settings
           ? { ...defaults, ...JSON.parse(settings) }
           : defaults;
         pr.current = p;
         setPreferences(p);
-        const stored: RoadCase[] = data ? JSON.parse(data) : [];
-        const sources = new Map(old.current.records.map((i) => [i.id, i]));
-        const restored = stored.map((c) =>
-          restoreEvidence(c, sources.get(c.sourceId || "")),
-        );
-        // Preserve the old evidence store; migrate analysed records once into the new case model.
-        const known = new Set(restored.map((c) => c.sourceId));
-        const migrated = old.current.records
-          .filter((i) => i.result && !known.has(i.id))
-          .flatMap((i) => fromLegacy(i, "MY"));
-        const next = [...restored, ...migrated];
-        if (p.demo)
-          for (const sample of fixtures.allCases) {
-            if (!next.some((c) => c.id === sample.id))
-              next.push(JSON.parse(JSON.stringify(sample)));
-          }
-        await persistCases(next);
+        // Start from server history each launch. Only authored demo fixtures
+        // are seeded locally, in memory, without restoring cached reviews.
+        const next: RoadCase[] = p.demo
+          ? JSON.parse(JSON.stringify(fixtures.allCases))
+          : [];
+        await replaceCases(next);
         const visible = next.filter((c) => c.provenance.isDemo === p.demo);
         select((p.demo ? visible[0] : pendingCases(visible)[0])?.id || "");
         if (!p.demo) void syncCases(true);
@@ -304,7 +379,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     return () => {
       disposed = true;
     };
-  }, [legacy.ready, persistCases, syncCases]);
+  }, [legacy.ready, replaceCases, syncCases]);
   useEffect(() => {
     if (ready && foreground && !prefs.demo) void syncCases();
   }, [foreground, prefs.demo, ready, syncCases]);
@@ -350,7 +425,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         status,
         patch.vehicle?.plate ?? current.vehicle.plate,
       );
-    await persistCases(
+    await replaceCases(
       cr.current.map((c) => {
         if (c.id !== id) return c;
         if (c.reporting.status === "sent" && !patch.reporting)
@@ -368,24 +443,26 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     if (!current) return;
     const next = applyReportDefaults(current, expected, defaults);
     if (next !== current)
-      await persistCases(cr.current.map((c) => c === current ? next : c));
-  }, [persistCases]);
+      await replaceCases(cr.current.map((c) => c === current ? next : c));
+  }, [replaceCases]);
+  const resolveIncidentLocation = useCallback(async (expected: RoadCase, isActive: () => boolean) => {
+    if (!isActive() || !needsIncidentLocation(expected)) return;
+    const address = await resolveIncidentAddress(expected.incident.location!);
+    if (!alive.current || !isActive()) return;
+    const current = cr.current.find((c) => c.id === expected.id);
+    if (!current) return;
+    const next = applyIncidentLocation(current, expected, address);
+    if (next !== current)
+      await replaceCases(cr.current.map((c) => c === current ? next : c));
+  }, [replaceCases]);
   const refreshEvidence = async (id: string) => {
     const current = cr.current.find((c) => c.id === id);
     if (!current) throw Error("Case not found.");
     if (!current.reviewId) return current;
-    const hasLocalRecord = old.current.records.some(
-      (record) => record.id === current.sourceId,
+    const serverCases = fromServerReview(
+      await old.current.getReview(current.reviewId),
+      current.region,
     );
-    const record = hasLocalRecord && current.sourceId
-      ? await old.current.refresh(current.sourceId)
-      : undefined;
-    const serverCases = record
-      ? fromLegacy(record, current.region)
-      : fromServerReview(
-          await old.current.getReview(current.reviewId),
-          current.region,
-        );
     const refreshed =
       serverCases.find((serverCase) => serverCase.id === current.id) ||
       serverCases[0];
@@ -395,8 +472,11 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
     if (!latest) throw Error("Case not found.");
     if (latest.sourceId !== current.sourceId || latest.reviewId !== current.reviewId ||
         latest.analysis !== current.analysis) return latest;
-    const next = mergeServerCase(latest, refreshed);
-    await persistCases(cr.current.map((c) => (c === latest ? next : c)));
+    const next = {
+      ...mergeServerCase(latest, refreshed),
+      ...(latest.dismissed !== current.dismissed ? { dismissed: latest.dismissed } : {}),
+    };
+    await replaceCases(cr.current.map((c) => (c === latest ? next : c)));
     return next;
   };
   const confirmSent = async (id: string, deferUndo = false) => {
@@ -404,6 +484,22 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
       reporting: { status: "sent", confirmedByUser: true },
     });
     if (!deferUndo) setUndo({ id, until: Date.now() + 8000 });
+  };
+  const dismissCases = async (ids: string[]) => {
+    const targets = cr.current.filter((c) => ids.includes(c.id));
+    const results = await Promise.allSettled(targets.map(async (c) => {
+      if (!c.provenance.isDemo) {
+        if (!c.reviewId) throw Error("This case has no server reference. Refresh Cases and retry.");
+        await old.current.syncReviewDismissal(c.reviewId, true);
+      }
+      return c.id;
+    }));
+    const confirmed = new Set(results.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
+    ));
+    await replaceCases(cr.current.map((c) => confirmed.has(c.id) ? { ...c, dismissed: true } : c));
+    const failed = results.find((result) => result.status === "rejected");
+    if (failed?.status === "rejected") throw failed.reason;
   };
   const undoSent = async () => {
     if (!undo || Date.now() > undo.until) return;
@@ -417,13 +513,13 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
       (f) => !cr.current.some((c) => c.id === f.id),
     );
     if (additions.length)
-      await persistCases([
+      await replaceCases([
         ...JSON.parse(JSON.stringify(additions)),
         ...cr.current,
       ]);
     await setPrefs({ demo: true });
   };
-  const begin = async (ids: string[], demo = false) => {
+  const begin = async (ids: string[], demo = false, retryJobId?: string) => {
     const preparedRecording =
       !demo &&
       jr.current?.status === "running" &&
@@ -438,6 +534,14 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
       );
     if (!demo && !old.current.settings.token)
       throw Error("This build isn’t connected to the analysis server yet. Add its access token in Developer settings.");
+    const previous = jr.current;
+    const retry = previous && previous.id === retryJobId &&
+      ["error", "cancelled"].includes(previous.status) &&
+      previous.mode === (demo ? "demo" : "live") &&
+      previous.region === pr.current.region &&
+      previous.sourceIds.length === ids.length &&
+      previous.sourceIds.every((id, index) => id === ids[index]);
+    const completedCaseIds = new Set(retry ? previous.caseIds : []);
     const generation = ++run.current;
     const j: Job = preparedRecording
       ? {
@@ -448,13 +552,14 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
           error: undefined,
         }
       : {
-          id: `JOB-${Date.now()}`,
+          id: retry ? previous.id : `JOB-${Date.now()}-${generation}`,
           mode: demo ? "demo" : "live",
           status: "running",
           stage: 0,
           progress: 0,
           sourceIds: ids,
           caseIds: [],
+          completedReviews: retry ? [...(previous.completedReviews || [])] : [],
           region: pr.current.region,
           notice: false,
         };
@@ -476,7 +581,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         const previous = cr.current.find((c) => c.id === base.id);
         if (previous?.reporting.status === "sent")
           base.id = `SUB-REPLAY-${Date.now()}`;
-        await persistCases([
+        await replaceCases([
           base,
           ...cr.current.filter((c) => c.id !== base.id),
         ]);
@@ -485,23 +590,58 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
       } else {
         for (const id of ids) {
           if (run.current !== generation) return;
-          // Retrying a multi-clip job must not bill or replace already reviewed clips.
-          const completed = cr.current.filter((c) => c.sourceId === id);
+          // Only an explicit retry of this job may reuse its completed clips.
+          // Starting Analyse again always requests a new server review.
+          const checkpoint = retry
+            ? previous.completedReviews?.find((entry) => entry.sourceId === id)
+            : undefined;
+          let completed = cr.current.filter((c) =>
+            checkpoint
+              ? c.reviewId === checkpoint.reviewId
+              : c.sourceId === id && completedCaseIds.has(c.id),
+          );
+          if (checkpoint && !completed.length) {
+            // Case data is never restored from disk. Recover the completed
+            // review from the API when startup history has not loaded it yet.
+            const review = await old.current.getReview(checkpoint.reviewId);
+            if (run.current !== generation) return;
+            completed = fromServerReview(review, j.region).map((c) =>
+              linkLocalEvidence(c, old.current.records),
+            );
+            if (!completed.length)
+              throw Error("The completed review could not be loaded. Retry when the server is available.");
+            await replaceCases([
+              ...completed,
+              ...cr.current.filter((c) => c.reviewId !== checkpoint.reviewId),
+            ]);
+          }
           if (completed.length) {
             j.caseIds.push(...completed.map((c) => c.id));
             select(completed[0].id);
             continue;
           }
-          const record = await old.current.analyse(id, j.region);
+          const record = await old.current.analyse(id, j.region, {
+            jobId: j.id,
+            reuseUpload: !!retry,
+          });
           if (run.current !== generation) return;
           if (!record || record.stage === "error")
             throw Error(record?.error || "Analysis unavailable.");
           const mapped = fromLegacy(record, j.region, new Date().toISOString());
-          await persistCases([
+          await replaceCases([
             ...mapped,
-            ...cr.current.filter((c) => c.sourceId !== id),
+            ...cr.current.filter((c) => !mapped.some((next) => next.id === c.id)),
           ]);
           j.caseIds.push(...mapped.map((c) => c.id));
+          if (record.result?.review_id) {
+            j.completedReviews = [
+              ...(j.completedReviews || []).filter((entry) => entry.sourceId !== id),
+              { sourceId: id, reviewId: record.result.review_id, caseIds: mapped.map((c) => c.id) },
+            ];
+          }
+          // Commit only references after every clip, before starting the next
+          // one, so a force-quit cannot turn completed work into a fresh review.
+          await updateJob({ ...j, caseIds: [...j.caseIds] });
           if (mapped[0]) select(mapped[0].id);
         }
       }
@@ -555,6 +695,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         select,
         changeCase,
         fillReportDefaults,
+        resolveIncidentLocation,
         refreshEvidence,
         syncCases,
         syncingCases,
@@ -566,10 +707,7 @@ export function RoadProvider({ children }: React.PropsWithChildren) {
         job,
         begin,
         cancel,
-        dismissCases: (ids) =>
-          persistCases(
-            cr.current.map((c) => (ids.includes(c.id) ? { ...c, dismissed: true } : c)),
-          ),
+        dismissCases,
         dismissNotice: () => {
           if (jr.current) updateJob({ ...jr.current, notice: false });
         },

@@ -1,46 +1,61 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Animated, Easing } from "react-native";
+import React, { useLayoutEffect, useRef, useState } from "react";
+import { View } from "react-native";
 import Svg, { Path, G, Circle } from "react-native-svg";
 import geometry from "../../design/submission/nav-geometry.json";
 import { useRoad } from "./context";
+import { settledTabs, tabMotion, TAB_MOTION_MS, type IconPose, type TabPose } from "./navigation-motion";
 
-const poses: Record<string, number> = {};
-export function SubmissionIcon({
-  name,
-  active,
-}: {
-  name: "home" | "review" | "history";
-  active: boolean;
-}) {
+/** One frame loop keeps the pill, icon bounce, morph and needle in sync. */
+export function useTabMotion(index: number, width: number, shown: boolean) {
   const { reduced, foreground } = useRoad();
-  const [mix, setMix] = useState(poses[name] ?? (active ? 1 : 0));
-  // The icon dips 12% in scale through the middle of its morph, as in the reference.
-  const [dip, setDip] = useState(0);
-  const prior = useRef(mix);
-  const f = geometry[name];
-  useEffect(() => {
-    const to = active ? 1 : 0;
-    if (reduced || !foreground) {
-      prior.current = to;
-      poses[name] = to;
-      setMix(to);
+  const spacing = (width - 28) / 3;
+  const [pose, setPose] = useState(() => settledTabs(index, spacing));
+  const current = useRef(pose);
+  const previous = useRef({ index, spacing });
+  const moving = useRef(false);
+  const [running, setRunning] = useState(false);
+  useLayoutEffect(() => {
+    const old = previous.current;
+    previous.current = { index, spacing };
+    const settle = () => {
+      moving.current = false;
+      setRunning(false);
+      current.current = settledTabs(index, spacing);
+      setPose(current.current);
+    };
+    if (reduced || !foreground || !shown || spacing !== old.spacing) {
+      settle();
       return;
     }
-    let raf = 0;
-    const from = prior.current,
-      start = Date.now();
-    function tick() {
-      const t = Math.min(1, (Date.now() - start) / 540);
-      const n = from + (to - from) * (t * t * (3 - 2 * t));
-      prior.current = n;
-      poses[name] = n;
-      setMix(n);
-      setDip(t < 1 ? 0.12 * Math.sin(Math.PI * t) : 0);
-      if (t < 1) raf = requestAnimationFrame(tick);
+    if (index === old.index) {
+      if (moving.current) settle();
+      return;
     }
+    const interrupted = moving.current;
+    const from = current.current;
+    const start = Date.now();
+    let frame = 0;
+    moving.current = true;
+    setRunning(true);
+    const tick = () => {
+      const progress = Math.min(1, (Date.now() - start) / TAB_MOTION_MS);
+      current.current = tabMotion(from, index, spacing, progress, interrupted);
+      setPose(current.current);
+      if (progress < 1) frame = requestAnimationFrame(tick);
+      else { moving.current = false; setRunning(false); }
+    };
     tick();
-    return () => cancelAnimationFrame(raf);
-  }, [active, reduced, foreground, name]);
+    return () => cancelAnimationFrame(frame);
+  }, [index, spacing, reduced, foreground, shown]);
+  return { pose, running };
+}
+
+export function SubmissionIcon({ name, pose }: {
+  name: "home" | "review" | "history";
+  pose: IconPose;
+}) {
+  const { mix } = pose;
+  const f = geometry[name];
   const outline =
     mix <= 0
       ? f.a
@@ -58,7 +73,7 @@ export function SubmissionIcon({
     <Svg
       width={26}
       height={26}
-      style={dip ? { transform: [{ scale: 1 - dip }] } : undefined}
+      style={{ transform: [{ translateY: pose.y }, { scaleX: pose.scaleX }, { scaleY: pose.scaleY }] }}
       viewBox="0 0 24 24"
       stroke={color}
       strokeWidth={1.7}
@@ -108,62 +123,23 @@ export function SubmissionIcon({
     </Svg>
   );
 }
-let lastTab = 0;
-export function SlidingPill({
-  index,
-  width,
-}: {
-  index: number;
-  width: number;
-}) {
-  const { reduced, foreground } = useRoad();
-  const x = useRef(new Animated.Value(lastTab)).current;
-  const stretch = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    lastTab = index;
-    if (reduced || !foreground) {
-      x.setValue(index);
-      stretch.setValue(1);
-      return;
-    }
-    const a = Animated.parallel([
-      Animated.timing(x, {
-        toValue: index,
-        duration: 460,
-        easing: Easing.bezier(0.32, 0.72, 0, 1),
-        useNativeDriver: true,
-      }),
-      Animated.sequence([
-        Animated.timing(stretch, {
-          toValue: 1.38,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(stretch, {
-          toValue: 1,
-          duration: 260,
-          useNativeDriver: true,
-        }),
-      ]),
-    ]);
-    a.start();
-    return () => a.stop();
-  }, [index, reduced, foreground, x, stretch]);
+export function SlidingPill({ pose, width }: { pose: TabPose["pill"]; width: number }) {
   return (
-    <Animated.View
+    <View
+      testID="tab-selection-pill"
       pointerEvents="none"
       style={{
         position: "absolute",
         left: 14 + (width - 28) / 6 - 28,
-        // Centred on the icon in the 64pt tab row (reference .tab-slab).
         top: 7.5,
         width: 56,
         height: 30,
         borderRadius: 15,
         backgroundColor: "#E9EBEF",
         transform: [
-          { translateX: Animated.multiply(x, (width - 28) / 3) },
-          { scaleX: stretch },
+          { translateX: pose.x },
+          { scaleX: pose.scaleX },
+          { scaleY: pose.scaleY },
         ],
       }}
     />

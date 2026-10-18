@@ -1,0 +1,23 @@
+name: External TestFlight submission
+on:
+  workflow_dispatch:
+    inputs:
+      build_id:
+        type: string
+        required: true
+        description: Finished iOS production EAS build ID.
+      changelog:
+        type: string
+        required: true
+        description: What external testers should verify.
+jobs:
+  testflight:
+    name: Upload and submit external beta
+    type: testflight
+    params:
+      build_id: ${{ inputs.build_id }}
+      profile: production
+      external_groups: ['Click-to-Safe Beta']
+      changelog: ${{ inputs.changelog }}
+      submit_beta_review: true
+      wait_processing_timeout_seconds: 1800

@@ -74,6 +74,20 @@ test("failed audio removal makes no network request and never uploads the origin
   assert.equal(c.uploads.length, 0);
 });
 
+test("dismissal PATCH uses the review identity and requires server confirmation", async () => {
+  const id = "a".repeat(32);
+  const calls: { url: string; method: string; body: string }[] = [];
+  const c = client({ fetch: async (url, options) => {
+    calls.push({ url, ...(options as unknown as { method: string; body: string }) });
+    return { ok: true, json: async () => ({ review_id: id, dismissed: true }) };
+  } });
+  await c.api.updateDismissal(id, true, settings, new AbortController().signal);
+  assert.equal(calls[0].url, `https://example.com/v1/reviews/${id}/dismissal`);
+  assert.equal(calls[0].method, "PATCH");
+  assert.deepEqual(JSON.parse(calls[0].body), { dismissed: true });
+  await assert.rejects(c.api.updateDismissal(id, false, settings, new AbortController().signal), /did not confirm/);
+});
+
 test("retry reuses only uploads verified audio-free for the same server", async () => {
   for (const verified of [false, true]) {
     const c = client();
